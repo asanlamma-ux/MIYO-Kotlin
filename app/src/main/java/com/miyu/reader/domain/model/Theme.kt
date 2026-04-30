@@ -79,4 +79,4 @@ data class ReadingSettings(
 )
 
 @Keep
-enum class PageAnimation { SLIDE, FADE, CURL }
+enum class PageAnimation { NONE, SLIDE, FADE, CURL }

@@ -245,10 +245,10 @@ private fun Chip(
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.15f) else readerTheme.background)
+            .background(if (active) readerTheme.accent.copy(alpha = 0.15f) else readerTheme.background)
             .border(
                 width = 1.5.dp,
-                color = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.secondaryText.copy(alpha = 0.2f),
+                color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
@@ -256,7 +256,7 @@ private fun Chip(
     ) {
         Text(
             label,
-            color = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.text,
+            color = if (active) readerTheme.accent else readerTheme.text,
             fontSize = 13.sp,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
         )
@@ -279,7 +279,7 @@ private fun ToggleRow(
             .background(readerTheme.background)
             .border(
                 width = 1.5.dp,
-                color = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.secondaryText.copy(alpha = 0.2f),
+                color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(14.dp)
             )
             .clickable(onClick = onToggle)
@@ -291,7 +291,7 @@ private fun ToggleRow(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.secondaryText,
+                tint = if (active) readerTheme.accent else readerTheme.secondaryText,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(12.dp))
@@ -312,7 +312,7 @@ private fun ToggleRow(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
-                .background(if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.secondaryText.copy(alpha = 0.35f))
+                .background(if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.35f))
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Text(
