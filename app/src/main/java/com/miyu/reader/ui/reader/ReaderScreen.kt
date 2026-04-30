@@ -61,7 +61,7 @@ fun ReaderScreen(
     val accentColor = readerTheme.accent
 
     // Javascript interface to receive selection coordinates and text
-    val jsInterface = remember(viewModel) {
+    val jsInterface: ReaderJsInterface = remember(viewModel) {
         ReaderJsInterface(viewModel)
     }
 
@@ -97,6 +97,7 @@ fun ReaderScreen(
                         settings.domStorageEnabled = true
                         settings.allowFileAccess = true
                         setBackgroundColor(bgColor.toArgb())
+                        @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = WebViewClient()
                     }
