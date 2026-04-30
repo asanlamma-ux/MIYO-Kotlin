@@ -1,0 +1,82 @@
+I'll analyze the failing job to identify the issue and provide a solution. Let me start by retrieving the job logs.Now let me check the file where the error occurred:## Solution
+
+The build is failing due to **syntax errors in the `SelectionToolbar.kt` file**. The issue is on **lines 63-70** where lambda parameter syntax is incorrect.
+
+### Problem
+
+Lines 63-70 use the arrow syntax `=>` instead of the correct Kotlin lambda syntax `->`:
+
+```kotlin
+onHighlight: (HighlightData) => Unit,  // ❌ Wrong
+onNote: (HighlightData) => Unit,       // ❌ Wrong
+```
+
+This is invalid Kotlin syntax and causes the compiler to fail with:
+- `Expecting comma or ')'` at line 63:33
+- `Function declaration must have a name` at line 71:3
+
+### Fix
+
+Replace all `=>` with `->` in the function parameters. Here's the corrected function signature:
+
+```kotlin
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectionToolbar(
+    selection: SelectionData?,
+    readerTheme: ReaderThemeColors,
+    onClose: () -> Unit,
+    onHighlight: (HighlightData) -> Unit,  // ✅ Changed => to ->
+    onNote: (HighlightData) -> Unit,       // ✅ Changed => to ->
+    onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onDictionary: (String) -> Unit,
+    onTranslate: (String) -> Unit,
+    onBookmarkSelection: (String) -> Unit,
+    onAddTerm: (String) -> Unit,
+) {
+    // ... rest of function
+}
+```
+
+**Key change:** Lines 63-64 should use `->` (arrow function) instead of `=>` (which is not valid Kotlin syntax).
+
+Once you make this correction, both the `kspReleaseKotlin` and `kspDebugKotlin` tasks should compile successfully.
+
+
+I'll retrieve the job logs to identify the failure and find a solution.Let me check the failing file to see the syntax error:## Solution
+
+The compilation error is on **line 63** in `SelectionToolbar.kt`. You're using an invalid arrow syntax `=>` instead of the correct Kotlin lambda syntax `->`.
+
+**The Problem:**
+```kotlin
+onHighlight: (HighlightData) => Unit,  // ❌ Wrong: C-style arrow
+```
+
+**The Fix:**
+```kotlin
+onHighlight: (HighlightData) -> Unit,  // ✅ Correct: Kotlin lambda arrow
+```
+
+Apply this change to all affected lambda parameters in the `SelectionToolbar` function signature (lines 63-64):
+
+```kotlin
+@Composable
+fun SelectionToolbar(
+    selection: SelectionData?,
+    readerTheme: ReaderThemeColors,
+    onClose: () -> Unit,
+    onHighlight: (HighlightData) -> Unit,  // Changed => to ->
+    onNote: (HighlightData) -> Unit,       // Changed => to ->
+    onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onDictionary: (String) -> Unit,
+    onTranslate: (String) -> Unit,
+    onBookmarkSelection: (String) -> Unit,
+    onAddTerm: (String) -> Unit,
+) {
+    // ... rest of function
+}
+```
+
+Kotlin uses `->` to denote lambda types in function signatures. The `=>` syntax is used in other languages like JavaScript/TypeScript but not in Kotlin. This syntax error cascaded into KSP compilation failures. Once corrected, your build should compile successfully.

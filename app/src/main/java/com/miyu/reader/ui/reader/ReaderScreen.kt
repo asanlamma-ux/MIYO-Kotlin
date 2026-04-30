@@ -1,6 +1,10 @@
 package com.miyu.reader.ui.reader
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
@@ -31,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.ReaderViewModel
 
@@ -46,6 +51,7 @@ fun ReaderScreen(
     onBack: () -> Unit,
     viewModel: ReaderViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val readerThemeId by viewModel.readerThemeId.collectAsStateWithLifecycle()
     val readerTheme = ReaderColors.findById(readerThemeId)
@@ -148,8 +154,17 @@ fun ReaderScreen(
                 onClose = { viewModel.clearSelection() },
                 onHighlight = { data -> viewModel.saveHighlight(data) },
                 onNote = { data -> viewModel.saveHighlight(data) },
-                onCopy = { /* TODO: Clipboard manager */ },
-                onShare = { /* TODO: Share sheet */ },
+                onCopy = { text ->
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Selected text", text))
+                },
+                onShare = { text ->
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        putExtra(Intent.EXTRA_TEXT, text)
+                        type = "text/plain"
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, "Share"))
+                },
                 onDictionary = { viewModel.showDictionary(it) },
                 onTranslate = { viewModel.showTranslation(it) },
                 onBookmarkSelection = { viewModel.addBookmark(it) },
@@ -282,8 +297,8 @@ fun ReaderScreen(
                             Icon(Icons.Default.SkipPrevious, "Previous", tint = if (uiState.chapterIndex > 0) textColor else textColor.copy(alpha = 0.3f))
                         }
 
-                        // Theme picker placeholder
-                        IconButton(onClick = { /* TODO: Theme picker */ }) {
+                        // Theme picker
+                        IconButton(onClick = { viewModel.toggleThemePicker() }) {
                             Icon(Icons.Outlined.Palette, "Theme", tint = textColor)
                         }
 
@@ -302,6 +317,15 @@ fun ReaderScreen(
                     }
                 }
             }
+        }
+
+        // ── Theme Picker ────────────────────────────────────────────
+        if (uiState.showThemePicker) {
+            ThemePickerBottomSheet(
+                selectedThemeId = readerThemeId,
+                onThemeSelected = { viewModel.setReaderThemeId(it) },
+                onDismiss = { viewModel.toggleThemePicker() },
+            )
         }
 
         // ── Layout Panel ────────────────────────────────────────────

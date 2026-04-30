@@ -26,6 +26,7 @@ data class ReaderUiState(
     val showLayoutPanel: Boolean = false,
     val showStatsModal: Boolean = false,
     val showSearchModal: Boolean = false,
+    val showThemePicker: Boolean = false,
     val isLoading: Boolean = true,
     val css: String = "",
     val selection: SelectionData? = null,
@@ -257,5 +258,13 @@ class ReaderViewModel @Inject constructor(
 
     fun toggleSearchModal() {
         _uiState.update { it.copy(showSearchModal = !it.showSearchModal) }
+    }
+
+    fun toggleThemePicker() {
+        _uiState.update { it.copy(showThemePicker = !it.showThemePicker) }
+    }
+
+    fun setReaderThemeId(id: String) {
+        viewModelScope.launch { preferences.setReaderThemeId(id) }
     }
 }
