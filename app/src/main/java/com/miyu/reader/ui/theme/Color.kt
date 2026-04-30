@@ -2,11 +2,7 @@ package com.miyu.reader.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-<<<<<<< HEAD
-// Base app palette (used outside the reader — navigation, settings, library, etc.)
-=======
 // Base palette
->>>>>>> debug
 val Primary = Color(0xFF6366F1)       // Indigo
 val PrimaryVariant = Color(0xFF4F46E5)
 val Secondary = Color(0xFF14B8A6)     // Teal
@@ -15,58 +11,16 @@ val SurfaceDark = Color(0xFF0F172A)
 val BackgroundLight = Color(0xFFF8FAFC)
 val BackgroundDark = Color(0xFF020617)
 val Error = Color(0xFFEF4444)
-<<<<<<< HEAD
-val OnPrimary = Color.White
-
-// Reader theme-specific color object — kept for backward-compatible references.
-// Prefer MIYUThemes.all() and the CompositionLocal in new code.
-object ReaderColors {
-    val White = ReaderThemeColors(
-        background = Color(0xFFFFFFFF),
-        text = Color(0xFF1E293B),
-        accent = Primary,
-        secondaryText = Color(0xFF64748B),
-        cardBackground = Color(0xFFF1F5F9),
-    )
-    val Sepia = ReaderThemeColors(
-        background = Color(0xFFF4EFE8),
-        text = Color(0xFF3A3228),
-        accent = Color(0xFF8B6F47),
-        secondaryText = Color(0xFF6B5D4D),
-        cardBackground = Color(0xFFFFFBF5),
-    )
-    val Dark = ReaderThemeColors(
-        background = Color(0xFF000000),
-        text = Color(0xFFECE7E1),
-        accent = Color(0xFF8AB4F8),
-        secondaryText = Color(0xFFA3A3A3),
-        cardBackground = Color(0xFF090909),
-    )
-    val Forest = ReaderThemeColors(
-        background = Color(0xFFE8F0E8),
-        text = Color(0xFF2D3E2D),
-        accent = Color(0xFF4A7C59),
-        secondaryText = Color(0xFF4D6B4D),
-        cardBackground = Color(0xFFF0F5F0),
-    )
-}
-
-data class ReaderThemeColors(
-=======
 
 // Reader themes — data class shared by the 16 built-in themes
 data class ReaderThemeColors(
     val id: String,
     val name: String,
->>>>>>> debug
     val background: Color,
     val text: Color,
     val accent: Color,
     val secondaryText: Color,
     val cardBackground: Color,
-<<<<<<< HEAD
-)
-=======
     val isDark: Boolean,
     val isSpecial: Boolean = false,
 )
@@ -280,4 +234,3 @@ object ReaderColors {
     fun findById(id: String): ReaderThemeColors =
         allThemes.firstOrNull { it.id == id } ?: SepiaClassic
 }
->>>>>>> debug

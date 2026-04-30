@@ -1,21 +1,5 @@
 package com.miyu.reader.ui.home
 
-<<<<<<< HEAD
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import com.miyu.reader.domain.model.Book
-import com.miyu.reader.ui.theme.LocalMIYUColors
-=======
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -40,35 +24,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HomeViewModel
->>>>>>> debug
 
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
-<<<<<<< HEAD
-=======
     onOpenBook: (String) -> Unit = {},
->>>>>>> debug
 ) {
     val books: List<Book> by viewModel.recentBooks.collectAsStateWithLifecycle(initialValue = emptyList())
     val colors = LocalMIYUColors.current
 
-<<<<<<< HEAD
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        if (books.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No books yet. Import an EPUB to get started.", color = colors.secondaryText)
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(books) { book ->
-                    BookCard(book = book)
-                }
-=======
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -168,34 +132,12 @@ fun HomeScreen(
             }
             items(books) { book ->
                 BookCard(book = book, onClick = { onOpenBook(book.id) }, colors = colors)
->>>>>>> debug
             }
         }
     }
 }
 
 @Composable
-<<<<<<< HEAD
-private fun BookCard(book: Book) {
-    val colors = LocalMIYUColors.current
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-    ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(book.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(book.author, style = MaterialTheme.typography.bodyMedium, color = colors.secondaryText)
-                if (book.progress > 0f) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { book.progress / 100f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-=======
 private fun ContinueReadingCard(
     book: Book,
     onClick: () -> Unit,
@@ -271,7 +213,6 @@ private fun BookCard(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Placeholder cover icon
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = colors.accent.copy(alpha = 0.12f),
@@ -322,7 +263,6 @@ private fun BookCard(
                     }
                 }
             }
->>>>>>> debug
         }
     }
 }

@@ -26,8 +26,6 @@ class UserPreferences @Inject constructor(
         context.dataStore.edit { it[THEME_MODE] = mode.name }
     }
 
-<<<<<<< HEAD
-=======
     // Reader theme
     val readerThemeId: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_READER_THEME_ID] ?: "sepia-classic"
@@ -37,7 +35,6 @@ class UserPreferences @Inject constructor(
         context.dataStore.edit { it[KEY_READER_THEME_ID] = id }
     }
 
->>>>>>> debug
     // Typography
     val typography: Flow<TypographySettings> = context.dataStore.data.map { prefs ->
         TypographySettings(
@@ -138,9 +135,6 @@ class UserPreferences @Inject constructor(
         private val KEY_COLUMN_WIDTH = intPreferencesKey("column_width")
         private val KEY_COLUMN_LAYOUT = stringPreferencesKey("column_layout")
         private val KEY_LAST_BOOK_ID = stringPreferencesKey("last_book_id")
-<<<<<<< HEAD
-=======
         private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id")
->>>>>>> debug
     }
 }

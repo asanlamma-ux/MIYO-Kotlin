@@ -15,22 +15,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-<<<<<<< HEAD
-=======
 import androidx.navigation.NavType
->>>>>>> debug
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-<<<<<<< HEAD
-import com.miyu.reader.domain.model.ThemeMode
-import com.miyu.reader.ui.home.HomeScreen
-import com.miyu.reader.ui.library.LibraryScreen
-import com.miyu.reader.ui.library.TermsScreen
-import com.miyu.reader.ui.library.HistoryScreen
-import com.miyu.reader.ui.library.SettingsScreen
-=======
 import androidx.navigation.navArgument
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.ui.home.HomeScreen
@@ -39,7 +28,6 @@ import com.miyu.reader.ui.terms.TermsScreen
 import com.miyu.reader.ui.history.HistoryScreen
 import com.miyu.reader.ui.settings.SettingsScreen
 import com.miyu.reader.ui.reader.ReaderScreen
->>>>>>> debug
 import com.miyu.reader.ui.theme.MIYUTheme
 import com.miyu.reader.viewmodel.ThemeViewModel
 
@@ -60,44 +48,13 @@ val bottomNavItems = listOf(
 fun MIYUApp() {
     val themeViewModel: ThemeViewModel = hiltViewModel()
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.LIGHT)
-<<<<<<< HEAD
-
-    MIYUTheme(themeMode = themeMode) {
-=======
     val readerThemeId by themeViewModel.readerThemeId.collectAsStateWithLifecycle(initialValue = "sepia-classic")
 
     MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {
->>>>>>> debug
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
 
-<<<<<<< HEAD
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            bottomBar = {
-                NavigationBar {
-                    bottomNavItems.forEach { screen ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                        NavigationBarItem(
-                            icon = {
-                                Icon(
-                                    imageVector = if (selected) screen.selectedIcon else screen.icon,
-                                    contentDescription = screen.title,
-                                )
-                            },
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                        )
-=======
         // Hide bottom bar when the reader is open
         val showBottomBar = currentDestination?.route?.startsWith("reader/") != true
 
@@ -128,7 +85,6 @@ fun MIYUApp() {
                                 },
                             )
                         }
->>>>>>> debug
                     }
                 }
             },
@@ -138,13 +94,6 @@ fun MIYUApp() {
                 startDestination = Screen.Home.route,
                 modifier = Modifier.padding(innerPadding),
             ) {
-<<<<<<< HEAD
-                composable(Screen.Home.route) { HomeScreen() }
-                composable(Screen.Library.route) { LibraryScreen() }
-                composable(Screen.Terms.route) { TermsScreen() }
-                composable(Screen.History.route) { HistoryScreen() }
-                composable(Screen.Settings.route) { SettingsScreen() }
-=======
                 composable(Screen.Home.route) {
                     HomeScreen(onOpenBook = { bookId ->
                         navController.navigate("reader/$bookId")
@@ -172,7 +121,6 @@ fun MIYUApp() {
                         onBack = { navController.popBackStack() },
                     )
                 }
->>>>>>> debug
             }
         }
     }

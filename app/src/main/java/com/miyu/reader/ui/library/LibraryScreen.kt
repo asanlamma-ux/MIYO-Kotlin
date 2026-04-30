@@ -1,43 +1,5 @@
 package com.miyu.reader.ui.library
 
-<<<<<<< HEAD
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import com.miyu.reader.ui.theme.LocalMIYUColors
-
-@Composable
-fun LibraryScreen() {
-    val colors = LocalMIYUColors.current
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Library — coming soon", color = colors.secondaryText)
-    }
-}
-
-@Composable
-fun TermsScreen() {
-    val colors = LocalMIYUColors.current
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Terms/MTL — coming soon", color = colors.secondaryText)
-    }
-}
-
-@Composable
-fun HistoryScreen() {
-    val colors = LocalMIYUColors.current
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("History — coming soon", color = colors.secondaryText)
-    }
-}
-
-@Composable
-fun SettingsScreen() {
-    val colors = LocalMIYUColors.current
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Settings — coming soon", color = colors.secondaryText)
-=======
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -488,6 +450,5 @@ private fun ListBookCard(
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = colors.secondaryText, modifier = Modifier.size(18.dp))
         }
->>>>>>> debug
     }
 }

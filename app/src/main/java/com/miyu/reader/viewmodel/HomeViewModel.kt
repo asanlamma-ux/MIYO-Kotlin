@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-package com.miyu.reader.ui.home
-=======
 package com.miyu.reader.viewmodel
->>>>>>> debug
 
 import androidx.lifecycle.ViewModel
 import com.miyu.reader.data.repository.BookRepository
