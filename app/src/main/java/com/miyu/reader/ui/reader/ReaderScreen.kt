@@ -38,6 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.ReaderViewModel
+import com.miyu.reader.domain.model.MarginPreset
+import com.miyu.reader.domain.model.TextAlign
 
 import android.webkit.JavascriptInterface
 import com.miyu.reader.ui.reader.components.SelectionToolbar
@@ -54,6 +56,8 @@ fun ReaderScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val readerThemeId by viewModel.readerThemeId.collectAsStateWithLifecycle()
+    val readingSettings by viewModel.readingSettings.collectAsStateWithLifecycle()
+    val typography by viewModel.typography.collectAsStateWithLifecycle()
     val readerTheme = ReaderColors.findById(readerThemeId)
 
     val bgColor = readerTheme.background
@@ -87,6 +91,10 @@ fun ReaderScreen(
                 bgColor = colorToHex(bgColor),
                 textColor = colorToHex(textColor),
                 accentColor = colorToHex(accentColor),
+                fontSize = typography.fontSize,
+                lineHeight = typography.lineHeight,
+                textAlign = typography.textAlign,
+                marginPreset = readingSettings.marginPreset,
             )
 
             AndroidView(
@@ -143,7 +151,18 @@ fun ReaderScreen(
                 onDictionary = { viewModel.showDictionary(it) },
                 onTranslate = { viewModel.showTranslation(it) },
                 onBookmarkSelection = { viewModel.addBookmark(it) },
-                onAddTerm = { /* TODO: Add to terms */ }
+                onAddTerm = { viewModel.showAddTerm(it) },
+            )
+        }
+
+        uiState.addTermText?.let { selectedText ->
+            com.miyu.reader.ui.reader.components.AddTermBottomSheet(
+                selectedText = selectedText,
+                groups = uiState.activeTermGroups.ifEmpty { emptyList() },
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.clearAddTerm() },
+                onSaveToGroup = viewModel::saveTerm,
+                onCreateGroupAndSave = viewModel::createTermGroupAndSave,
             )
         }
 
@@ -228,6 +247,7 @@ fun ReaderScreen(
             com.miyu.reader.ui.reader.components.SearchInBookBottomSheet(
                 currentChapterIndex = uiState.chapterIndex,
                 readerTheme = readerTheme,
+                onSearch = viewModel::searchInBook,
                 onGoToChapter = { viewModel.goToChapter(it) },
                 onDismiss = { viewModel.toggleSearchModal() },
             )
@@ -305,7 +325,6 @@ fun ReaderScreen(
 
         // ── Layout Panel ────────────────────────────────────────────
         if (uiState.showLayoutPanel) {
-            val readingSettings by viewModel.readingSettings.collectAsStateWithLifecycle()
             com.miyu.reader.ui.reader.components.ReaderLayoutPanelBottomSheet(
                 settings = readingSettings,
                 readerTheme = readerTheme,
@@ -399,6 +418,10 @@ private fun buildReaderHtml(
     bgColor: String,
     textColor: String,
     accentColor: String,
+    fontSize: Float,
+    lineHeight: Float,
+    textAlign: TextAlign,
+    marginPreset: MarginPreset,
 ): String = """
 <!DOCTYPE html>
 <html>
@@ -411,9 +434,10 @@ html, body {
   background: $bgColor;
   color: $textColor;
   font-family: 'Georgia', serif;
-  font-size: 18px;
-  line-height: 1.7;
-  padding: 20px 16px 60px 16px;
+  font-size: ${fontSize.toInt()}px;
+  line-height: $lineHeight;
+  text-align: ${if (textAlign == TextAlign.JUSTIFY) "justify" else "left"};
+  padding: 20px ${readerMarginPx(marginPreset)}px 72px ${readerMarginPx(marginPreset)}px;
   word-wrap: break-word;
   overflow-wrap: break-word;
   -webkit-text-size-adjust: 100%;
@@ -427,7 +451,7 @@ $css
 </style>
 </head>
 <body>
-$chapterHtml
+${extractBodyContent(chapterHtml)}
 <script>
 document.addEventListener('selectionchange', function() {
     var sel = window.getSelection();
@@ -456,6 +480,17 @@ document.addEventListener('selectionchange', function() {
 </body>
 </html>
 """.trimIndent()
+
+private fun readerMarginPx(marginPreset: MarginPreset): Int = when (marginPreset) {
+    MarginPreset.NARROW -> 12
+    MarginPreset.MEDIUM -> 18
+    MarginPreset.WIDE -> 28
+}
+
+private fun extractBodyContent(html: String): String {
+    val bodyMatch = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)
+    return bodyMatch?.groupValues?.getOrNull(1) ?: html
+}
 
 // Named class so Android lint can see @JavascriptInterface annotations
 private class ReaderJsInterface(private val viewModel: ReaderViewModel) {

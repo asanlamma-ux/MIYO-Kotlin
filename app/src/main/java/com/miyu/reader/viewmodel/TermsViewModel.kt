@@ -3,6 +3,7 @@ package com.miyu.reader.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.repository.TermRepository
+import com.miyu.reader.domain.model.Term
 import com.miyu.reader.domain.model.TermGroup
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -71,6 +72,22 @@ class TermsViewModel @Inject constructor(
             _uiState.update {
                 it.copy(selectedGroupId = if (it.selectedGroupId == groupId) null else it.selectedGroupId)
             }
+        }
+    }
+
+    fun addTerm(groupId: String, originalText: String, correctedText: String) {
+        viewModelScope.launch {
+            val now = java.time.Instant.now().toString()
+            termRepository.addTermToGroup(
+                groupId,
+                Term(
+                    id = UUID.randomUUID().toString(),
+                    originalText = originalText.trim(),
+                    correctedText = correctedText.trim(),
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
         }
     }
 }

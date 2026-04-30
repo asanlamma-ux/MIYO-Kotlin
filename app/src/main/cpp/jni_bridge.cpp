@@ -141,4 +141,19 @@ Java_com_miyu_reader_engine_bridge_EpubEngineBridge_evictCache(
     env->ReleaseStringUTFChars(filePath, path);
 }
 
+JNIEXPORT jstring JNICALL
+Java_com_miyu_reader_engine_bridge_EpubEngineBridge_searchInBook(
+    JNIEnv* env, jobject /* this */, jstring filePath, jstring query) {
+    const char* path = env->GetStringUTFChars(filePath, nullptr);
+    const char* q = env->GetStringUTFChars(query, nullptr);
+    LOGI("searchInBook: %s query=%s", path, q);
+
+    std::string jsonResult = miyu::epub::searchEpub(path, miyu::g_cache_manager, q);
+
+    env->ReleaseStringUTFChars(filePath, path);
+    env->ReleaseStringUTFChars(query, q);
+
+    return env->NewStringUTF(jsonResult.c_str());
+}
+
 } // extern "C"

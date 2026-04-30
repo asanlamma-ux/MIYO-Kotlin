@@ -2,15 +2,11 @@ package com.miyu.reader.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.LibraryBooks
-import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.annotation.DrawableRes
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -21,6 +17,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.miyu.reader.R
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.ui.home.HomeScreen
 import com.miyu.reader.ui.library.LibraryScreen
@@ -31,12 +28,12 @@ import com.miyu.reader.ui.reader.ReaderScreen
 import com.miyu.reader.ui.theme.MIYUTheme
 import com.miyu.reader.viewmodel.ThemeViewModel
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
-    data object Home : Screen("home", "Home", Icons.Outlined.Home, Icons.Filled.Home)
-    data object Library : Screen("library", "Library", Icons.AutoMirrored.Outlined.LibraryBooks, Icons.AutoMirrored.Filled.LibraryBooks)
-    data object Terms : Screen("terms", "Terms", Icons.Outlined.Translate, Icons.Filled.Translate)
-    data object History : Screen("history", "History", Icons.Outlined.AccessTime, Icons.Filled.AccessTime)
-    data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
+sealed class Screen(val route: String, val title: String, @DrawableRes val icon: Int) {
+    data object Home : Screen("home", "Home", R.drawable.ic_miyu_home)
+    data object Library : Screen("library", "Library", R.drawable.ic_miyu_library)
+    data object Terms : Screen("terms", "Terms", R.drawable.ic_miyu_terms)
+    data object History : Screen("history", "History", R.drawable.ic_miyu_history)
+    data object Settings : Screen("settings", "Settings", R.drawable.ic_miyu_settings)
 }
 
 val bottomNavItems = listOf(
@@ -68,7 +65,7 @@ fun MIYUApp() {
                             NavigationBarItem(
                                 icon = {
                                     Icon(
-                                        imageVector = if (selected) screen.selectedIcon else screen.icon,
+                                        painter = painterResource(screen.icon),
                                         contentDescription = screen.title,
                                     )
                                 },

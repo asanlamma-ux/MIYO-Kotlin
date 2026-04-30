@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
+import com.miyu.reader.ui.components.BookCover
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HomeViewModel
 
@@ -152,12 +152,7 @@ private fun ContinueReadingCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Icon(
-                Icons.Default.Book,
-                contentDescription = null,
-                tint = colors.accent,
-                modifier = Modifier.size(32.dp),
-            )
+            BookCover(book = book, modifier = Modifier.fillMaxWidth().height(96.dp))
             Spacer(Modifier.height(10.dp))
             Text(
                 book.title,
@@ -213,20 +208,7 @@ private fun BookCard(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = colors.accent.copy(alpha = 0.12f),
-                modifier = Modifier.size(48.dp, 64.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Book,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
+            BookCover(book = book, modifier = Modifier.size(48.dp, 64.dp))
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

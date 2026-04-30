@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -78,6 +80,10 @@ fun SelectionToolbar(
     val bgColor = Color(0xEB1A1A24) // Dark transluscent
     val iconColor = Color.White
     val labelColor = Color.White.copy(alpha = 0.78f)
+    val density = LocalDensity.current
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val anchorTop = with(density) { (selection.y + selection.height + 12f).toDp() }
+        .coerceIn(24.dp, screenHeight - 190.dp)
 
     // Note Modal
     if (showNoteModal) {
@@ -101,14 +107,14 @@ fun SelectionToolbar(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 16.dp),
-        contentAlignment = Alignment.BottomCenter,
+            .padding(top = anchorTop, start = 8.dp, end = 8.dp),
+        contentAlignment = Alignment.TopCenter,
     ) {
         // Toolbar Card
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 0.dp),
             shape = RoundedCornerShape(22.dp),
             color = bgColor,
             shadowElevation = 12.dp,

@@ -43,6 +43,7 @@ data class SearchResult(
 fun SearchInBookBottomSheet(
     currentChapterIndex: Int,
     readerTheme: ReaderThemeColors,
+    onSearch: suspend (query: String, fullBook: Boolean) -> List<SearchResult>,
     onGoToChapter: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -62,23 +63,7 @@ fun SearchInBookBottomSheet(
         isSearching = true
         delay(400) // debounce
         
-        // Mock search results
-        val simulatedResults = mutableListOf<SearchResult>()
-        val startCi = if (searchFullBook) 0 else currentChapterIndex
-        val endCi = if (searchFullBook) startCi + 5 else startCi + 1
-        
-        for (ci in startCi until endCi) {
-            simulatedResults.add(
-                SearchResult(
-                    chapterIndex = ci,
-                    chapterTitle = "Chapter ${ci + 1}",
-                    excerptBefore = "...this is a simulated search result for ",
-                    excerptMatch = query,
-                    excerptAfter = " and it works correctly..."
-                )
-            )
-        }
-        results = simulatedResults
+        results = onSearch(query.trim(), searchFullBook)
         isSearching = false
     }
 

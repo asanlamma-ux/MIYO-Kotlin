@@ -1,4 +1,5 @@
 #include "epub_renderer.h"
+#include "epub_parser.h"
 #include <android/log.h>
 #include <regex>
 #include <sstream>
@@ -39,6 +40,9 @@ std::string renderChapter(
     const std::map<std::string, std::string>& termReplacements,
     CacheManager& cache) {
 
+    if (!cache.get(filePath)) {
+        parseEpub(filePath, cache);
+    }
     const auto* cached = cache.get(filePath);
     if (!cached || chapterIndex < 0 || chapterIndex >= cached->parsed.totalChapters) {
         return "<html><body><p>Chapter not found</p></body></html>";
@@ -93,6 +97,9 @@ int countChapterWords(
     int chapterIndex,
     CacheManager& cache) {
 
+    if (!cache.get(filePath)) {
+        parseEpub(filePath, cache);
+    }
     const auto* cached = cache.get(filePath);
     if (!cached || chapterIndex < 0 || chapterIndex >= cached->parsed.totalChapters) {
         return 0;

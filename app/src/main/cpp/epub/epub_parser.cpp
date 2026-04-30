@@ -42,14 +42,49 @@ std::string extractTag(const std::string& xml, const std::string& tag) {
     return xml.substr(start, end - start);
 }
 
+std::string extractAttr(const std::string& attrs, const std::string& name) {
+    std::regex attrRegex(name + R"(\s*=\s*["']([^"']+)["'])", std::regex::icase);
+    std::smatch match;
+    return std::regex_search(attrs, match, attrRegex) ? match[1].str() : "";
+}
+
+std::string readZipTextLoose(ZipArchive& zip, const std::string& path) {
+    std::string content = zip.readText(path);
+    if (!content.empty()) return content;
+
+    std::string normalized = path;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    while (!normalized.empty() && normalized.front() == '/') {
+        normalized.erase(normalized.begin());
+    }
+
+    std::string lowerTarget = normalized;
+    std::transform(lowerTarget.begin(), lowerTarget.end(), lowerTarget.begin(), ::tolower);
+    for (const auto& entry : zip.entries()) {
+        std::string lowerEntry = entry.name;
+        std::transform(lowerEntry.begin(), lowerEntry.end(), lowerEntry.begin(), ::tolower);
+        if (lowerEntry == lowerTarget || ends_with(lowerEntry, "/" + lowerTarget)) {
+            content = zip.readText(entry.name);
+            if (!content.empty()) return content;
+        }
+    }
+    return "";
+}
+
 EpubMetadata parseOpfMetadata(const std::string& opfXml) {
     EpubMetadata meta;
     meta.title = stripTags(extractTag(opfXml, "dc:title"));
+    if (meta.title.empty()) meta.title = stripTags(extractTag(opfXml, "title"));
     meta.author = stripTags(extractTag(opfXml, "dc:creator"));
+    if (meta.author.empty()) meta.author = stripTags(extractTag(opfXml, "creator"));
     meta.description = stripTags(extractTag(opfXml, "dc:description"));
+    if (meta.description.empty()) meta.description = stripTags(extractTag(opfXml, "description"));
     meta.language = stripTags(extractTag(opfXml, "dc:language"));
+    if (meta.language.empty()) meta.language = stripTags(extractTag(opfXml, "language"));
     meta.publisher = stripTags(extractTag(opfXml, "dc:publisher"));
+    if (meta.publisher.empty()) meta.publisher = stripTags(extractTag(opfXml, "publisher"));
     meta.publishDate = stripTags(extractTag(opfXml, "dc:date"));
+    if (meta.publishDate.empty()) meta.publishDate = stripTags(extractTag(opfXml, "date"));
 
     std::regex idRegex(R"(<dc:identifier[^>]*>([^<]+)</dc:identifier>)");
     std::smatch m;
@@ -70,27 +105,34 @@ std::vector<EpubChapter> parseChapters(ZipArchive& zip, const std::string& opfXm
     std::vector<EpubChapter> chapters;
     std::map<std::string, std::string> manifestMap;
 
-    std::regex itemRegex(R"(<item\s[^>]*id=\"([^\"]+)\"[^>]*href=\"([^\"]+)\")");
+    std::regex itemRegex(R"(<item\b([^>]*)>)", std::regex::icase);
     auto begin = std::sregex_iterator(opfXml.begin(), opfXml.end(), itemRegex);
     auto end = std::sregex_iterator();
     for (auto it = begin; it != end; ++it) {
-        manifestMap[(*it)[1].str()] = (*it)[2].str();
+        std::string attrs = (*it)[1].str();
+        std::string id = extractAttr(attrs, "id");
+        std::string href = extractAttr(attrs, "href");
+        std::string mediaType = extractAttr(attrs, "media-type");
+        if (!id.empty() && !href.empty() &&
+            (mediaType.empty() || mediaType.find("xhtml") != std::string::npos || mediaType.find("html") != std::string::npos)) {
+            manifestMap[id] = href;
+        }
     }
 
-    std::regex spineRefRegex(R"(<itemref\s[^>]*idref=\"([^\"]+)\")");
+    std::regex spineRefRegex(R"(<itemref\b([^>]*)>)", std::regex::icase);
     auto spineBegin = std::sregex_iterator(opfXml.begin(), opfXml.end(), spineRefRegex);
     auto spineEnd = std::sregex_iterator();
 
     int order = 0;
     for (auto it = spineBegin; it != spineEnd; ++it) {
-        std::string idref = (*it)[1].str();
+        std::string idref = extractAttr((*it)[1].str(), "idref");
         auto manifestIt = manifestMap.find(idref);
         if (manifestIt == manifestMap.end()) continue;
 
         std::string href = manifestIt->second;
         std::string fullPath = opfDir.empty() ? href : opfDir + "/" + href;
 
-        std::string content = zip.readText(fullPath);
+        std::string content = readZipTextLoose(zip, fullPath);
         if (content.empty()) continue;
 
         std::string title = stripTags(extractTag(content, "title"));
@@ -197,7 +239,7 @@ std::string parseEpub(const std::string& filePath, CacheManager& cache) {
     }
 
     // Find OPF via container.xml
-    std::string containerXml = zip.readText("META-INF/container.xml");
+    std::string containerXml = readZipTextLoose(zip, "META-INF/container.xml");
     if (containerXml.empty()) {
         LOGE("No META-INF/container.xml in EPUB");
         return "{}";
@@ -216,7 +258,7 @@ std::string parseEpub(const std::string& filePath, CacheManager& cache) {
     size_t lastSlash = opfPath.find_last_of('/');
     std::string opfDir = (lastSlash != std::string::npos) ? opfPath.substr(0, lastSlash) : "";
 
-    std::string opfXml = zip.readText(opfPath);
+    std::string opfXml = readZipTextLoose(zip, opfPath);
     if (opfXml.empty()) {
         LOGE("Failed to read OPF: %s", opfPath.c_str());
         return "{}";
@@ -235,7 +277,7 @@ std::string parseEpub(const std::string& filePath, CacheManager& cache) {
             std::string lower = e.name;
             std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
             if (ends_with(lower, ".css")) {
-                std::string css = zip.readText(e.name);
+                std::string css = readZipTextLoose(zip, e.name);
                 if (!css.empty()) {
                     cssBuf << "/* " << e.name << " */\n" << css << "\n";
                 }
@@ -251,6 +293,83 @@ std::string parseEpub(const std::string& filePath, CacheManager& cache) {
 
     LOGI("Parsed EPUB: title=%s, chapters=%d", epub.metadata.title.c_str(), epub.totalChapters);
     return toJson(epub);
+}
+
+TextMapping extractPlainTextWithMapping(const std::string& html) {
+    TextMapping mapping;
+    mapping.plainText.reserve(html.size());
+    mapping.byteIndices.reserve(html.size());
+
+    bool inTag = false;
+    for (size_t i = 0; i < html.size(); ++i) {
+        char c = html[i];
+        if (c == '<') {
+            inTag = true;
+        } else if (c == '>') {
+            inTag = false;
+        } else if (!inTag) {
+            mapping.plainText += c;
+            mapping.byteIndices.push_back(i);
+        }
+    }
+    return mapping;
+}
+
+std::string searchEpub(const std::string& filePath, CacheManager& cache, const std::string& query) {
+    if (query.empty()) {
+        return "[]";
+    }
+
+    // Ensure the EPUB is parsed and in cache
+    parseEpub(filePath, cache);
+
+    auto* cached = cache.get(filePath);
+    if (!cached) {
+        return "[]";
+    }
+
+    std::string lowerQuery = query;
+    std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+
+    std::ostringstream json;
+    json << "[";
+    bool firstResult = true;
+
+    for (const auto& ch : cached->parsed.chapters) {
+        TextMapping mapping = extractPlainTextWithMapping(ch.content);
+
+        std::string lowerText = mapping.plainText;
+        std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+
+        size_t pos = 0;
+        while ((pos = lowerText.find(lowerQuery, pos)) != std::string::npos) {
+            size_t endPos = pos + lowerQuery.length() - 1;
+            int startHtmlIndex = mapping.byteIndices[pos];
+            int endHtmlIndex = mapping.byteIndices[endPos];
+
+            // Extract excerpt around the match
+            int contextChars = 40;
+            int startExcerpt = std::max(0, static_cast<int>(pos) - contextChars);
+            int endExcerpt = std::min(static_cast<int>(mapping.plainText.length()) - 1, static_cast<int>(endPos) + contextChars);
+            std::string excerpt = mapping.plainText.substr(startExcerpt, endExcerpt - startExcerpt + 1);
+
+            if (!firstResult) json << ",";
+            json << "{";
+            json << "\"chapterId\":\"" << escapeJson(ch.id) << "\",";
+            json << "\"chapterTitle\":\"" << escapeJson(ch.title) << "\",";
+            json << "\"chapterIndex\":" << ch.order << ",";
+            json << "\"matchStartHtmlIndex\":" << startHtmlIndex << ",";
+            json << "\"matchEndHtmlIndex\":" << endHtmlIndex << ",";
+            json << "\"excerpt\":\"" << escapeJson(excerpt) << "\"";
+            json << "}";
+
+            firstResult = false;
+            pos += lowerQuery.length();
+        }
+    }
+
+    json << "]";
+    return json.str();
 }
 
 } // namespace epub

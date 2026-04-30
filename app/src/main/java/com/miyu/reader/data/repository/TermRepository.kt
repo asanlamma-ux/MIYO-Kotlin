@@ -8,6 +8,7 @@ import com.miyu.reader.data.toEntity
 import com.miyu.reader.domain.model.Term
 import com.miyu.reader.domain.model.TermGroup
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -17,9 +18,12 @@ import javax.inject.Singleton
 class TermRepository @Inject constructor(
     private val termDao: TermDao,
 ) {
-    fun getAllGroups(): Flow<List<TermGroup>> = termDao.getAllGroups().map { entities ->
-        entities.map { it.toDomain() }
-    }
+    fun getAllGroups(): Flow<List<TermGroup>> =
+        combine(termDao.getAllGroups(), termDao.getAllTerms()) { groups, terms ->
+            groups.map { group ->
+                group.toDomain(terms.filter { it.groupId == group.id }.map { it.toDomain() })
+            }
+        }
 
     suspend fun getGroup(groupId: String): TermGroup? {
         val group = termDao.getGroupById(groupId) ?: return null
@@ -27,13 +31,34 @@ class TermRepository @Inject constructor(
         return group.toDomain(terms.map { it.toDomain() })
     }
 
+    suspend fun getAllGroupsOnce(): List<TermGroup> {
+        val groups = termDao.getAllGroups().firstOrNull() ?: emptyList()
+        val terms = termDao.getAllTermsOnce()
+        return groups.map { group ->
+            group.toDomain(terms.filter { it.groupId == group.id }.map { it.toDomain() })
+        }
+    }
+
     fun getTermsForGroup(groupId: String): Flow<List<Term>> =
         termDao.getTermsForGroup(groupId).map { entities ->
             entities.map { it.toDomain() }
         }
 
-    suspend fun findTermsForBook(text: String, bookId: String): List<Term> =
-        termDao.findTermsForBook(text, bookId).map { it.toDomain() }
+    suspend fun getGroupsForBook(bookId: String): List<TermGroup> {
+        val groups = termDao.getAllGroups().firstOrNull() ?: emptyList()
+        val terms = termDao.getAllTermsOnce()
+        return groups
+            .filter { bookId in it.appliedToBooks }
+            .map { group ->
+                group.toDomain(terms.filter { it.groupId == group.id }.map { it.toDomain() })
+            }
+    }
+
+    suspend fun getReplacementMapForBook(bookId: String): Map<String, String> =
+        getGroupsForBook(bookId)
+            .flatMap { it.terms }
+            .filter { it.originalText.isNotBlank() && it.correctedText.isNotBlank() }
+            .associate { it.originalText to it.correctedText }
 
     suspend fun saveGroup(group: TermGroup) {
         termDao.upsertGroup(TermGroupEntity(
@@ -50,18 +75,28 @@ class TermRepository @Inject constructor(
 
     suspend fun deleteGroup(groupId: String) {
         termDao.deleteTermsForGroup(groupId)
-        termDao.deleteGroup(TermGroupEntity(
-            id = groupId,
-            name = "",
-            description = null,
-            appliedToBooks = emptyList(),
-            createdAt = "",
-            updatedAt = "",
-        ))
+        termDao.deleteGroupById(groupId)
     }
 
     suspend fun addTermToGroup(groupId: String, term: Term) {
         termDao.upsertTerm(term.toEntity(groupId))
+    }
+
+    suspend fun addTermToGroupAndApplyToBook(groupId: String, term: Term, bookId: String?) {
+        val group = termDao.getGroupById(groupId) ?: return
+        val appliedBooks = if (bookId != null && bookId !in group.appliedToBooks) {
+            group.appliedToBooks + bookId
+        } else {
+            group.appliedToBooks
+        }
+        termDao.upsertGroup(group.copy(appliedToBooks = appliedBooks, updatedAt = java.time.Instant.now().toString()))
+        termDao.upsertTerm(term.toEntity(groupId))
+    }
+
+    suspend fun applyGroupToBook(groupId: String, bookId: String) {
+        val group = termDao.getGroupById(groupId) ?: return
+        if (bookId in group.appliedToBooks) return
+        termDao.upsertGroup(group.copy(appliedToBooks = group.appliedToBooks + bookId, updatedAt = java.time.Instant.now().toString()))
     }
 
     suspend fun removeTerm(term: Term) {

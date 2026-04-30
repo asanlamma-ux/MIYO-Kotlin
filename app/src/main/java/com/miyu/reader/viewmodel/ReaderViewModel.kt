@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.BookRepository
+import com.miyu.reader.data.repository.TermRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,6 +15,8 @@ import javax.inject.Inject
 
 import com.miyu.reader.ui.reader.components.SelectionData
 import com.miyu.reader.ui.reader.components.HighlightData
+import com.miyu.reader.ui.reader.components.SearchResult
+import org.json.JSONArray
 
 data class ReaderUiState(
     val book: Book? = null,
@@ -30,6 +33,8 @@ data class ReaderUiState(
     val isLoading: Boolean = true,
     val css: String = "",
     val selection: SelectionData? = null,
+    val addTermText: String? = null,
+    val activeTermGroups: List<TermGroup> = emptyList(),
     val translationText: String? = null,
     val dictionaryWord: String? = null,
     val highlights: List<Highlight> = emptyList(),
@@ -40,6 +45,7 @@ data class ReaderUiState(
 class ReaderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val bookRepository: BookRepository,
+    private val termRepository: TermRepository,
     private val epubEngine: EpubEngineBridge,
     private val preferences: UserPreferences,
 ) : ViewModel() {
@@ -54,6 +60,9 @@ class ReaderViewModel @Inject constructor(
 
     val readingSettings: StateFlow<ReadingSettings> = preferences.readingSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReadingSettings())
+
+    val typography: StateFlow<TypographySettings> = preferences.typography
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TypographySettings())
 
     init {
         loadBook()
@@ -72,6 +81,7 @@ class ReaderViewModel @Inject constructor(
                         book = book,
                         chapterIndex = chapterIndex,
                         totalChapters = book.totalChapters,
+                        activeTermGroups = termRepository.getAllGroupsOnce(),
                     )
                 }
 
@@ -104,11 +114,18 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val html = epubEngine.renderChapter(filePath, index)
+                val book = _uiState.value.book
+                val replacements = if (book != null) {
+                    termRepository.getReplacementMapForBook(book.id)
+                } else {
+                    emptyMap()
+                }
+                val html = epubEngine.renderChapter(filePath, index, replacements)
                 _uiState.update {
                     it.copy(
                         chapterHtml = html,
                         chapterIndex = index,
+                        activeTermGroups = termRepository.getAllGroupsOnce(),
                         isLoading = false,
                     )
                 }
@@ -205,6 +222,80 @@ class ReaderViewModel @Inject constructor(
         _uiState.update { it.copy(selection = null) }
     }
 
+    fun showAddTerm(text: String) {
+        _uiState.update { it.copy(addTermText = text, selection = null) }
+    }
+
+    fun clearAddTerm() {
+        _uiState.update { it.copy(addTermText = null) }
+    }
+
+    fun saveTerm(
+        originalText: String,
+        correctedText: String,
+        translationText: String?,
+        context: String?,
+        groupId: String,
+    ) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val book = state.book ?: return@launch
+            val now = java.time.Instant.now().toString()
+            termRepository.addTermToGroupAndApplyToBook(
+                groupId = groupId,
+                term = Term(
+                    id = java.util.UUID.randomUUID().toString(),
+                    originalText = originalText.trim(),
+                    correctedText = correctedText.trim(),
+                    translationText = translationText?.trim()?.takeIf { it.isNotBlank() },
+                    context = context?.trim()?.takeIf { it.isNotBlank() },
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+                bookId = book.id,
+            )
+            clearAddTerm()
+            loadChapter(state.chapterIndex, book.filePath)
+        }
+    }
+
+    fun createTermGroupAndSave(
+        groupName: String,
+        originalText: String,
+        correctedText: String,
+        translationText: String?,
+        context: String?,
+    ) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val book = state.book ?: return@launch
+            val now = java.time.Instant.now().toString()
+            val group = TermGroup(
+                id = java.util.UUID.randomUUID().toString(),
+                name = groupName.trim(),
+                appliedToBooks = listOf(book.id),
+                createdAt = now,
+                updatedAt = now,
+            )
+            termRepository.saveGroup(group)
+            termRepository.addTermToGroupAndApplyToBook(
+                groupId = group.id,
+                term = Term(
+                    id = java.util.UUID.randomUUID().toString(),
+                    originalText = originalText.trim(),
+                    correctedText = correctedText.trim(),
+                    translationText = translationText?.trim()?.takeIf { it.isNotBlank() },
+                    context = context?.trim()?.takeIf { it.isNotBlank() },
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+                bookId = book.id,
+            )
+            clearAddTerm()
+            loadChapter(state.chapterIndex, book.filePath)
+        }
+    }
+
     fun saveHighlight(data: HighlightData, startOffset: Int = 0, endOffset: Int = 0) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -258,6 +349,42 @@ class ReaderViewModel @Inject constructor(
 
     fun toggleSearchModal() {
         _uiState.update { it.copy(showSearchModal = !it.showSearchModal) }
+    }
+
+    suspend fun searchInBook(query: String, fullBook: Boolean): List<SearchResult> {
+        val state = _uiState.value
+        val book = state.book ?: return emptyList()
+        if (query.length < 2) return emptyList()
+        return runCatching {
+            val json = epubEngine.searchInBook(book.filePath, query)
+            val array = JSONArray(json)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    val chapterOrder = item.optInt("chapterIndex", -1)
+                    val chapterIndex = if (chapterOrder >= 0) chapterOrder else findChapterIndex(item.optString("chapterId"))
+                    if (fullBook || chapterIndex == state.chapterIndex) {
+                        val excerpt = item.optString("excerpt")
+                        val matchIndex = excerpt.indexOf(query, ignoreCase = true).coerceAtLeast(0)
+                        val matchEnd = (matchIndex + query.length).coerceAtMost(excerpt.length)
+                        add(
+                            SearchResult(
+                                chapterIndex = chapterIndex.coerceAtLeast(0),
+                                chapterTitle = item.optString("chapterTitle", "Chapter ${chapterIndex + 1}"),
+                                excerptBefore = excerpt.substring(0, matchIndex),
+                                excerptMatch = excerpt.substring(matchIndex, matchEnd),
+                                excerptAfter = excerpt.substring(matchEnd),
+                            )
+                        )
+                    }
+                }
+            }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun findChapterIndex(chapterId: String): Int {
+        val suffixNumber = Regex("(\\d+)").findAll(chapterId).lastOrNull()?.value?.toIntOrNull()
+        return suffixNumber?.minus(1) ?: _uiState.value.chapterIndex
     }
 
     fun toggleThemePicker() {

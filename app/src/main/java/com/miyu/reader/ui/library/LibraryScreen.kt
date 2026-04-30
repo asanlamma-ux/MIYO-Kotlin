@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,7 +30,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.*
+import com.miyu.reader.ui.components.BookCover
 import com.miyu.reader.ui.theme.LocalMIYUColors
+import com.miyu.reader.viewmodel.ImportFeedbackType
 import com.miyu.reader.viewmodel.LibraryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -321,6 +324,43 @@ fun LibraryScreen(
                 }
             }
         }
+
+        uiState.importFeedback?.let { feedback ->
+            val icon = when (feedback.type) {
+                ImportFeedbackType.SUCCESS -> Icons.Default.CheckCircle
+                ImportFeedbackType.ERROR -> Icons.Default.Error
+                ImportFeedbackType.WARNING -> Icons.Default.Warning
+            }
+            val tint = when (feedback.type) {
+                ImportFeedbackType.SUCCESS -> colors.accent
+                ImportFeedbackType.ERROR -> MaterialTheme.colorScheme.error
+                ImportFeedbackType.WARNING -> Color(0xFFB7791F)
+            }
+            AlertDialog(
+                onDismissRequest = viewModel::clearImportFeedback,
+                icon = { Icon(icon, contentDescription = null, tint = tint) },
+                title = { Text(feedback.title) },
+                text = { Text(feedback.message) },
+                confirmButton = {
+                    if (feedback.bookId != null) {
+                        TextButton(
+                            onClick = {
+                                val bookId = feedback.bookId
+                                viewModel.clearImportFeedback()
+                                onOpenBook(bookId)
+                            },
+                        ) {
+                            Text("Read now", color = colors.accent)
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::clearImportFeedback) {
+                        Text(if (feedback.bookId == null) "Close" else "Later")
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -342,23 +382,12 @@ private fun GridBookCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Cover placeholder
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = colors.accent.copy(alpha = 0.1f),
+            BookCover(
+                book = book,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(130.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Book,
-                        contentDescription = null,
-                        tint = colors.accent.copy(alpha = 0.5f),
-                        modifier = Modifier.size(40.dp),
-                    )
-                }
-            }
+            )
             Spacer(Modifier.height(10.dp))
             Text(
                 book.title,
@@ -412,15 +441,7 @@ private fun ListBookCard(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = colors.accent.copy(alpha = 0.1f),
-                modifier = Modifier.size(48.dp, 68.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Book, contentDescription = null, tint = colors.accent, modifier = Modifier.size(24.dp))
-                }
-            }
+            BookCover(book = book, modifier = Modifier.size(48.dp, 68.dp))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

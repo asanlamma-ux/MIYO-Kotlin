@@ -55,4 +55,10 @@ class EpubEngineBridge {
      * Call when a book is removed from library.
      */
     external fun evictCache(filePath: String)
+
+    /**
+     * Search all parsed chapter text in the native EPUB cache.
+     * Returns a JSON array with chapter IDs, titles, HTML offsets, and excerpts.
+     */
+    external fun searchInBook(filePath: String, query: String): String
 }

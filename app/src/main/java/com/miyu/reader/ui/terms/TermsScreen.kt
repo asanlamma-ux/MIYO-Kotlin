@@ -238,6 +238,70 @@ fun TermsScreen(
             },
         )
     }
+
+    uiState.termGroups.firstOrNull { it.id == uiState.selectedGroupId }?.let { group ->
+        var original by remember(group.id) { mutableStateOf("") }
+        var replacement by remember(group.id) { mutableStateOf("") }
+        ModalBottomSheet(onDismissRequest = { viewModel.setSelectedGroupId(null) }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    group.name,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.onBackground,
+                )
+                Text(
+                    "${group.terms.size} terms · applied to ${group.appliedToBooks.size} books",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = original,
+                    onValueChange = { original = it },
+                    label = { Text("Original text") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = replacement,
+                    onValueChange = { replacement = it },
+                    label = { Text("Replacement") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        viewModel.addTerm(group.id, original, replacement)
+                        original = ""
+                        replacement = ""
+                    },
+                    enabled = original.isNotBlank() && replacement.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add term", fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(14.dp))
+                group.terms.forEach { term ->
+                    ListItem(
+                        headlineContent = { Text(term.originalText, fontWeight = FontWeight.SemiBold) },
+                        supportingContent = { Text(term.correctedText) },
+                        leadingContent = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = colors.accent) },
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
 }
 
 @Composable

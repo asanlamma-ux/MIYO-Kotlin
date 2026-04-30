@@ -10,7 +10,7 @@ namespace miyu {
 namespace epub {
 
 std::string extractCover(const std::string& filePath, CacheManager& cache) {
-    if (auto* cached = cache.get(filePath)) {
+    if (auto* cached = cache.get(filePath); cached && !cached->coverBase64.empty()) {
         return cached->coverBase64;
     }
 

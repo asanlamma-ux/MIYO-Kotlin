@@ -16,14 +16,20 @@ interface TermDao {
     @Query("SELECT * FROM terms WHERE groupId = :groupId ORDER BY originalText")
     fun getTermsForGroup(groupId: String): Flow<List<TermEntity>>
 
-    @Query("SELECT * FROM terms WHERE originalText = :originalText AND groupId IN (SELECT id FROM term_groups WHERE :bookId IN (SELECT value FROM json_each(appliedToBooks)))")
-    suspend fun findTermsForBook(originalText: String, bookId: String): List<TermEntity>
+    @Query("SELECT * FROM terms ORDER BY originalText")
+    fun getAllTerms(): Flow<List<TermEntity>>
+
+    @Query("SELECT * FROM terms ORDER BY originalText")
+    suspend fun getAllTermsOnce(): List<TermEntity>
 
     @Upsert
     suspend fun upsertGroup(group: TermGroupEntity)
 
     @Delete
     suspend fun deleteGroup(group: TermGroupEntity)
+
+    @Query("DELETE FROM term_groups WHERE id = :groupId")
+    suspend fun deleteGroupById(groupId: String)
 
     @Upsert
     suspend fun upsertTerm(term: TermEntity)
