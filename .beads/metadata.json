@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "MIYO_Kotlin",
+  "project_id": "0e0bac16-29be-4eeb-a498-1c32dd713285"
+}

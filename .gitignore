@@ -3,3 +3,8 @@ keystore_b64.txt
 *.keystore
 *.jks
 *.b64
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
