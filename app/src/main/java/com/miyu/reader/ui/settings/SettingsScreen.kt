@@ -40,6 +40,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(colors.background)
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
@@ -54,12 +55,43 @@ fun SettingsScreen(
         // ── Account ─────────────────────────────────────────────────
         SettingsSection(title = "Account") {
             SettingsRow(
-                icon = Icons.Outlined.Person,
+                icon = Icons.Outlined.Login,
                 title = "Sign In / Sign Up",
-                subtitle = "Unlock cloud sync and auto-translation",
+                subtitle = "Unlock auto-translation features",
                 onClick = { /* TODO: Auth flow */ },
                 accentColor = colors.accent,
             )
+        }
+
+        // ── Translations ────────────────────────────────────────────
+        SettingsSection(title = "Translations") {
+            SettingsRow(
+                icon = Icons.Outlined.Translate,
+                title = "Auto Translation Mode",
+                subtitle = "Off — translate only when you tap Translate",
+                onClick = { /* TODO: provider configuration */ },
+                accentColor = colors.accent,
+                trailing = { Text("Off", color = colors.secondaryText) },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Translate,
+                title = "Translation Language",
+                subtitle = "Target language for chapter auto-translation",
+                onClick = { /* TODO: language picker */ },
+                accentColor = colors.accent,
+                trailing = { Text("English", color = colors.secondaryText) },
+            )
+        }
+
+        // ── Daily Goal ──────────────────────────────────────────────
+        SettingsSection(title = "Daily Goal") {
+            Text(
+                "Minutes to aim for each day. Progress appears on the Home tab using logged reading time.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            )
+            DailyGoalButtons(selectedMinutes = 30, accentColor = colors.accent)
         }
 
         // ── Appearance ──────────────────────────────────────────────
@@ -153,6 +185,13 @@ fun SettingsScreen(
         // ── Reading ─────────────────────────────────────────────────
         SettingsSection(title = "Reading") {
             SettingsRow(
+                icon = Icons.Outlined.TextFields,
+                title = "Typography",
+                subtitle = "System Default, ${uiState.typography.fontSize.toInt()}px",
+                onClick = { /* Controls below are already live */ },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
                 icon = Icons.Outlined.Animation,
                 title = "Page Animation",
                 subtitle = uiState.readingSettings.pageAnimation.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -166,9 +205,43 @@ fun SettingsScreen(
             SettingsToggle(
                 icon = Icons.Outlined.TouchApp,
                 title = "Tap Zones",
-                subtitle = "Enable left/right edge taps",
+                subtitle = "Enable left/right edge taps in the reader",
                 checked = uiState.readingSettings.tapZonesEnabled,
                 onCheckedChange = viewModel::setTapZonesEnabled,
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Side tap & swipe",
+                subtitle = if (uiState.readingSettings.tapZoneNavMode == TapZoneNavMode.CHAPTER) {
+                    "Turn chapters at the edges"
+                } else {
+                    "Scroll within chapter (default)"
+                },
+                onClick = {
+                    viewModel.setTapZoneNavMode(
+                        if (uiState.readingSettings.tapZoneNavMode == TapZoneNavMode.SCROLL) {
+                            TapZoneNavMode.CHAPTER
+                        } else {
+                            TapZoneNavMode.SCROLL
+                        },
+                    )
+                },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Timer,
+                title = "Sleep timer",
+                subtitle = "Off",
+                onClick = { /* TODO: sleep timer */ },
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.Download,
+                title = "Continuous chapter loading",
+                subtitle = "Append the next chapter in the same reading space when you reach the end",
+                checked = true,
+                onCheckedChange = { /* TODO: continuous reader pipeline */ },
                 accentColor = colors.accent,
             )
             SettingsToggle(
@@ -177,6 +250,22 @@ fun SettingsScreen(
                 subtitle = "Use volume buttons to turn pages",
                 checked = uiState.readingSettings.volumeButtonPageTurn,
                 onCheckedChange = viewModel::setVolumeButtonPageTurn,
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.Tune,
+                title = "Bionic reading",
+                subtitle = "Emphasize word beginnings in the reader",
+                checked = false,
+                onCheckedChange = { /* TODO: bionic renderer */ },
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.PhoneAndroid,
+                title = "Keep screen on",
+                subtitle = "While a book is open in the reader",
+                checked = true,
+                onCheckedChange = { /* TODO: window flag integration */ },
                 accentColor = colors.accent,
             )
         }
@@ -205,37 +294,38 @@ fun SettingsScreen(
         }
 
         // ── Cloud Sync & AI ─────────────────────────────────────────
-        SettingsSection(title = "Cloud Sync") {
-            SettingsRow(
-                icon = Icons.Outlined.Cloud,
-                title = "Google Drive",
-                subtitle = "Back up reading data (coming soon)",
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Storage,
-                title = "WebDAV Server",
-                subtitle = "Use your own server (coming soon)",
-                accentColor = colors.accent,
-            )
-        }
-
         SettingsSection(title = "AI & Secrets") {
             SettingsRow(
                 icon = Icons.Outlined.AutoAwesome,
                 title = "AI Provider Configuration",
-                subtitle = "Configure OpenAI, Claude, or Gemini (coming soon)",
+                subtitle = "Configure OpenAI, Claude, Gemini, or custom endpoints",
+                onClick = { /* TODO: AI provider screen */ },
                 accentColor = colors.accent,
             )
         }
 
-        // ── Storage ─────────────────────────────────────────────────
         SettingsSection(title = "Storage") {
+            SettingsRow(
+                icon = Icons.Outlined.Folder,
+                title = "Storage Location",
+                subtitle = "Select the folder used for new imports and watched-folder rescans",
+                onClick = { /* TODO: SAF folder picker */ },
+                accentColor = colors.accent,
+                trailing = { Text("Internal storage/MIYO", color = colors.secondaryText) },
+            )
             SettingsRow(
                 icon = Icons.Outlined.SdStorage,
                 title = "Library Size",
                 subtitle = "${uiState.bookCount} book(s) on disk",
                 accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.FolderOpen,
+                title = "Watched Folder",
+                subtitle = "Rescan imports new EPUBs from this folder without copying them again",
+                onClick = { /* TODO: watched folder rescan */ },
+                accentColor = colors.accent,
+                trailing = { Text("Active", color = colors.secondaryText) },
             )
             SettingsRow(
                 icon = Icons.Outlined.DeleteSweep,
@@ -246,11 +336,77 @@ fun SettingsScreen(
             )
         }
 
+        SettingsSection(title = "Cloud Sync & Backup") {
+            SettingsRow(
+                icon = Icons.Outlined.Cloud,
+                title = "Connect Google Drive",
+                subtitle = "Back up reading data to your Google account",
+                onClick = { /* TODO: Google Drive sync */ },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Storage,
+                title = "Connect WebDAV Server",
+                subtitle = "Use your own server (Nextcloud, ownCloud, etc.)",
+                onClick = { /* TODO: WebDAV sync */ },
+                accentColor = colors.accent,
+            )
+        }
+
+        SettingsSection(title = "Permissions") {
+            SettingsRow(
+                icon = Icons.Outlined.Security,
+                title = "Storage Permission",
+                subtitle = "Required to import and read EPUB files",
+                onClick = { /* TODO: permission manager */ },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Folder,
+                title = "Open App Settings",
+                subtitle = "Manage app permissions",
+                onClick = { /* TODO: launch app settings */ },
+                accentColor = colors.accent,
+            )
+        }
+
+        SettingsSection(title = "Language Tools") {
+            SettingsRow(
+                icon = Icons.Outlined.MenuBook,
+                title = "Dictionary Library",
+                subtitle = "Download offline dictionaries and manage lookup packages",
+                onClick = { /* TODO: dictionary packages */ },
+                accentColor = colors.accent,
+            )
+        }
+
         // ── Advanced ────────────────────────────────────────────────
         SettingsSection(title = "Advanced") {
+            SettingsToggle(
+                icon = Icons.Outlined.ZoomInMap,
+                title = "Reduced Motion",
+                subtitle = "Minimize animations",
+                checked = uiState.readingSettings.reducedMotion,
+                onCheckedChange = viewModel::setReducedMotion,
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Sync,
+                title = "Rescan Library",
+                subtitle = "Find missing or new books",
+                onClick = { /* TODO: library rescan */ },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Storage,
+                title = "Duplicate Audit",
+                subtitle = "Detect exact and probable duplicate book entries",
+                onClick = { /* TODO: duplicate audit */ },
+                accentColor = colors.accent,
+            )
             SettingsRow(
                 icon = Icons.Outlined.RestartAlt,
-                title = "Reset Preferences",
+                title = "Reset All Preferences",
                 subtitle = "Restore defaults for reading and display",
                 onClick = viewModel::resetToDefaults,
                 accentColor = Color(0xFFEF4444),
@@ -292,11 +448,45 @@ private fun SettingsSection(
                 .padding(horizontal = 16.dp),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         ) {
             Column { content() }
         }
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DailyGoalButtons(
+    selectedMinutes: Int,
+    accentColor: Color,
+) {
+    val options = listOf(15, 30, 45, 60, 90, 120)
+    FlowRow(
+        modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        options.forEach { minutes ->
+            val selected = minutes == selectedMinutes
+            OutlinedButton(
+                onClick = { /* TODO: persist daily goal */ },
+                shape = RoundedCornerShape(14.dp),
+                colors = if (selected) {
+                    ButtonDefaults.outlinedButtonColors(
+                        containerColor = accentColor,
+                        contentColor = Color.White,
+                    )
+                } else {
+                    ButtonDefaults.outlinedButtonColors()
+                },
+                modifier = Modifier.width(92.dp),
+            ) {
+                Text("$minutes min", fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+            }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 // ── Row ─────────────────────────────────────────────────────────────

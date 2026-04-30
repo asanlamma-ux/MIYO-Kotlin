@@ -2,14 +2,14 @@ package com.miyu.reader.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Base palette
-val Primary = Color(0xFF6366F1)       // Indigo
-val PrimaryVariant = Color(0xFF4F46E5)
-val Secondary = Color(0xFF14B8A6)     // Teal
-val SurfaceLight = Color(0xFFFAFAFA)
-val SurfaceDark = Color(0xFF0F172A)
-val BackgroundLight = Color(0xFFF8FAFC)
-val BackgroundDark = Color(0xFF020617)
+// Base palette: ported to the React Native app's calm sepia reading language.
+val Primary = Color(0xFF9A7747)
+val PrimaryVariant = Color(0xFF7B5E37)
+val Secondary = Color(0xFF6F8A6A)
+val SurfaceLight = Color(0xFFFFFBF5)
+val SurfaceDark = Color(0xFF1C1816)
+val BackgroundLight = Color(0xFFF4EFE8)
+val BackgroundDark = Color(0xFF100D0B)
 val Error = Color(0xFFEF4444)
 
 // Reader themes — data class shared by the 16 built-in themes

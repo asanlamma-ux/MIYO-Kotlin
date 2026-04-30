@@ -9,8 +9,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -104,6 +102,8 @@ fun ReaderScreen(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.allowFileAccess = true
+                        settings.loadsImagesAutomatically = true
+                        settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
@@ -112,20 +112,13 @@ fun ReaderScreen(
                 },
                 update = { webView ->
                     webView.setBackgroundColor(bgColor.toArgb())
-                    webView.loadDataWithBaseURL(null, htmlContent, "text/html", "utf-8", null)
+                    val baseUrl = uiState.book?.filePath
+                        ?.substringBeforeLast('/', missingDelimiterValue = "")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { "file://$it/" }
+                    webView.loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "UTF-8", null)
                 },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                    ) { 
-                        if (uiState.selection != null) {
-                            viewModel.clearSelection()
-                        } else {
-                            viewModel.toggleControls() 
-                        }
-                    },
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
@@ -422,7 +415,11 @@ private fun buildReaderHtml(
     lineHeight: Float,
     textAlign: TextAlign,
     marginPreset: MarginPreset,
-): String = """
+): String {
+    val bodyContent = extractBodyContent(chapterHtml).takeIf { it.isNotBlank() }
+        ?: "<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>"
+
+    return """
 <!DOCTYPE html>
 <html>
 <head>
@@ -430,9 +427,10 @@ private fun buildReaderHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
+$css
 html, body {
-  background: $bgColor;
-  color: $textColor;
+  background: $bgColor !important;
+  color: $textColor !important;
   font-family: 'Georgia', serif;
   font-size: ${fontSize.toInt()}px;
   line-height: $lineHeight;
@@ -442,17 +440,31 @@ html, body {
   overflow-wrap: break-word;
   -webkit-text-size-adjust: 100%;
 }
-a { color: $accentColor; text-decoration: none; }
+body, body * {
+  color: inherit;
+}
+body :not(a) {
+  color: $textColor !important;
+}
+a { color: $accentColor !important; text-decoration: none; }
 img { max-width: 100%; height: auto; }
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
 p { margin-bottom: 0.8em; }
 blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
-$css
+.miyu-empty-chapter {
+  border: 1px solid rgba(154, 119, 71, 0.25);
+  border-radius: 18px;
+  padding: 22px;
+  background: rgba(255, 251, 245, 0.42);
+}
 </style>
 </head>
 <body>
-${extractBodyContent(chapterHtml)}
+$bodyContent
 <script>
+document.addEventListener('click', function() {
+    if (window.AndroidBridge) window.AndroidBridge.onReaderTap();
+});
 document.addEventListener('selectionchange', function() {
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
@@ -480,6 +492,7 @@ document.addEventListener('selectionchange', function() {
 </body>
 </html>
 """.trimIndent()
+}
 
 private fun readerMarginPx(marginPreset: MarginPreset): Int = when (marginPreset) {
     MarginPreset.NARROW -> 12
@@ -518,5 +531,10 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    @JavascriptInterface
+    fun onReaderTap() {
+        viewModel.handleReaderTap()
     }
 }

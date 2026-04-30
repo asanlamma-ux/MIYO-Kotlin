@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -82,20 +83,50 @@ fun LibraryScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(colors.background)
                 .padding(padding),
         ) {
             // ── Header ──────────────────────────────────────────────
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Text(
-                    "Library",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onBackground,
-                )
-                Text(
-                    "${uiState.books.size} book${if (uiState.books.size != 1) "s" else ""}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Library",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.onBackground,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = colors.cardBackground,
+                    ) {
+                        Text(
+                            "${uiState.books.size}",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            color = colors.secondaryText,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalIconButton(onClick = { /* TODO: OPDS catalog */ }, shape = RoundedCornerShape(14.dp)) {
+                        Icon(Icons.Outlined.Public, contentDescription = "Catalogs")
+                    }
+                    FilledTonalIconButton(onClick = { /* TODO: WTR Lab parser */ }, shape = RoundedCornerShape(14.dp)) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = "WTR Lab")
+                    }
+                    FilledTonalIconButton(onClick = viewModel::toggleViewMode, shape = RoundedCornerShape(14.dp)) {
+                        Icon(
+                            if (uiState.viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
+                            contentDescription = "Toggle View",
+                        )
+                    }
+                }
             }
 
             // ── Search bar ──────────────────────────────────────────
@@ -145,12 +176,24 @@ fun LibraryScreen(
                     }
                 }
 
-                // Sort + view toggle
                 Row {
                     Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Outlined.Sort, contentDescription = "Sort", modifier = Modifier.size(20.dp))
-                        }
+                        AssistChip(
+                            onClick = { showSortMenu = true },
+                            leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            label = {
+                                Text(
+                                    when (uiState.sortOption) {
+                                        SortOption.RECENT -> "Sort: Recently Read"
+                                        SortOption.TITLE -> "Sort: Title"
+                                        SortOption.AUTHOR -> "Sort: Author"
+                                        SortOption.PROGRESS -> "Sort: Progress"
+                                        SortOption.DATE_ADDED -> "Sort: Date Added"
+                                    },
+                                )
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                        )
                         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                             SortOption.entries.forEach { option ->
                                 DropdownMenuItem(
@@ -175,13 +218,6 @@ fun LibraryScreen(
                                 )
                             }
                         }
-                    }
-                    IconButton(onClick = viewModel::toggleViewMode) {
-                        Icon(
-                            if (uiState.viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
-                            contentDescription = "Toggle View",
-                            modifier = Modifier.size(20.dp),
-                        )
                     }
                 }
             }

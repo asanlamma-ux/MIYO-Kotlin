@@ -1,6 +1,7 @@
 package com.miyu.reader.ui.terms
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ fun TermsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(colors.background)
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
@@ -67,6 +69,12 @@ fun TermsScreen(
                     shape = RoundedCornerShape(13.dp),
                 ) {
                     Icon(Icons.Outlined.Upload, contentDescription = "Export")
+                }
+                FilledTonalIconButton(
+                    onClick = { /* TODO: Community packs */ },
+                    shape = RoundedCornerShape(13.dp),
+                ) {
+                    Icon(Icons.Outlined.Public, contentDescription = "Community")
                 }
                 FilledIconButton(
                     onClick = { viewModel.toggleCreateInput() },

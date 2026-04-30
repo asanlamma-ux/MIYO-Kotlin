@@ -150,6 +150,12 @@ class ReaderViewModel @Inject constructor(
         _uiState.update { it.copy(showControls = !it.showControls) }
     }
 
+    fun handleReaderTap() {
+        _uiState.update { state ->
+            if (state.selection != null) state.copy(selection = null) else state.copy(showControls = !state.showControls)
+        }
+    }
+
     fun toggleChapterDrawer() {
         _uiState.update { it.copy(showChapterDrawer = !it.showChapterDrawer) }
     }

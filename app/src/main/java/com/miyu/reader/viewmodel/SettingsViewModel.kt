@@ -97,6 +97,20 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setReducedMotion(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(reducedMotion = enabled))
+        }
+    }
+
+    fun setTapZoneNavMode(mode: TapZoneNavMode) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(tapZoneNavMode = mode))
+        }
+    }
+
     fun setImmersiveMode(enabled: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.readingSettings
