@@ -62,33 +62,7 @@ fun ReaderScreen(
 
     // Javascript interface to receive selection coordinates and text
     val jsInterface = remember(viewModel) {
-        object {
-            @JavascriptInterface
-            fun onSelectionChanged(jsonStr: String) {
-                if (jsonStr.isBlank() || jsonStr == "null") {
-                    viewModel.handleSelection(null)
-                    return
-                }
-                try {
-                    val json = JSONObject(jsonStr)
-                    val text = json.getString("text")
-                    if (text.isBlank()) {
-                        viewModel.handleSelection(null)
-                        return
-                    }
-                    val selection = SelectionData(
-                        text = text,
-                        x = json.getDouble("x").toFloat(),
-                        y = json.getDouble("y").toFloat(),
-                        width = json.getDouble("width").toFloat(),
-                        height = json.getDouble("height").toFloat()
-                    )
-                    viewModel.handleSelection(selection)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
+        ReaderJsInterface(viewModel)
     }
 
     Box(
@@ -481,3 +455,32 @@ document.addEventListener('selectionchange', function() {
 </body>
 </html>
 """.trimIndent()
+
+// Named class so Android lint can see @JavascriptInterface annotations
+private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
+    @JavascriptInterface
+    fun onSelectionChanged(jsonStr: String) {
+        if (jsonStr.isBlank() || jsonStr == "null") {
+            viewModel.handleSelection(null)
+            return
+        }
+        try {
+            val json = JSONObject(jsonStr)
+            val text = json.getString("text")
+            if (text.isBlank()) {
+                viewModel.handleSelection(null)
+                return
+            }
+            val selection = SelectionData(
+                text = text,
+                x = json.getDouble("x").toFloat(),
+                y = json.getDouble("y").toFloat(),
+                width = json.getDouble("width").toFloat(),
+                height = json.getDouble("height").toFloat()
+            )
+            viewModel.handleSelection(selection)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
