@@ -1,0 +1,19 @@
+name: Create Pull Request
+on:
+  push:
+    branches:
+      - debug  # Triggers when you push to the debug branch
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Open Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: debug
+          base: main
+          title: "Auto-PR: Merge Debug into Main"
+          body: "This PR was automatically created by GitHub Actions."

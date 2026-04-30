@@ -1,0 +1,459 @@
+package com.miyu.reader.ui.reader
+
+import android.annotation.SuppressLint
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.miyu.reader.ui.theme.ReaderColors
+import com.miyu.reader.viewmodel.ReaderViewModel
+
+import android.webkit.JavascriptInterface
+import com.miyu.reader.ui.reader.components.SelectionToolbar
+import com.miyu.reader.ui.reader.components.SelectionData
+import org.json.JSONObject
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReaderScreen(
+    bookId: String,
+    onBack: () -> Unit,
+    viewModel: ReaderViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val readerThemeId by viewModel.readerThemeId.collectAsStateWithLifecycle()
+    val readerTheme = ReaderColors.findById(readerThemeId)
+
+    val bgColor = readerTheme.background
+    val textColor = readerTheme.text
+    val accentColor = readerTheme.accent
+
+    // Javascript interface to receive selection coordinates and text
+    val jsInterface = remember(viewModel) {
+        object {
+            @JavascriptInterface
+            fun onSelectionChanged(jsonStr: String) {
+                if (jsonStr.isBlank() || jsonStr == "null") {
+                    viewModel.handleSelection(null)
+                    return
+                }
+                try {
+                    val json = JSONObject(jsonStr)
+                    val text = json.getString("text")
+                    if (text.isBlank()) {
+                        viewModel.handleSelection(null)
+                        return
+                    }
+                    val selection = SelectionData(
+                        text = text,
+                        x = json.getDouble("x").toFloat(),
+                        y = json.getDouble("y").toFloat(),
+                        width = json.getDouble("width").toFloat(),
+                        height = json.getDouble("height").toFloat()
+                    )
+                    viewModel.handleSelection(selection)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(bgColor),
+    ) {
+        // ── Loading state ───────────────────────────────────────────
+        if (uiState.isLoading && uiState.chapterHtml.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = accentColor)
+                    Spacer(Modifier.height(16.dp))
+                    Text("Loading book…", color = readerTheme.secondaryText)
+                }
+            }
+        } else {
+            // ── WebView ─────────────────────────────────────────────
+            val htmlContent = buildReaderHtml(
+                chapterHtml = uiState.chapterHtml,
+                css = uiState.css,
+                bgColor = colorToHex(bgColor),
+                textColor = colorToHex(textColor),
+                accentColor = colorToHex(accentColor),
+            )
+
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        @SuppressLint("SetJavaScriptEnabled")
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = true
+                        setBackgroundColor(bgColor.toArgb())
+                        addJavascriptInterface(jsInterface, "AndroidBridge")
+                        webViewClient = WebViewClient()
+                    }
+                },
+                update = { webView ->
+                    webView.setBackgroundColor(bgColor.toArgb())
+                    webView.loadDataWithBaseURL(null, htmlContent, "text/html", "utf-8", null)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { 
+                        if (uiState.selection != null) {
+                            viewModel.clearSelection()
+                        } else {
+                            viewModel.toggleControls() 
+                        }
+                    },
+            )
+        }
+
+        // ── Selection Toolbar ───────────────────────────────────────
+        if (uiState.selection != null) {
+            SelectionToolbar(
+                selection = uiState.selection,
+                readerTheme = readerTheme,
+                onClose = { viewModel.clearSelection() },
+                onHighlight = { data -> viewModel.saveHighlight(data) },
+                onNote = { data -> viewModel.saveHighlight(data) },
+                onCopy = { /* TODO: Clipboard manager */ },
+                onShare = { /* TODO: Share sheet */ },
+                onDictionary = { viewModel.showDictionary(it) },
+                onTranslate = { viewModel.showTranslation(it) },
+                onBookmarkSelection = { viewModel.addBookmark(it) },
+                onAddTerm = { /* TODO: Add to terms */ }
+            )
+        }
+
+        // ── Translation Sheet ───────────────────────────────────────
+        if (uiState.translationText != null) {
+            com.miyu.reader.ui.reader.components.TranslationSheetBottomSheet(
+                sourceText = uiState.translationText!!,
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.clearTranslation() },
+            )
+        }
+
+        // ── Dictionary Sheet ────────────────────────────────────────
+        if (uiState.dictionaryWord != null) {
+            com.miyu.reader.ui.reader.components.DictionaryLookupBottomSheet(
+                word = uiState.dictionaryWord!!,
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.clearDictionary() },
+            )
+        }
+
+        // ── Top controls overlay ────────────────────────────────────
+        AnimatedVisibility(
+            visible = uiState.showControls && uiState.selection == null,
+            enter = fadeIn() + slideInVertically(),
+            exit = fadeOut() + slideOutVertically(),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Surface(
+                color = bgColor.copy(alpha = 0.95f),
+                shadowElevation = 4.dp,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = textColor)
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                    ) {
+                        Text(
+                            uiState.book?.title ?: "",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = textColor,
+                        )
+                        Text(
+                            "Chapter ${uiState.chapterIndex + 1} of ${uiState.totalChapters}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = readerTheme.secondaryText,
+                        )
+                    }
+                    IconButton(onClick = { viewModel.addBookmark("") }) {
+                        Icon(Icons.Outlined.BookmarkBorder, "Bookmark", tint = textColor)
+                    }
+                    IconButton(onClick = { viewModel.toggleAnnotationsDrawer() }) {
+                        Icon(Icons.Outlined.Bookmarks, "Annotations", tint = textColor)
+                    }
+                    IconButton(onClick = { viewModel.toggleStatsModal() }) {
+                        Icon(Icons.Outlined.Info, "Stats", tint = textColor)
+                    }
+                    IconButton(onClick = { viewModel.toggleSearchModal() }) {
+                        Icon(Icons.Outlined.Search, "Search", tint = textColor)
+                    }
+                    IconButton(onClick = { viewModel.toggleChapterDrawer() }) {
+                        Icon(Icons.Outlined.FormatListBulleted, "Chapters", tint = textColor)
+                    }
+                }
+            }
+        }
+
+        // ── Search Modal ────────────────────────────────────────────
+        if (uiState.showSearchModal) {
+            com.miyu.reader.ui.reader.components.SearchInBookBottomSheet(
+                currentChapterIndex = uiState.chapterIndex,
+                readerTheme = readerTheme,
+                onGoToChapter = { viewModel.goToChapter(it) },
+                onDismiss = { viewModel.toggleSearchModal() },
+            )
+        }
+
+        // ── Bottom controls overlay ─────────────────────────────────
+        AnimatedVisibility(
+            visible = uiState.showControls && uiState.selection == null,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Surface(
+                color = bgColor.copy(alpha = 0.95f),
+                shadowElevation = 4.dp,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    // Progress slider
+                    if (uiState.totalChapters > 0) {
+                        Slider(
+                            value = (uiState.chapterIndex.toFloat()),
+                            onValueChange = { viewModel.goToChapter(it.toInt()) },
+                            valueRange = 0f..(uiState.totalChapters - 1).toFloat().coerceAtLeast(0f),
+                            colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor),
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        // Previous chapter
+                        IconButton(
+                            onClick = { viewModel.navigateChapter(-1) },
+                            enabled = uiState.chapterIndex > 0,
+                        ) {
+                            Icon(Icons.Default.SkipPrevious, "Previous", tint = if (uiState.chapterIndex > 0) textColor else textColor.copy(alpha = 0.3f))
+                        }
+
+                        // Theme picker placeholder
+                        IconButton(onClick = { /* TODO: Theme picker */ }) {
+                            Icon(Icons.Outlined.Palette, "Theme", tint = textColor)
+                        }
+
+                        // Settings panel
+                        IconButton(onClick = { viewModel.toggleLayoutPanel() }) {
+                            Icon(Icons.Outlined.Settings, "Layout", tint = textColor)
+                        }
+
+                        // Next chapter
+                        IconButton(
+                            onClick = { viewModel.navigateChapter(1) },
+                            enabled = uiState.chapterIndex < uiState.totalChapters - 1,
+                        ) {
+                            Icon(Icons.Default.SkipNext, "Next", tint = if (uiState.chapterIndex < uiState.totalChapters - 1) textColor else textColor.copy(alpha = 0.3f))
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Layout Panel ────────────────────────────────────────────
+        if (uiState.showLayoutPanel) {
+            val readingSettings by viewModel.readingSettings.collectAsStateWithLifecycle()
+            com.miyu.reader.ui.reader.components.ReaderLayoutPanelBottomSheet(
+                settings = readingSettings,
+                readerTheme = readerTheme,
+                onSettingsChanged = { viewModel.updateReadingSettings(it) },
+                onDismiss = { viewModel.toggleLayoutPanel() },
+            )
+        }
+
+        // ── Stats Modal ─────────────────────────────────────────────
+        if (uiState.showStatsModal && uiState.book != null) {
+            com.miyu.reader.ui.reader.components.ReadingStatsBottomSheet(
+                book = uiState.book!!,
+                chapterIndex = uiState.chapterIndex,
+                totalChapters = uiState.totalChapters,
+                totalHighlights = uiState.highlights.size,
+                totalBookmarks = uiState.bookmarks.size,
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.toggleStatsModal() },
+            )
+        }
+
+        // ── Annotations drawer ──────────────────────────────────────
+        if (uiState.showAnnotationsDrawer) {
+            com.miyu.reader.ui.reader.components.AnnotationsDrawerBottomSheet(
+                highlights = uiState.highlights,
+                bookmarks = uiState.bookmarks,
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.toggleAnnotationsDrawer() },
+                onHighlightClick = { highlight ->
+                    viewModel.goToChapter(highlight.chapterIndex)
+                    viewModel.toggleAnnotationsDrawer()
+                },
+                onBookmarkClick = { bookmark ->
+                    viewModel.goToChapter(bookmark.chapterIndex)
+                    viewModel.toggleAnnotationsDrawer()
+                },
+                onDeleteHighlight = { viewModel.deleteHighlight(it) },
+                onDeleteBookmark = { viewModel.deleteBookmark(it) },
+            )
+        }
+
+        // ── Chapter drawer ──────────────────────────────────────────
+        if (uiState.showChapterDrawer) {
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.toggleChapterDrawer() },
+                containerColor = readerTheme.cardBackground,
+            ) {
+                Text(
+                    "Chapters",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    color = textColor,
+                )
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                ) {
+                    val chapCount = uiState.totalChapters.coerceAtLeast(1)
+                    itemsIndexed(List(chapCount) { it }) { index, _ ->
+                        ListItem(
+                            headlineContent = {
+                                Text(
+                                    "Chapter ${index + 1}",
+                                    fontWeight = if (index == uiState.chapterIndex) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (index == uiState.chapterIndex) accentColor else textColor,
+                                )
+                            },
+                            leadingContent = {
+                                if (index == uiState.chapterIndex) {
+                                    Surface(shape = CircleShape, color = accentColor, modifier = Modifier.size(8.dp)) {}
+                                }
+                            },
+                            modifier = Modifier.clickable { viewModel.goToChapter(index) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+private fun colorToHex(color: Color): String {
+    val argb = color.toArgb()
+    return String.format("#%06X", 0xFFFFFF and argb)
+}
+
+private fun buildReaderHtml(
+    chapterHtml: String,
+    css: String,
+    bgColor: String,
+    textColor: String,
+    accentColor: String,
+): String = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: $bgColor;
+  color: $textColor;
+  font-family: 'Georgia', serif;
+  font-size: 18px;
+  line-height: 1.7;
+  padding: 20px 16px 60px 16px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  -webkit-text-size-adjust: 100%;
+}
+a { color: $accentColor; text-decoration: none; }
+img { max-width: 100%; height: auto; }
+h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
+p { margin-bottom: 0.8em; }
+blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
+$css
+</style>
+</head>
+<body>
+$chapterHtml
+<script>
+document.addEventListener('selectionchange', function() {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
+        return;
+    }
+    var text = sel.toString().trim();
+    if (text.length === 0) {
+        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
+        return;
+    }
+    try {
+        var rect = sel.getRangeAt(0).getBoundingClientRect();
+        var data = {
+            text: text,
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height
+        };
+        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
+    } catch(e) {}
+});
+</script>
+</body>
+</html>
+""".trimIndent()
