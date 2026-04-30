@@ -110,13 +110,13 @@ fun ReadingStatsBottomSheet(
                                 .fillMaxWidth(progress / 100f)
                                 .height(8.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(Color(android.graphics.Color.parseColor(readerTheme.accent)))
+                                .background(readerTheme.accent)
                         )
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Start", color = readerTheme.secondaryText, fontSize = 12.sp)
-                        Text("${progress.toInt()}%", color = Color(android.graphics.Color.parseColor(readerTheme.accent)), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("${progress.toInt()}%", color = readerTheme.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Text("End", color = readerTheme.secondaryText, fontSize = 12.sp)
                     }
                 }
@@ -126,7 +126,7 @@ fun ReadingStatsBottomSheet(
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.TrendingUp,
-                        iconColor = Color(android.graphics.Color.parseColor(readerTheme.accent)),
+                        iconColor = readerTheme.accent,
                         value = "${progress.toInt()}%",
                         label = "Reading Progress",
                         subValue = "${chapterIndex + 1} of $totalChapters chapters",

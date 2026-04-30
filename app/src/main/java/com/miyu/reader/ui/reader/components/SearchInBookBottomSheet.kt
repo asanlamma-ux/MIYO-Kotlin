@@ -146,7 +146,7 @@ fun SearchInBookBottomSheet(
                     unfocusedBorderColor = readerTheme.secondaryText.copy(alpha = 0.2f),
                     focusedTextColor = readerTheme.text,
                     unfocusedTextColor = readerTheme.text,
-                    cursorColor = Color(android.graphics.Color.parseColor(readerTheme.accent))
+                    cursorColor = readerTheme.accent
                 ),
                 shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -186,10 +186,10 @@ fun SearchInBookBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (isCurrent) Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.1f) else readerTheme.background)
+                            .background(if (isCurrent) readerTheme.accent.copy(alpha = 0.1f) else readerTheme.background)
                             .border(
                                 1.dp,
-                                if (isCurrent) Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.3f) else readerTheme.secondaryText.copy(alpha = 0.15f),
+                                if (isCurrent) readerTheme.accent.copy(alpha = 0.3f) else readerTheme.secondaryText.copy(alpha = 0.15f),
                                 RoundedCornerShape(14.dp)
                             )
                             .clickable {
@@ -199,15 +199,15 @@ fun SearchInBookBottomSheet(
                             .padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(result.chapterTitle, color = Color(android.graphics.Color.parseColor(readerTheme.accent)), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            Text(result.chapterTitle, color = readerTheme.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             if (isCurrent) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.2f))
+                                        .background(readerTheme.accent.copy(alpha = 0.2f))
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Current", color = Color(android.graphics.Color.parseColor(readerTheme.accent)), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("Current", color = readerTheme.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -216,7 +216,7 @@ fun SearchInBookBottomSheet(
                         Text(
                             buildAnnotatedString {
                                 append(result.excerptBefore)
-                                withStyle(SpanStyle(background = Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.35f), color = readerTheme.text, fontWeight = FontWeight.Bold)) {
+                                withStyle(SpanStyle(background = readerTheme.accent.copy(alpha = 0.35f), color = readerTheme.text, fontWeight = FontWeight.Bold)) {
                                     append(result.excerptMatch)
                                 }
                                 append(result.excerptAfter)
@@ -239,10 +239,10 @@ private fun Chip(label: String, active: Boolean, readerTheme: ReaderThemeColors,
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)).copy(alpha = 0.22f) else readerTheme.background)
+            .background(if (active) readerTheme.accent.copy(alpha = 0.22f) else readerTheme.background)
             .border(
                 width = 1.5.dp,
-                color = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.secondaryText.copy(alpha = 0.3f),
+                color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
@@ -250,7 +250,7 @@ private fun Chip(label: String, active: Boolean, readerTheme: ReaderThemeColors,
     ) {
         Text(
             label,
-            color = if (active) Color(android.graphics.Color.parseColor(readerTheme.accent)) else readerTheme.text,
+            color = if (active) readerTheme.accent else readerTheme.text,
             fontSize = 12.sp,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
         )
