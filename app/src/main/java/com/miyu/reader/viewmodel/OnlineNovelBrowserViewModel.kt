@@ -585,6 +585,42 @@ true;
         if (isNull(key)) null else optDouble(key).toFloat().takeIf { it > 0f }
 
     private fun OnlineNovelSummary.toWtrPayload(): JSONObject =
+        buildWtrPayload(
+            rawId = rawId,
+            slug = slug,
+            path = path,
+            title = title,
+            coverUrl = coverUrl,
+            author = author,
+            summary = summary,
+            status = status,
+            chapterCount = chapterCount,
+        )
+
+    private fun OnlineNovelDetails.toWtrPayload(): JSONObject =
+        buildWtrPayload(
+            rawId = rawId,
+            slug = slug,
+            path = path,
+            title = title,
+            coverUrl = coverUrl,
+            author = author,
+            summary = summary,
+            status = status,
+            chapterCount = chapterCount,
+        )
+
+    private fun buildWtrPayload(
+        rawId: String,
+        slug: String,
+        path: String,
+        title: String,
+        coverUrl: String?,
+        author: String,
+        summary: String,
+        status: String,
+        chapterCount: Int?,
+    ): JSONObject =
         JSONObject()
             .put("providerId", "wtr-lab")
             .put("rawId", rawId)
