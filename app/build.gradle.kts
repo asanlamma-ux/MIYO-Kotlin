@@ -208,6 +208,7 @@ dependencies {
 
     // HTML parsing for OPDS-adjacent online novel provider imports
     implementation("org.jsoup:jsoup:1.17.2")
+    implementation("org.jspecify:jspecify:0.3.0")
 
     // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.6.0")
