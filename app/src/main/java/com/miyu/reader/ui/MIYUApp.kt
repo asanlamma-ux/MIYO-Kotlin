@@ -1,11 +1,8 @@
 package com.miyu.reader.ui
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -29,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.miyu.reader.R
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.ui.home.HomeScreen
 import com.miyu.reader.ui.library.BookDetailsScreen
@@ -50,12 +49,17 @@ import com.miyu.reader.ui.theme.SpecialThemeBackdrop
 import com.miyu.reader.viewmodel.LibraryViewModel
 import com.miyu.reader.viewmodel.ThemeViewModel
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector? = null) {
-    data object Home : Screen("home", "Home", Icons.Outlined.Home)
-    data object Library : Screen("library", "Library", Icons.Outlined.MenuBook)
-    data object Terms : Screen("terms", "Terms", Icons.Outlined.Translate)
-    data object History : Screen("history", "History", Icons.Outlined.History)
-    data object Settings : Screen("settings", "Settings", Icons.Outlined.Tune)
+sealed class Screen(
+    val route: String,
+    val title: String,
+    @DrawableRes val iconRes: Int? = null,
+    val icon: ImageVector? = null,
+) {
+    data object Home : Screen("home", "Home", iconRes = R.drawable.ic_nav_home)
+    data object Library : Screen("library", "Library", iconRes = R.drawable.ic_nav_library)
+    data object Terms : Screen("terms", "Terms", icon = Icons.Outlined.Translate)
+    data object History : Screen("history", "History", iconRes = R.drawable.ic_nav_history)
+    data object Settings : Screen("settings", "Settings", iconRes = R.drawable.ic_nav_settings)
     data object OnlineBrowser : Screen("library/online", "Online Browser")
     data object OpdsCatalogs : Screen("library/opds", "OPDS Catalogs")
     data object BookDetails : Screen("library/book/{bookId}", "Book Details")
@@ -156,11 +160,21 @@ fun MIYUApp() {
                                                     if (selected) colors.accent else Color.Transparent,
                                                 ),
                                         )
-                                        Icon(
-                                            imageVector = screen.icon ?: Icons.Outlined.Home,
-                                            contentDescription = screen.title,
-                                            tint = if (selected) colors.accent else colors.secondaryText,
-                                        )
+                                        if (screen.iconRes != null) {
+                                            Icon(
+                                                painter = painterResource(screen.iconRes),
+                                                contentDescription = screen.title,
+                                                tint = if (selected) colors.accent else colors.secondaryText,
+                                                modifier = Modifier.size(24.dp),
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = screen.icon ?: Icons.Outlined.Translate,
+                                                contentDescription = screen.title,
+                                                tint = if (selected) colors.accent else colors.secondaryText,
+                                                modifier = Modifier.size(24.dp),
+                                            )
+                                        }
                                         Spacer(Modifier.height(4.dp))
                                         Text(
                                             screen.title,
