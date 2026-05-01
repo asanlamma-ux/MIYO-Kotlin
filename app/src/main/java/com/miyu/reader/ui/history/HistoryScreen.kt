@@ -2,7 +2,6 @@ package com.miyu.reader.ui.history
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
+import com.miyu.reader.ui.core.components.MiyoEmptyScreen
+import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HistoryViewModel
 import java.time.Instant
@@ -55,26 +56,10 @@ fun HistoryScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // ── Header ──────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
+        MiyoScreenHeader(
+            title = "History",
+            subtitle = "${history.size} ${if (history.size == 1) "book" else "books"} read",
         ) {
-            Column {
-                Text(
-                    "History",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onBackground,
-                )
-                Text(
-                    "${history.size} ${if (history.size == 1) "book" else "books"} read",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                )
-            }
             if (uiState.isSelecting) {
                 IconButton(onClick = viewModel::cancelSelection) {
                     Icon(Icons.Default.Close, contentDescription = "Cancel")
@@ -119,41 +104,14 @@ fun HistoryScreen(
 
         // ── Content ─────────────────────────────────────────────────
         if (history.isEmpty()) {
-            Box(
+            MiyoEmptyScreen(
+                icon = Icons.Outlined.AccessTime,
+                title = "No Reading History",
+                message = "Start reading a book and it will appear here.",
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = CircleShape,
-                        color = colors.accent.copy(alpha = 0.12f),
-                        modifier = Modifier.size(100.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Outlined.AccessTime,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(48.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(24.dp))
-                    Text(
-                        "No Reading History",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.onBackground,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Start reading a book and it will appear here.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.secondaryText,
-                    )
-                }
-            }
+            )
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),

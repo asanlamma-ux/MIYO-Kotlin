@@ -16,10 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.TermGroup
+import com.miyu.reader.ui.core.components.MiyoEmptyScreen
+import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.TermsViewModel
 
@@ -42,27 +43,10 @@ fun TermsScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        // ── Header ──────────────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
+        MiyoScreenHeader(
+            title = "Terms",
+            subtitle = "Manage translation corrections for your novels",
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Terms",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onBackground,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "Manage translation corrections for your novels",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                )
-            }
             FilledIconButton(
                 onClick = { viewModel.toggleCreateInput() },
                 shape = RoundedCornerShape(13.dp),
@@ -139,54 +123,20 @@ fun TermsScreen(
 
         // ── Empty state ─────────────────────────────────────────────
         if (filteredGroups.isEmpty()) {
-            Box(
+            MiyoEmptyScreen(
+                icon = Icons.Outlined.Translate,
+                title = if (uiState.searchQuery.isNotBlank()) "No Results" else "No Term Groups Yet",
+                message = if (uiState.searchQuery.isNotBlank()) {
+                    "Try a different search query."
+                } else {
+                    "Create a term group to start correcting MTL translations."
+                },
+                actionLabel = if (uiState.searchQuery.isBlank()) "Create First Group" else null,
+                onAction = if (uiState.searchQuery.isBlank()) viewModel::toggleCreateInput else null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 60.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = colors.accent.copy(alpha = 0.12f),
-                        modifier = Modifier.size(90.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Outlined.Translate,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier.size(40.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(20.dp))
-                    Text(
-                        if (uiState.searchQuery.isNotBlank()) "No Results" else "No Term Groups Yet",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = colors.onBackground,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        if (uiState.searchQuery.isNotBlank()) "Try a different search query."
-                        else "Create a term group to start correcting MTL translations.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.secondaryText,
-                    )
-                    if (uiState.searchQuery.isBlank()) {
-                        Spacer(Modifier.height(20.dp))
-                        Button(
-                            onClick = { viewModel.toggleCreateInput() },
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
-                            shape = RoundedCornerShape(14.dp),
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Create First Group", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
+            )
         } else {
             // ── Group cards ─────────────────────────────────────────
             filteredGroups.forEach { group ->

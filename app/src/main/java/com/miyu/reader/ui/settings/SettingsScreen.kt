@@ -3,35 +3,23 @@ package com.miyu.reader.ui.settings
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.MarginPreset
@@ -40,6 +28,11 @@ import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.domain.model.DownloadedDictionary
+import com.miyu.reader.ui.core.components.settings.MiyoExpandableChoiceSetting as ExpandableChoiceSetting
+import com.miyu.reader.ui.core.components.settings.MiyoSectionLabel as SectionLabel
+import com.miyu.reader.ui.core.components.settings.MiyoSettingsItem as SettingsRow
+import com.miyu.reader.ui.core.components.settings.MiyoSettingsSection as SettingsSection
+import com.miyu.reader.ui.core.components.settings.MiyoSettingsSwitch as SettingsToggle
 import com.miyu.reader.ui.library.LibraryWorkspaceSurface
 import com.miyu.reader.ui.library.WorkspaceExitButton
 import com.miyu.reader.ui.theme.LocalMIYUColors
@@ -801,187 +794,6 @@ private fun DictionaryRow(
             }
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    val colors = LocalMIYUColors.current
-    Text(
-        text.uppercase(),
-        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-        color = colors.secondaryText,
-        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-    )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun <T> ExpandableChoiceSetting(
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    accentColor: Color,
-    currentValue: String,
-    choices: List<T>,
-    choiceLabel: (T) -> String,
-    selectedChoice: T,
-    onChoiceSelected: (T) -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-    ) {
-        SettingsRow(
-            icon = icon,
-            title = title,
-            subtitle = subtitle,
-            onClick = { onExpandedChange(!expanded) },
-            accentColor = accentColor,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(currentValue, color = colors.secondaryText, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.width(8.dp))
-                    Icon(
-                        Icons.AutoMirrored.Outlined.ArrowForwardIos,
-                        contentDescription = null,
-                        tint = colors.secondaryText,
-                        modifier = Modifier
-                            .size(14.dp)
-                            .rotate(if (expanded) 90f else 0f),
-                    )
-                }
-            },
-        )
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 56.dp, end = 18.dp, bottom = 16.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = colors.background.copy(alpha = if (colors.isDark) 0.34f else 0.56f),
-            ) {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    choices.forEach { choice ->
-                        FilterChip(
-                            selected = selectedChoice == choice,
-                            onClick = {
-                                onChoiceSelected(choice)
-                                onExpandedChange(false)
-                            },
-                            label = { Text(choiceLabel(choice), fontWeight = FontWeight.SemiBold) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        Text(
-            title.uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-            ),
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            color = colors.secondaryText,
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        ) {
-            Column { content() }
-        }
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: (() -> Unit)? = null,
-    accentColor: Color = LocalMIYUColors.current.accent,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    val colors = LocalMIYUColors.current
-    ListItem(
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-        },
-        supportingContent = {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
-        },
-        leadingContent = {
-            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
-        },
-        trailingContent = trailing ?: {
-            if (onClick != null) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.ArrowForwardIos,
-                    contentDescription = null,
-                    tint = colors.secondaryText,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        },
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-    )
-}
-
-@Composable
-private fun SettingsToggle(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    accentColor: Color = LocalMIYUColors.current.accent,
-) {
-    val colors = LocalMIYUColors.current
-    ListItem(
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = colors.onBackground)
-        },
-        supportingContent = {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
-        },
-        leadingContent = {
-            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
-        },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(checkedTrackColor = accentColor),
-            )
-        },
-    )
 }
 
 private fun storageLabel(uri: String?): String {

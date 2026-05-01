@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,7 +41,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +69,9 @@ import com.miyu.reader.domain.model.ReadingStatus
 import com.miyu.reader.domain.model.SortOption
 import com.miyu.reader.domain.model.ViewMode
 import com.miyu.reader.ui.components.BookCover
+import com.miyu.reader.ui.core.components.MiyoEmptyScreen
+import com.miyu.reader.ui.core.components.MiyoIconActionButton
+import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.ImportFeedbackType
 import com.miyu.reader.viewmodel.LibraryViewModel
@@ -191,9 +191,7 @@ fun LibraryScreen(
             onClick = { filePickerLauncher.launch(arrayOf("application/epub+zip", "application/epub", "application/octet-stream")) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 0.dp)
-                .offset(y = 18.dp),
+                .padding(end = 20.dp, bottom = 20.dp),
             containerColor = colors.accent,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             shape = RoundedCornerShape(22.dp),
@@ -231,43 +229,19 @@ private fun LibraryTopBar(
     onOpenOpds: () -> Unit,
     onToggleView: () -> Unit,
 ) {
-    val colors = LocalMIYUColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    MiyoScreenHeader(
+        title = "Library",
+        count = count,
+        subtitle = "Local EPUBs, OPDS catalogs, and online MTL imports.",
+        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Library",
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                color = colors.onBackground,
-            )
-            Spacer(Modifier.width(10.dp))
-            Surface(
-                shape = CircleShape,
-                color = colors.cardBackground,
-                shadowElevation = 1.dp,
-            ) {
-                Text(
-                    count.toString(),
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
-                    color = colors.secondaryText,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
-                FilledTonalIconButton(
+                MiyoIconActionButton(
+                    icon = Icons.Outlined.Tune,
+                    contentDescription = "Sort",
                     onClick = onToggleSort,
-                    shape = RoundedCornerShape(16.dp),
-                ) {
-                    Icon(Icons.Outlined.Tune, contentDescription = "Sort")
-                }
+                )
                 DropdownMenu(expanded = showSortMenu, onDismissRequest = onDismissSort) {
                     SortOption.entries.forEach { option ->
                         DropdownMenuItem(
@@ -280,27 +254,21 @@ private fun LibraryTopBar(
                     }
                 }
             }
-            FilledTonalIconButton(
+            MiyoIconActionButton(
+                icon = Icons.Outlined.CloudDownload,
+                contentDescription = "Online MTL browser",
                 onClick = onOpenOnline,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Outlined.CloudDownload, contentDescription = "Online MTL browser")
-            }
-            FilledTonalIconButton(
+            )
+            MiyoIconActionButton(
+                icon = Icons.Outlined.Public,
+                contentDescription = "OPDS catalogs",
                 onClick = onOpenOpds,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Outlined.Public, contentDescription = "OPDS catalogs")
-            }
-            FilledTonalIconButton(
+            )
+            MiyoIconActionButton(
+                icon = if (viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
+                contentDescription = "Toggle view",
                 onClick = onToggleView,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(
-                    if (viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
-                    contentDescription = "Toggle view",
-                )
-            }
+            )
         }
     }
 }
@@ -330,42 +298,14 @@ private fun EmptyLibraryState(
     hasSearch: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val colors = LocalMIYUColors.current
-    Box(
+    MiyoEmptyScreen(
+        icon = Icons.Filled.MenuBook,
+        title = if (hasSearch) "No books found" else "No books yet",
+        message = if (hasSearch) "Clear search or change filters." else "Import an EPUB to start reading.",
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 84.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(28.dp)) {
-            Surface(
-                shape = CircleShape,
-                color = colors.accent.copy(alpha = 0.12f),
-                modifier = Modifier.size(88.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Filled.MenuBook,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.size(38.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-            Text(
-                if (hasSearch) "No books found" else "No books yet",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = colors.onBackground,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (hasSearch) "Clear search or change filters." else "Import an EPUB to start reading.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.secondaryText,
-            )
-        }
-    }
+            .padding(bottom = 96.dp),
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

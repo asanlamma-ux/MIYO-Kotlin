@@ -58,6 +58,7 @@ import coil.compose.AsyncImage
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.domain.model.ReadingStatus
 import com.miyu.reader.ui.components.BookCover
+import com.miyu.reader.ui.core.components.MiyoSectionCard
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.BookDetailsChapter
 import com.miyu.reader.viewmodel.BookDetailsViewModel
@@ -319,27 +320,7 @@ private fun DetailSectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val colors = LocalMIYUColors.current
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground.copy(alpha = 0.94f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = {
-                Text(
-                    title,
-                    color = colors.onBackground,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                )
-                content()
-            },
-        )
-    }
+    MiyoSectionCard(title = title, content = content)
 }
 
 @Composable

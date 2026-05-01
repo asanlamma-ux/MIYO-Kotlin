@@ -1,6 +1,5 @@
 package com.miyu.reader.ui.home
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,11 +17,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.ui.components.BookCover
+import com.miyu.reader.ui.core.components.MiyoEmptyScreen
+import com.miyu.reader.ui.core.components.MiyoIconActionButton
+import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HomeViewModel
 
@@ -39,40 +40,21 @@ fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        // ── Header ──────────────────────────────────────────────────
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+            MiyoScreenHeader(
+                title = "Miyo",
+                eyebrow = "Good Morning",
+                subtitle = if (books.isEmpty()) {
+                    "Import a book to start reading"
+                } else {
+                    "${books.size} book${if (books.size != 1) "s" else ""} in your library"
+                },
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Good Morning",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = colors.secondaryText,
-                    )
-                    Text(
-                        text = "Miyo",
-                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                        color = colors.onBackground,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = if (books.isEmpty()) "Import a book to start reading"
-                        else "${books.size} book${if (books.size != 1) "s" else ""} in your library",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.secondaryText,
-                    )
-                }
-                FilledTonalIconButton(
+                MiyoIconActionButton(
+                    icon = Icons.Outlined.Palette,
+                    contentDescription = "Themes",
                     onClick = onOpenThemePicker,
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Outlined.Palette, contentDescription = "Themes", tint = colors.accent)
-                }
+                )
             }
         }
 
@@ -103,41 +85,14 @@ fun HomeScreen(
         // ── Empty state ─────────────────────────────────────────────
         if (books.isEmpty()) {
             item {
-                Box(
+                MiyoEmptyScreen(
+                    icon = Icons.Default.MenuBook,
+                    title = "No Books Yet",
+                    message = "Go to the Library tab to import your first EPUB.",
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 60.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = colors.accent.copy(alpha = 0.12f),
-                            modifier = Modifier.size(100.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.MenuBook,
-                                    contentDescription = null,
-                                    tint = colors.accent,
-                                    modifier = Modifier.size(48.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(20.dp))
-                        Text(
-                            "No Books Yet",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.onBackground,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Go to the Library tab to import your first EPUB.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.secondaryText,
-                        )
-                    }
-                }
+                )
             }
         }
 

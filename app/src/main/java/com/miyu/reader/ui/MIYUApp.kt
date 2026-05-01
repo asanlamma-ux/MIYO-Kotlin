@@ -1,19 +1,13 @@
 package com.miyu.reader.ui
 
 import androidx.annotation.DrawableRes
-import androidx.compose.animation.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -42,6 +36,9 @@ import com.miyu.reader.ui.settings.ReaderSettingsScreen
 import com.miyu.reader.ui.settings.SettingsScreen
 import com.miyu.reader.ui.reader.ReaderScreen
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
+import com.miyu.reader.ui.core.components.material.MiyoNavigationBar
+import com.miyu.reader.ui.core.components.material.MiyoNavigationBarItem
+import com.miyu.reader.ui.core.components.material.MiyoScaffold
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.MIYUTheme
@@ -116,70 +113,39 @@ fun MIYUApp() {
                 darkTheme = colors.isDark,
                 modifier = Modifier.matchParentSize(),
             )
-            Scaffold(
+            MiyoScaffold(
                 modifier = Modifier.fillMaxSize(),
-                containerColor = Color.Transparent,
                 bottomBar = {
                     if (showBottomBar) {
-                        Surface(
-                            color = colors.cardBackground.copy(alpha = 0.96f),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 8.dp,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                bottomNavItems.forEach { screen ->
-                                    val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                                    Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(18.dp))
-                                            .clickable {
-                                                navController.navigate(screen.route) {
-                                                    popUpTo(navController.graph.findStartDestination().id) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
+                        MiyoNavigationBar {
+                            bottomNavItems.forEach { screen ->
+                                val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                                MiyoNavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
                                             }
-                                            .padding(vertical = 4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(bottom = 6.dp)
-                                                .size(width = 20.dp, height = 3.dp)
-                                                .clip(RoundedCornerShape(50))
-                                                .background(
-                                                    if (selected) colors.accent else Color.Transparent,
-                                                ),
-                                        )
-                                        if (screen.iconRes != null) {
-                                            Icon(
-                                                painter = painterResource(screen.iconRes),
-                                                contentDescription = screen.title,
-                                                tint = if (selected) colors.accent else colors.secondaryText,
-                                                modifier = Modifier.size(24.dp),
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = screen.icon ?: Icons.Outlined.Translate,
-                                                contentDescription = screen.title,
-                                                tint = if (selected) colors.accent else colors.secondaryText,
-                                                modifier = Modifier.size(24.dp),
-                                            )
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            screen.title,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (selected) colors.onBackground else colors.secondaryText,
+                                    },
+                                    label = screen.title,
+                                ) { tint ->
+                                    if (screen.iconRes != null) {
+                                        Icon(
+                                            painter = painterResource(screen.iconRes),
+                                            contentDescription = screen.title,
+                                            tint = tint,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = screen.icon ?: Icons.Outlined.Translate,
+                                            contentDescription = screen.title,
+                                            tint = tint,
+                                            modifier = Modifier.size(24.dp),
                                         )
                                     }
                                 }
