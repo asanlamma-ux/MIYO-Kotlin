@@ -8,7 +8,9 @@ import com.miyu.reader.domain.model.LookupSource
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import java.net.HttpURLConnection
+import java.net.URLEncoder
 import java.net.URL
+import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,53 +56,64 @@ class DictionaryRepository @Inject constructor(
         normalizedWord: String,
     ): DictionaryLookupResult? {
         return runCatching {
-            val connection = (URL("https://api.dictionaryapi.dev/api/v2/entries/en/$normalizedWord").openConnection() as HttpURLConnection).apply {
+            val encodedWord = URLEncoder.encode(normalizedWord, StandardCharsets.UTF_8.name())
+            val sourceUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord"
+            val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 4000
                 readTimeout = 4000
                 setRequestProperty("Accept", "application/json")
             }
 
-            connection.inputStream.bufferedReader().use { reader ->
-                if (connection.responseCode !in 200..299) return null
-                val payload = JSONArray(reader.readText())
-                val entries = buildList {
-                    for (itemIndex in 0 until payload.length()) {
-                        val item = payload.getJSONObject(itemIndex)
-                        val term = item.optString("word", normalizedWord)
-                        val meanings = item.optJSONArray("meanings") ?: continue
-                        for (meaningIndex in 0 until meanings.length()) {
-                            val meaning = meanings.getJSONObject(meaningIndex)
-                            val partOfSpeech = meaning.optString("partOfSpeech").takeIf { it.isNotBlank() }
-                            val definitions = meaning.optJSONArray("definitions") ?: continue
-                            for (definitionIndex in 0 until definitions.length()) {
-                                val definition = definitions.getJSONObject(definitionIndex)
-                                val text = definition.optString("definition").takeIf { it.isNotBlank() } ?: continue
-                                add(
-                                    DictionaryEntry(
-                                        term = term,
-                                        definition = text,
-                                        partOfSpeech = partOfSpeech,
-                                        example = definition.optString("example").takeIf { it.isNotBlank() },
-                                        source = "dictionaryapi.dev",
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
+            if (connection.responseCode !in 200..299) {
+                connection.disconnect()
+                return@runCatching null
+            }
 
-                if (entries.isEmpty()) return null
+            connection.inputStream.bufferedReader().use { reader ->
+                val payload = JSONArray(reader.readText())
+                val entries = parseDictionaryApiEntries(payload, normalizedWord)
+
+                if (entries.isEmpty()) return@runCatching null
 
                 DictionaryLookupResult(
                     source = LookupSource.ONLINE,
                     word = originalWord.trim(),
                     dictionaryName = "Online Dictionary",
                     entries = entries,
-                    sourceUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/$normalizedWord",
+                    sourceUrl = sourceUrl,
                 )
             }
         }.getOrNull()
+    }
+
+    private fun parseDictionaryApiEntries(
+        payload: JSONArray,
+        normalizedWord: String,
+    ): List<DictionaryEntry> {
+        val entries = mutableListOf<DictionaryEntry>()
+        for (itemIndex in 0 until payload.length()) {
+            val item = payload.getJSONObject(itemIndex)
+            val term = item.optString("word", normalizedWord)
+            val meanings = item.optJSONArray("meanings") ?: continue
+            for (meaningIndex in 0 until meanings.length()) {
+                val meaning = meanings.getJSONObject(meaningIndex)
+                val partOfSpeech = meaning.optString("partOfSpeech").takeIf { it.isNotBlank() }
+                val definitions = meaning.optJSONArray("definitions") ?: continue
+                for (definitionIndex in 0 until definitions.length()) {
+                    val definition = definitions.getJSONObject(definitionIndex)
+                    val text = definition.optString("definition").takeIf { it.isNotBlank() } ?: continue
+                    entries += DictionaryEntry(
+                        term = term,
+                        definition = text,
+                        partOfSpeech = partOfSpeech,
+                        example = definition.optString("example").takeIf { it.isNotBlank() },
+                        source = "dictionaryapi.dev",
+                    )
+                }
+            }
+        }
+        return entries
     }
 
     private fun mapEntry(entry: DictionaryEntryEntity): DictionaryEntry = DictionaryEntry(

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
