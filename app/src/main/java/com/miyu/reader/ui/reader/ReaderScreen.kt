@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
+import com.miyu.reader.ui.theme.ReaderThemeColors
 import com.miyu.reader.viewmodel.ReaderViewModel
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
@@ -204,12 +205,12 @@ fun ReaderScreen(
                         settings.loadsImagesAutomatically = true
                         settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
-                        customSelectionActionModeCallback = object : ActionMode.Callback {
+                        setCustomSelectionActionModeCallback(object : ActionMode.Callback {
                             override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
                             override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
                             override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
                             override fun onDestroyActionMode(mode: ActionMode?) = Unit
-                        }
+                        })
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = WebViewClient()
