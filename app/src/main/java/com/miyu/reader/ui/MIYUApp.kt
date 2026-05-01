@@ -124,7 +124,7 @@ fun MIYUApp() {
                             }
                         }
                     }
-                },
+                }
             },
         ) { innerPadding ->
             NavHost(
