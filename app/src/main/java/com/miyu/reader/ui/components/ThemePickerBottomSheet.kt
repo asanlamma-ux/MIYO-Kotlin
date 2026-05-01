@@ -3,10 +3,9 @@ package com.miyu.reader.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,41 +21,178 @@ import androidx.compose.ui.unit.dp
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ThemePickerBottomSheet(
     selectedThemeId: String,
     onThemeSelected: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val selectedTheme = ReaderColors.findById(selectedThemeId)
+    val normalThemes = ReaderColors.allThemes.filterNot { it.isSpecial }
+    val specialThemes = ReaderColors.allThemes.filter { it.isSpecial }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = selectedTheme.cardBackground,
+    ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text(
-                "Reader Themes",
+                "Theme Selection",
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = selectedTheme.text,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "Choose a theme for the reading experience",
+                "Split between Normal UI palettes and Special UI palettes from the RN app.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = selectedTheme.secondaryText,
             )
             Spacer(Modifier.height(16.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 130.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.heightIn(max = 400.dp),
+
+            Surface(
+                color = selectedTheme.background.copy(alpha = 0.82f),
+                shape = RoundedCornerShape(18.dp),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
             ) {
-                items(ReaderColors.allThemes) { theme ->
-                    ThemeCard(
-                        theme = theme,
-                        isSelected = theme.id == selectedThemeId,
-                        onClick = { onThemeSelected(theme.id) },
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "ACTIVE PROFILE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = selectedTheme.accent,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            selectedTheme.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = selectedTheme.text,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (selectedTheme.isSpecial) "Special palette with decorative styling hooks." else "Standard reading palette for everyday use.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = selectedTheme.secondaryText,
+                        )
+                    }
+                    ThemeMiniPreview(selectedTheme)
                 }
             }
-            Spacer(Modifier.height(24.dp))
+
+            Spacer(Modifier.height(18.dp))
+
+            ThemeSection(
+                title = "Normal UI",
+                subtitle = "Balanced reading palettes for the default Kotlin UI shell.",
+                themes = normalThemes,
+                selectedThemeId = selectedThemeId,
+                onThemeSelected = onThemeSelected,
+                sectionColor = selectedTheme,
+            )
+            Spacer(Modifier.height(18.dp))
+            ThemeSection(
+                title = "Special UI",
+                subtitle = "Decorative reading palettes carried over from the RN theme set.",
+                themes = specialThemes,
+                selectedThemeId = selectedThemeId,
+                onThemeSelected = onThemeSelected,
+                sectionColor = selectedTheme,
+            )
+            Spacer(Modifier.height(28.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ThemeSection(
+    title: String,
+    subtitle: String,
+    themes: List<ReaderThemeColors>,
+    selectedThemeId: String,
+    onThemeSelected: (String) -> Unit,
+    sectionColor: ReaderThemeColors,
+) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+        color = sectionColor.secondaryText,
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        subtitle,
+        style = MaterialTheme.typography.bodySmall,
+        color = sectionColor.secondaryText,
+    )
+    Spacer(Modifier.height(12.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        themes.forEach { theme ->
+            Box(modifier = Modifier.width(156.dp)) {
+                ThemeCard(
+                    theme = theme,
+                    isSelected = theme.id == selectedThemeId,
+                    onClick = { onThemeSelected(theme.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeMiniPreview(theme: ReaderThemeColors) {
+    Surface(
+        color = theme.cardBackground,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.size(width = 92.dp, height = 112.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(theme.background)
+                .padding(12.dp),
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.72f)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(theme.text),
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(theme.text.copy(alpha = 0.38f)),
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.84f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(theme.text.copy(alpha = 0.24f)),
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .width(30.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(theme.accent),
+                )
+            }
         }
     }
 }

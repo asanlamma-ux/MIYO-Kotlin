@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +30,7 @@ import com.miyu.reader.viewmodel.HomeViewModel
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
+    onOpenThemePicker: () -> Unit = {},
 ) {
     val books: List<Book> by viewModel.recentBooks.collectAsStateWithLifecycle(initialValue = emptyList())
     val colors = LocalMIYUColors.current
@@ -39,19 +41,38 @@ fun HomeScreen(
     ) {
         // ── Header ──────────────────────────────────────────────────
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                Text(
-                    text = "Welcome back 👋",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onBackground,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (books.isEmpty()) "Import a book to start reading"
-                    else "${books.size} book${if (books.size != 1) "s" else ""} in your library",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.secondaryText,
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Good Morning",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = colors.secondaryText,
+                    )
+                    Text(
+                        text = "Miyo",
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                        color = colors.onBackground,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (books.isEmpty()) "Import a book to start reading"
+                        else "${books.size} book${if (books.size != 1) "s" else ""} in your library",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.secondaryText,
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = onOpenThemePicker,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Outlined.Palette, contentDescription = "Themes", tint = colors.accent)
+                }
             }
         }
 

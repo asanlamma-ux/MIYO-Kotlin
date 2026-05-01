@@ -1,10 +1,12 @@
 package com.miyu.reader.ui.reader
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
@@ -32,6 +34,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
@@ -68,6 +73,28 @@ fun ReaderScreen(
         ReaderJsInterface(viewModel)
     }
 
+    DisposableEffect(readingSettings.immersiveMode, context) {
+        val activity = context.findActivity()
+        val window = activity?.window
+        val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+
+        if (window != null && controller != null && readingSettings.immersiveMode) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else if (window != null && controller != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+
+        onDispose {
+            if (window != null && controller != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -86,7 +113,6 @@ fun ReaderScreen(
             // ── WebView ─────────────────────────────────────────────
             val htmlContent = buildReaderHtml(
                 chapterHtml = uiState.chapterHtml,
-                css = uiState.css,
                 bgColor = colorToHex(bgColor),
                 textColor = colorToHex(textColor),
                 accentColor = colorToHex(accentColor),
@@ -103,6 +129,9 @@ fun ReaderScreen(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.allowFileAccess = true
+                        settings.allowContentAccess = true
+                        settings.allowFileAccessFromFileURLs = true
+                        settings.allowUniversalAccessFromFileURLs = true
                         settings.loadsImagesAutomatically = true
                         settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
@@ -164,7 +193,14 @@ fun ReaderScreen(
         if (uiState.translationText != null) {
             com.miyu.reader.ui.reader.components.TranslationSheetBottomSheet(
                 sourceText = uiState.translationText!!,
+                status = uiState.translationStatus,
                 readerTheme = readerTheme,
+                onOpenExternal = {
+                    val uri = Uri.parse(
+                        "https://translate.google.com/?sl=auto&tl=en&text=${Uri.encode(uiState.translationText!!)}&op=translate",
+                    )
+                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                },
                 onDismiss = { viewModel.clearTranslation() },
             )
         }
@@ -173,6 +209,9 @@ fun ReaderScreen(
         if (uiState.dictionaryWord != null) {
             com.miyu.reader.ui.reader.components.DictionaryLookupBottomSheet(
                 word = uiState.dictionaryWord!!,
+                result = uiState.dictionaryResult,
+                downloadedDictionaryCount = uiState.downloadedDictionaryCount,
+                isLoading = uiState.dictionaryLoading,
                 readerTheme = readerTheme,
                 onDismiss = { viewModel.clearDictionary() },
             )
@@ -408,7 +447,6 @@ private fun colorToHex(color: Color): String {
 
 private fun buildReaderHtml(
     chapterHtml: String,
-    css: String,
     bgColor: String,
     textColor: String,
     accentColor: String,
@@ -417,18 +455,7 @@ private fun buildReaderHtml(
     textAlign: TextAlign,
     marginPreset: MarginPreset,
 ): String {
-    val bodyContent = extractBodyContent(chapterHtml).takeIf { it.isNotBlank() }
-        ?: "<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>"
-
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-$css
+    val themeCss = """
 html, body {
   background: $bgColor !important;
   color: $textColor !important;
@@ -441,12 +468,7 @@ html, body {
   overflow-wrap: break-word;
   -webkit-text-size-adjust: 100%;
 }
-body, body * {
-  color: inherit;
-}
-body :not(a) {
-  color: $textColor !important;
-}
+body :not(a) { color: $textColor !important; }
 a { color: $accentColor !important; text-decoration: none; }
 img { max-width: 100%; height: auto; }
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
@@ -458,10 +480,68 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
   padding: 22px;
   background: rgba(255, 251, 245, 0.42);
 }
+""".trimIndent()
+
+    if (chapterHtml.contains("<html", ignoreCase = true)) {
+        val themedHtml = if (Regex("<style[^>]*id=[\"']miyu-reader-theme[\"'][^>]*>", RegexOption.IGNORE_CASE).containsMatchIn(chapterHtml)) {
+            chapterHtml.replace(
+                Regex("<style[^>]*id=[\"']miyu-reader-theme[\"'][^>]*>.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)),
+                "<style id=\"miyu-reader-theme\">\n$themeCss\n</style>",
+            )
+        } else {
+            chapterHtml.replace(
+                Regex("</head>", RegexOption.IGNORE_CASE),
+                "<style id=\"miyu-reader-theme\">\n$themeCss\n</style></head>",
+            )
+        }
+        val withBody = if (extractBodyContent(themedHtml).isBlank()) {
+            themedHtml.replace(
+                Regex("<body[^>]*>", RegexOption.IGNORE_CASE),
+                "$0<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>",
+            )
+        } else {
+            themedHtml
+        }
+        return if (Regex("</body>", RegexOption.IGNORE_CASE).containsMatchIn(withBody)) {
+            withBody.replace(Regex("</body>", RegexOption.IGNORE_CASE), "${readerBridgeScript()}</body>")
+        } else {
+            "$withBody${readerBridgeScript()}"
+        }
+    }
+
+    val bodyContent = extractBodyContent(chapterHtml).takeIf { it.isNotBlank() }
+        ?: "<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>"
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+$themeCss
 </style>
 </head>
 <body>
 $bodyContent
+${readerBridgeScript()}
+</body>
+</html>
+""".trimIndent()
+}
+
+private fun readerMarginPx(marginPreset: MarginPreset): Int = when (marginPreset) {
+    MarginPreset.NARROW -> 12
+    MarginPreset.MEDIUM -> 18
+    MarginPreset.WIDE -> 28
+}
+
+private fun extractBodyContent(html: String): String {
+    val bodyMatch = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)
+    return bodyMatch?.groupValues?.getOrNull(1) ?: html
+}
+
+private fun readerBridgeScript(): String = """
 <script>
 document.addEventListener('click', function() {
     if (window.AndroidBridge) window.AndroidBridge.onReaderTap();
@@ -487,23 +567,15 @@ document.addEventListener('selectionchange', function() {
             height: rect.height
         };
         if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
-    } catch(e) {}
+    } catch (e) {}
 });
 </script>
-</body>
-</html>
 """.trimIndent()
-}
 
-private fun readerMarginPx(marginPreset: MarginPreset): Int = when (marginPreset) {
-    MarginPreset.NARROW -> 12
-    MarginPreset.MEDIUM -> 18
-    MarginPreset.WIDE -> 28
-}
-
-private fun extractBodyContent(html: String): String {
-    val bodyMatch = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)
-    return bodyMatch?.groupValues?.getOrNull(1) ?: html
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 // Named class so Android lint can see @JavascriptInterface annotations

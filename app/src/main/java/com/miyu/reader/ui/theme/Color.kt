@@ -11,6 +11,7 @@ val SurfaceDark = Color(0xFF1C1816)
 val BackgroundLight = Color(0xFFF4EFE8)
 val BackgroundDark = Color(0xFF100D0B)
 val Error = Color(0xFFEF4444)
+const val DefaultReaderThemeId = "parchment"
 
 // Reader themes — data class shared by the 16 built-in themes
 data class ReaderThemeColors(
@@ -232,5 +233,5 @@ object ReaderColors {
     )
 
     fun findById(id: String): ReaderThemeColors =
-        allThemes.firstOrNull { it.id == id } ?: SepiaClassic
+        allThemes.firstOrNull { it.id == id } ?: ParchmentComfort
 }

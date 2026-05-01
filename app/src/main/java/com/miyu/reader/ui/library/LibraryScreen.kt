@@ -114,12 +114,6 @@ fun LibraryScreen(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalIconButton(onClick = { /* TODO: OPDS catalog */ }, shape = RoundedCornerShape(14.dp)) {
-                        Icon(Icons.Outlined.Public, contentDescription = "Catalogs")
-                    }
-                    FilledTonalIconButton(onClick = { /* TODO: WTR Lab parser */ }, shape = RoundedCornerShape(14.dp)) {
-                        Icon(Icons.Outlined.AutoAwesome, contentDescription = "WTR Lab")
-                    }
                     FilledTonalIconButton(onClick = viewModel::toggleViewMode, shape = RoundedCornerShape(14.dp)) {
                         Icon(
                             if (uiState.viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
@@ -128,6 +122,12 @@ fun LibraryScreen(
                     }
                 }
             }
+            Text(
+                "OPDS catalogs and WTR Lab imports are still being ported, so only local EPUB import is exposed here right now.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
 
             // ── Search bar ──────────────────────────────────────────
             OutlinedTextField(

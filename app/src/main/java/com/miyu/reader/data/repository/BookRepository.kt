@@ -6,6 +6,7 @@ import com.miyu.reader.data.toDomain
 import com.miyu.reader.data.toEntity
 import com.miyu.reader.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,6 +18,8 @@ class BookRepository @Inject constructor(
     fun getAllBooks(): Flow<List<Book>> = bookDao.getAllBooks().map { entities ->
         entities.map { it.toDomain() }
     }
+
+    suspend fun getAllBooksOnce(): List<Book> = getAllBooks().first()
 
     fun getBooksByStatus(status: ReadingStatus): Flow<List<Book>> =
         bookDao.getBooksByStatus(status.name).map { entities ->

@@ -103,104 +103,19 @@ fun ReaderLayoutPanelBottomSheet(
                 }
                 Spacer(Modifier.height(24.dp))
 
-                // Column Width
-                SectionHeader("COLUMN WIDTH", Icons.Outlined.VerticalSplit, readerTheme)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    val columnOptions = listOf(
-                        null to "Full",
-                        560 to "Compact",
-                        640 to "Standard",
-                        720 to "Comfort",
-                        840 to "Wide"
-                    )
-                    columnOptions.forEach { (value, label) ->
-                        val active = settings.contentColumnWidth == value
-                        Chip(
-                            label = label,
-                            active = active,
-                            readerTheme = readerTheme,
-                            onClick = { onSettingsChanged(settings.copy(contentColumnWidth = value)) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-
-                // Reading Flow
-                SectionHeader("READING FLOW", Icons.Outlined.Menu, readerTheme, "Scroll for web-novel style, or paged for chapter focus.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    listOf("scroll", "paged").forEach { mode ->
-                        val active = (settings.pageAnimation == PageAnimation.NONE && mode == "scroll") || 
-                                     (settings.pageAnimation != PageAnimation.NONE && mode == "paged")
-                        Chip(
-                            label = mode.replaceFirstChar { it.uppercase() },
-                            active = active,
-                            readerTheme = readerTheme,
-                            onClick = { 
-                                val anim = if (mode == "scroll") PageAnimation.NONE else PageAnimation.SLIDE
-                                onSettingsChanged(settings.copy(pageAnimation = anim)) 
-                            }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-
-                // Text Columns
-                SectionHeader("TEXT COLUMNS", Icons.Outlined.ViewArray, readerTheme, "Magazine-style layout; phones stay single column.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    ReaderColumnLayout.entries.forEach { layout ->
-                        val active = settings.readerColumnLayout == layout
-                        Chip(
-                            label = layout.name.lowercase().replaceFirstChar { it.uppercase() },
-                            active = active,
-                            readerTheme = readerTheme,
-                            onClick = { onSettingsChanged(settings.copy(readerColumnLayout = layout)) }
-                        )
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-
-                // Auto Scroll
-                SectionHeader("AUTO SCROLL", Icons.Outlined.KeyboardDoubleArrowDown, readerTheme, "Hands-free scrolling while you read.")
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), 
+                Surface(
+                    color = readerTheme.background.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val scrollSpeeds = listOf(0f to "Off", 1f to "Slow", 2f to "Calm", 3f to "Med", 4f to "Fast", 5f to "Max")
-                    scrollSpeeds.take(3).forEach { (value, label) ->
-                        val active = settings.autoScrollSpeed == value
-                        Chip(label, active, readerTheme) { onSettingsChanged(settings.copy(autoScrollSpeed = value)) }
-                    }
+                    Text(
+                        "Only margin width is live in the Kotlin reader right now. Column width, reading flow, text columns, auto-scroll, bionic reading, and keep-screen-on stay hidden until the runtime actually supports them.",
+                        color = readerTheme.secondaryText,
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(14.dp),
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    val scrollSpeeds = listOf(0f to "Off", 1f to "Slow", 2f to "Calm", 3f to "Med", 4f to "Fast", 5f to "Max")
-                    scrollSpeeds.takeLast(3).forEach { (value, label) ->
-                        val active = settings.autoScrollSpeed == value
-                        Chip(label, active, readerTheme) { onSettingsChanged(settings.copy(autoScrollSpeed = value)) }
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-
-                // Bionic Reading Toggle
-                ToggleRow(
-                    title = "Bionic reading",
-                    subtitle = "Emphasize the start of longer words",
-                    icon = Icons.Outlined.AutoAwesome,
-                    active = false, // Mock for now, not in ReadingSettings model
-                    readerTheme = readerTheme,
-                    onToggle = { /* TODO: add to ReadingSettings if needed */ }
-                )
-                Spacer(Modifier.height(16.dp))
-                
-                // Keep Screen On Toggle
-                ToggleRow(
-                    title = "Keep screen on",
-                    subtitle = "While this book is open",
-                    icon = Icons.Outlined.LightMode,
-                    active = false, // Mock for now, not in ReadingSettings model
-                    readerTheme = readerTheme,
-                    onToggle = { /* TODO: add to ReadingSettings if needed */ }
-                )
                 Spacer(Modifier.height(32.dp))
             }
         }

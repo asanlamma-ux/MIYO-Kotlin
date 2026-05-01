@@ -16,33 +16,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.miyu.reader.domain.model.DictionaryLookupResult
+import com.miyu.reader.domain.model.LookupSource
 import com.miyu.reader.ui.theme.ReaderThemeColors
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DictionaryLookupBottomSheet(
     word: String,
+    result: DictionaryLookupResult?,
+    downloadedDictionaryCount: Int,
+    isLoading: Boolean,
     readerTheme: ReaderThemeColors,
     onDismiss: () -> Unit,
 ) {
-    var definition by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(word) {
-        isLoading = true
-        definition = null
-        // Simulate dictionary lookup delay
-        delay(800)
-        definition = """
-            1. n. A simulated definition for "$word".
-            2. v. To test the dictionary UI implementation.
-            
-            "The developer implemented the $word feature successfully."
-        """.trimIndent()
-        isLoading = false
-    }
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = readerTheme.cardBackground,
@@ -108,30 +95,71 @@ fun DictionaryLookupBottomSheet(
                         Spacer(Modifier.width(12.dp))
                         Text("Looking up…", color = readerTheme.secondaryText, fontSize = 14.sp)
                     }
-                } else if (definition != null) {
+                } else if (result != null) {
                     Text(
-                        definition!!,
-                        color = readerTheme.text,
-                        fontSize = 15.sp,
-                        lineHeight = 24.sp,
+                        if (result.source == LookupSource.OFFLINE) "Offline · ${result.dictionaryName}" else "Online · ${result.dictionaryName}",
+                        color = readerTheme.secondaryText,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.4.sp,
                     )
+                    Spacer(Modifier.height(14.dp))
+                    result.entries.forEachIndexed { index, entry ->
+                        if (index > 0) Spacer(Modifier.height(12.dp))
+                        Surface(
+                            color = readerTheme.background,
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(entry.term, color = readerTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                entry.partOfSpeech?.let {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(it, color = readerTheme.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    entry.definition,
+                                    color = readerTheme.text,
+                                    fontSize = 15.sp,
+                                    lineHeight = 24.sp,
+                                )
+                                entry.example?.let {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Example: $it",
+                                        color = readerTheme.secondaryText,
+                                        fontSize = 12.sp,
+                                        lineHeight = 18.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 } else {
-                    Text(
-                        "No definition found.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 15.sp,
-                        lineHeight = 24.sp,
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            "No definition found.",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 15.sp,
+                            lineHeight = 24.sp,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (downloadedDictionaryCount > 0) {
+                                "Your offline dictionaries and the online fallback did not return a match."
+                            } else {
+                                "No offline dictionaries are installed yet, and the online fallback did not return a match."
+                            },
+                            color = readerTheme.secondaryText,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
                 }
-
                 Spacer(Modifier.height(32.dp))
-
-                Text(
-                    "Uses offline dictionary packages. (Simulated)",
-                    color = readerTheme.secondaryText.copy(alpha = 0.75f),
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                )
             }
         }
     }

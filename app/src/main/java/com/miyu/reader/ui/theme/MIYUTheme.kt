@@ -25,7 +25,7 @@ val LocalMIYUColors = staticCompositionLocalOf { MIYUColors() }
  * The currently-selected reader theme ID, provided through CompositionLocal
  * so any composable can read it without drilling props.
  */
-val LocalReaderThemeId = staticCompositionLocalOf { "sepia-classic" }
+val LocalReaderThemeId = staticCompositionLocalOf { DefaultReaderThemeId }
 
 private val LightColorScheme = lightColorScheme(
     primary = Primary,
@@ -54,7 +54,7 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun MIYUTheme(
     themeMode: ThemeMode = ThemeMode.LIGHT,
-    readerThemeId: String = "sepia-classic",
+    readerThemeId: String = DefaultReaderThemeId,
     content: @Composable () -> Unit,
 ) {
     val darkTheme = when (themeMode) {

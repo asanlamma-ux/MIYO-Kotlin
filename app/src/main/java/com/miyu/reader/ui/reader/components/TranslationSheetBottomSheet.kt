@@ -17,30 +17,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.ui.theme.ReaderThemeColors
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranslationSheetBottomSheet(
     sourceText: String,
+    status: String?,
     readerTheme: ReaderThemeColors,
+    onOpenExternal: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var translatedText by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    val coroutineScope = rememberCoroutineScope()
-
-    LaunchedEffect(sourceText) {
-        isLoading = true
-        translatedText = null
-        // Simulate translation delay.
-        // In a real implementation, this would call a Translation API or ViewModel
-        delay(1200)
-        translatedText = "[Simulated Translation]: ${sourceText.take(100)}..."
-        isLoading = false
-    }
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = readerTheme.cardBackground,
@@ -116,33 +102,26 @@ fun TranslationSheetBottomSheet(
                     letterSpacing = 0.4.sp,
                 )
                 Spacer(Modifier.height(8.dp))
-
-                if (isLoading) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
-                        CircularProgressIndicator(color = readerTheme.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text("Translating…", color = readerTheme.secondaryText, fontSize = 14.sp)
-                    }
-                } else if (translatedText != null) {
-                    Text(
-                        translatedText!!,
-                        color = readerTheme.text,
-                        fontSize = 15.sp,
-                        lineHeight = 24.sp,
-                    )
-                } else {
-                    Text(
-                        "Translation unavailable.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 15.sp,
-                        lineHeight = 24.sp,
-                    )
-                }
+                Text(
+                    status ?: "Translation unavailable.",
+                    color = readerTheme.text,
+                    fontSize = 15.sp,
+                    lineHeight = 24.sp,
+                )
 
                 Spacer(Modifier.height(32.dp))
 
+                Button(
+                    onClick = onOpenExternal,
+                    colors = ButtonDefaults.buttonColors(containerColor = readerTheme.accent),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Open in Browser", color = readerTheme.background, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    "Free translation service. Limit applies to long text.",
+                    "This fallback opens a live translator while the in-app provider stack is still being ported.",
                     color = readerTheme.secondaryText.copy(alpha = 0.75f),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,

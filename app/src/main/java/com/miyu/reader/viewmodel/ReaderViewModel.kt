@@ -5,10 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.BookRepository
+import com.miyu.reader.data.repository.DictionaryRepository
 import com.miyu.reader.data.repository.TermRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -31,12 +33,15 @@ data class ReaderUiState(
     val showSearchModal: Boolean = false,
     val showThemePicker: Boolean = false,
     val isLoading: Boolean = true,
-    val css: String = "",
     val selection: SelectionData? = null,
     val addTermText: String? = null,
     val activeTermGroups: List<TermGroup> = emptyList(),
     val translationText: String? = null,
+    val translationStatus: String? = null,
     val dictionaryWord: String? = null,
+    val dictionaryLoading: Boolean = false,
+    val dictionaryResult: DictionaryLookupResult? = null,
+    val downloadedDictionaryCount: Int = 0,
     val highlights: List<Highlight> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
 )
@@ -46,6 +51,7 @@ class ReaderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val bookRepository: BookRepository,
     private val termRepository: TermRepository,
+    private val dictionaryRepository: DictionaryRepository,
     private val epubEngine: EpubEngineBridge,
     private val preferences: UserPreferences,
 ) : ViewModel() {
@@ -56,7 +62,7 @@ class ReaderViewModel @Inject constructor(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     val readerThemeId: StateFlow<String> = preferences.readerThemeId
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "sepia-classic")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DefaultReaderThemeId)
 
     val readingSettings: StateFlow<ReadingSettings> = preferences.readingSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReadingSettings())
@@ -84,10 +90,6 @@ class ReaderViewModel @Inject constructor(
                         activeTermGroups = termRepository.getAllGroupsOnce(),
                     )
                 }
-
-                // Load first chapter and CSS
-                val css = try { epubEngine.extractStylesheet(book.filePath) } catch (_: Exception) { "" }
-                _uiState.update { it.copy(css = css) }
 
                 loadChapter(chapterIndex, book.filePath)
 
@@ -324,19 +326,51 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun showTranslation(text: String) {
-        _uiState.update { it.copy(translationText = text) }
+        _uiState.update {
+            it.copy(
+                translationText = text,
+                translationStatus = "Inline translation providers from the React Native build are not ported yet. Use the browser fallback for now.",
+                selection = null,
+            )
+        }
     }
 
     fun clearTranslation() {
-        _uiState.update { it.copy(translationText = null) }
+        _uiState.update { it.copy(translationText = null, translationStatus = null) }
     }
 
     fun showDictionary(word: String) {
-        _uiState.update { it.copy(dictionaryWord = word) }
+        val lookupWord = word.trim().split(Regex("\\s+")).firstOrNull()?.take(80)?.trim().orEmpty()
+        if (lookupWord.isBlank()) return
+        _uiState.update {
+            it.copy(
+                dictionaryWord = lookupWord,
+                dictionaryLoading = true,
+                dictionaryResult = null,
+                selection = null,
+            )
+        }
+        viewModelScope.launch {
+            val downloadedCount = dictionaryRepository.getDownloadedDictionaryCount()
+            val result = dictionaryRepository.lookupWord(lookupWord)
+            _uiState.update {
+                it.copy(
+                    dictionaryLoading = false,
+                    dictionaryResult = result,
+                    downloadedDictionaryCount = downloadedCount,
+                )
+            }
+        }
     }
 
     fun clearDictionary() {
-        _uiState.update { it.copy(dictionaryWord = null) }
+        _uiState.update {
+            it.copy(
+                dictionaryWord = null,
+                dictionaryLoading = false,
+                dictionaryResult = null,
+            )
+        }
     }
 
     fun updateReadingSettings(settings: ReadingSettings) {

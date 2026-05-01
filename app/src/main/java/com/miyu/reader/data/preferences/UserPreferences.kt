@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.miyu.reader.domain.model.*
+import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -28,7 +29,7 @@ class UserPreferences @Inject constructor(
 
     // Reader theme
     val readerThemeId: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_READER_THEME_ID] ?: "sepia-classic"
+        prefs[KEY_READER_THEME_ID] ?: DefaultReaderThemeId
     }
 
     suspend fun setReaderThemeId(id: String) {
@@ -112,6 +113,25 @@ class UserPreferences @Inject constructor(
         }
     }
 
+    val dailyGoalMinutes: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[KEY_DAILY_GOAL_MINUTES] ?: 30
+    }
+
+    suspend fun setDailyGoalMinutes(minutes: Int) {
+        context.dataStore.edit { it[KEY_DAILY_GOAL_MINUTES] = minutes.coerceIn(15, 240) }
+    }
+
+    val storageDirectoryUri: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_STORAGE_DIRECTORY_URI]
+    }
+
+    suspend fun setStorageDirectoryUri(uri: String?) {
+        context.dataStore.edit {
+            if (uri.isNullOrBlank()) it.remove(KEY_STORAGE_DIRECTORY_URI)
+            else it[KEY_STORAGE_DIRECTORY_URI] = uri
+        }
+    }
+
     companion object {
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_FONT_FAMILY = stringPreferencesKey("font_family")
@@ -136,5 +156,7 @@ class UserPreferences @Inject constructor(
         private val KEY_COLUMN_LAYOUT = stringPreferencesKey("column_layout")
         private val KEY_LAST_BOOK_ID = stringPreferencesKey("last_book_id")
         private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id")
+        private val KEY_DAILY_GOAL_MINUTES = intPreferencesKey("daily_goal_minutes")
+        private val KEY_STORAGE_DIRECTORY_URI = stringPreferencesKey("storage_directory_uri")
     }
 }

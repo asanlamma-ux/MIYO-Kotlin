@@ -63,28 +63,20 @@ fun TermsScreen(
                     color = colors.secondaryText,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalIconButton(
-                    onClick = { /* TODO: Export */ },
-                    shape = RoundedCornerShape(13.dp),
-                ) {
-                    Icon(Icons.Outlined.Upload, contentDescription = "Export")
-                }
-                FilledTonalIconButton(
-                    onClick = { /* TODO: Community packs */ },
-                    shape = RoundedCornerShape(13.dp),
-                ) {
-                    Icon(Icons.Outlined.Public, contentDescription = "Community")
-                }
-                FilledIconButton(
-                    onClick = { viewModel.toggleCreateInput() },
-                    shape = RoundedCornerShape(13.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.accent),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.onPrimary)
-                }
+            FilledIconButton(
+                onClick = { viewModel.toggleCreateInput() },
+                shape = RoundedCornerShape(13.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.accent),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.onPrimary)
             }
         }
+        Text(
+            "Group creation and book-linked replacement are active. Export and community term packs stay hidden until the Kotlin port has working package flows.",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondaryText,
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
 
         // ── Search ──────────────────────────────────────────────────
         OutlinedTextField(

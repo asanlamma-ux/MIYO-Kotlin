@@ -32,6 +32,15 @@ std::string applyTermReplacements(const std::string& html,
     return result;
 }
 
+std::string extractBodyInnerHtml(const std::string& html) {
+    std::regex bodyRegex(R"(<body[^>]*>([\s\S]*?)</body>)", std::regex::icase);
+    std::smatch match;
+    if (std::regex_search(html, match, bodyRegex) && match.size() > 1) {
+        return match[1].str();
+    }
+    return html;
+}
+
 } // anonymous namespace
 
 std::string renderChapter(
@@ -49,7 +58,7 @@ std::string renderChapter(
     }
 
     const auto& chapter = cached->parsed.chapters[chapterIndex];
-    std::string content = applyTermReplacements(chapter.content, termReplacements);
+    std::string content = applyTermReplacements(extractBodyInnerHtml(chapter.content), termReplacements);
 
     // Build a standalone HTML document for the WebView reader
     std::ostringstream html;
