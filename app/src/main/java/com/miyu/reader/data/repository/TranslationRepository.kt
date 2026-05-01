@@ -1,12 +1,12 @@
 package com.miyu.reader.data.repository
 
 import android.text.Html
-import com.miyu.reader.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,38 +18,22 @@ data class TranslationResult(
 @Singleton
 class TranslationRepository @Inject constructor() {
     suspend fun translateToEnglish(text: String): TranslationResult = withContext(Dispatchers.IO) {
-        val trimmed = text.trim()
+        val trimmed = text.replace(Regex("\\s+"), " ").trim().take(MAX_CHARS)
         if (trimmed.isBlank()) {
             return@withContext TranslationResult(null, "No text selected.")
         }
 
-        val apiKey = BuildConfig.GOOGLE_TRANSLATE_API_KEY
-        if (apiKey.isBlank()) {
-            return@withContext TranslationResult(
-                translatedText = null,
-                statusMessage = "Google Translate is not configured. Add MIYU_GOOGLE_TRANSLATE_API_KEY to enable in-app translation.",
-            )
-        }
-
         return@withContext runCatching {
-            val endpoint = URL("https://translation.googleapis.com/language/translate/v2?key=$apiKey")
-            val payload = JSONObject()
-                .put("q", trimmed)
-                .put("target", "en")
-                .put("format", "text")
-                .toString()
+            val encodedQuery = URLEncoder.encode(trimmed, Charsets.UTF_8.name())
+            val encodedPair = URLEncoder.encode("Autodetect|en", Charsets.UTF_8.name())
+            val endpoint = URL("$MYMEMORY_ENDPOINT?q=$encodedQuery&langpair=$encodedPair")
 
             val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
+                requestMethod = "GET"
                 connectTimeout = 8000
-                readTimeout = 12000
-                doOutput = true
+                readTimeout = 15000
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-
-            connection.outputStream.use { output ->
-                output.write(payload.toByteArray(Charsets.UTF_8))
+                setRequestProperty("User-Agent", "MIYO-Kotlin/1.0")
             }
 
             val body = if (connection.responseCode in 200..299) {
@@ -61,11 +45,16 @@ class TranslationRepository @Inject constructor() {
             connection.disconnect()
 
             val translated = JSONObject(body)
-                .getJSONObject("data")
-                .getJSONArray("translations")
-                .getJSONObject(0)
-                .getString("translatedText")
+                .optJSONObject("responseData")
+                ?.optString("translatedText")
+                ?.trim()
+                .orEmpty()
                 .decodeHtmlEntities()
+                .trim()
+
+            if (translated.isBlank()) {
+                throw IllegalStateException("Translation unavailable. Check your connection or try shorter text.")
+            }
 
             TranslationResult(
                 translatedText = translated,
@@ -74,11 +63,16 @@ class TranslationRepository @Inject constructor() {
         }.getOrElse { error ->
             TranslationResult(
                 translatedText = null,
-                statusMessage = error.message ?: "Translation failed.",
+                statusMessage = error.message ?: "Translation unavailable. Check your connection or try shorter text.",
             )
         }
     }
 
     private fun String.decodeHtmlEntities(): String =
         Html.fromHtml(this, Html.FROM_HTML_MODE_LEGACY).toString()
+
+    private companion object {
+        const val MAX_CHARS = 440
+        const val MYMEMORY_ENDPOINT = "https://api.mymemory.translated.net/get"
+    }
 }

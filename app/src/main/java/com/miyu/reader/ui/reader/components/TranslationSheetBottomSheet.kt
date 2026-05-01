@@ -121,7 +121,7 @@ fun TranslationSheetBottomSheet(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "In-app translation uses Google Cloud Translate when MIYU_GOOGLE_TRANSLATE_API_KEY is configured.",
+                    "In-app translation uses the same MyMemory public endpoint as the React Native app. No API key is required; avoid sending sensitive text.",
                     color = readerTheme.secondaryText.copy(alpha = 0.75f),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,

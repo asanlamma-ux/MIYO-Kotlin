@@ -34,7 +34,6 @@ android {
 
         buildConfigField("String", "SUPABASE_URL", buildConfigString(project.secret("MIYU_SUPABASE_URL")))
         buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(project.secret("MIYU_SUPABASE_ANON_KEY")))
-        buildConfigField("String", "GOOGLE_TRANSLATE_API_KEY", buildConfigString(project.secret("MIYU_GOOGLE_TRANSLATE_API_KEY")))
 
         ndkVersion = "26.1.10909125"
 
