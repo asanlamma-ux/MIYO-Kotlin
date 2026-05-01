@@ -8,8 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
-import android.view.Menu
-import android.view.MenuItem
 import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -194,7 +192,7 @@ fun ReaderScreen(
 
             AndroidView(
                 factory = { context ->
-                    WebView(context).apply {
+                    ReaderWebView(context).apply {
                         @SuppressLint("SetJavaScriptEnabled")
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
@@ -205,12 +203,6 @@ fun ReaderScreen(
                         settings.loadsImagesAutomatically = true
                         settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
-                        setCustomSelectionActionModeCallback(object : ActionMode.Callback {
-                            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-                            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
-                            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
-                            override fun onDestroyActionMode(mode: ActionMode?) = Unit
-                        })
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = WebViewClient()
@@ -962,6 +954,12 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is android.content.ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private class ReaderWebView(context: Context) : WebView(context) {
+    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = null
+
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
 }
 
 // Named class so Android lint can see @JavascriptInterface annotations
