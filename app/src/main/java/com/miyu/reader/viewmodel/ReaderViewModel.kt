@@ -80,10 +80,14 @@ class ReaderViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val bookId: String = savedStateHandle["bookId"] ?: ""
+    private val launchChapterIndex: Int = savedStateHandle["chapterIndex"] ?: -1
 
     private val _uiState = MutableStateFlow(ReaderUiState())
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
     private var chapterAppendInFlight = false
+    private var lastSelectionNonNullAt = 0L
+    private var ignoreProgressUntil = 0L
+    private var navigationTargetChapterIndex: Int? = null
 
     val readerThemeId: StateFlow<String> = preferences.readerThemeId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DefaultReaderThemeId)
@@ -113,9 +117,13 @@ class ReaderViewModel @Inject constructor(
                     return@launch
                 }
                 val position = bookRepository.getReadingPosition(bookId)
-                val chapterIndex = position?.chapterIndex ?: 0
+                val chapterIndex = if (launchChapterIndex >= 0) {
+                    launchChapterIndex
+                } else {
+                    position?.chapterIndex ?: 0
+                }
                 val chapterScrollPercent = (
-                    position?.chapterScrollPercent ?: position?.scrollPosition ?: 0f
+                    if (launchChapterIndex >= 0) 0f else position?.chapterScrollPercent ?: position?.scrollPosition ?: 0f
                 ).coerceIn(0f, 1f)
 
                 _uiState.update {
@@ -131,7 +139,7 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
 
-                loadChapter(chapterIndex, book.filePath)
+                loadChapter(chapterIndex, book.filePath, chapterScrollPercent)
 
                 // Observe annotations
                 viewModelScope.launch {
@@ -155,7 +163,7 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun loadChapter(index: Int, filePath: String) {
+    private fun loadChapter(index: Int, filePath: String, restorePercent: Float = 0f) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
@@ -185,7 +193,7 @@ class ReaderViewModel @Inject constructor(
                         chapterHtml = html,
                         chapterIndex = index,
                         renderedChapterIndex = index,
-                        chapterScrollPercent = _uiState.value.chapterScrollPercent.takeIf { _uiState.value.chapterIndex == index } ?: 0f,
+                        chapterScrollPercent = restorePercent.coerceIn(0f, 1f),
                         continuousLoadedThroughIndex = index,
                         pendingChapterAppend = null,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
@@ -209,9 +217,18 @@ class ReaderViewModel @Inject constructor(
         val book = state.book ?: return
         val newIndex = (state.chapterIndex + delta).coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
         if (newIndex != state.chapterIndex) {
-            loadChapter(newIndex, book.filePath)
+            navigationTargetChapterIndex = newIndex
+            ignoreProgressUntil = System.currentTimeMillis() + 1_600L
+            loadChapter(newIndex, book.filePath, 0f)
             savePosition(newIndex, 0f)
-            _uiState.update { it.copy(chapterScrollPercent = 0f) }
+            _uiState.update {
+                it.copy(
+                    chapterScrollPercent = 0f,
+                    selection = null,
+                    showControls = false,
+                    pendingChapterAppend = null,
+                )
+            }
         }
     }
 
@@ -301,9 +318,19 @@ class ReaderViewModel @Inject constructor(
 
     fun goToChapter(index: Int) {
         val book = _uiState.value.book ?: return
-        loadChapter(index, book.filePath)
+        navigationTargetChapterIndex = index
+        ignoreProgressUntil = System.currentTimeMillis() + 1_600L
+        loadChapter(index, book.filePath, 0f)
         savePosition(index, 0f)
-        _uiState.update { it.copy(showChapterDrawer = false, chapterScrollPercent = 0f) }
+        _uiState.update {
+            it.copy(
+                showChapterDrawer = false,
+                chapterScrollPercent = 0f,
+                selection = null,
+                showControls = false,
+                pendingChapterAppend = null,
+            )
+        }
     }
 
     private fun savePosition(chapterIndex: Int, scrollPercent: Float) {
@@ -335,6 +362,14 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             val state = _uiState.value
             val book = state.book ?: return@launch
+            val now = System.currentTimeMillis()
+            val targetChapter = navigationTargetChapterIndex
+            if (targetChapter != null && now < ignoreProgressUntil && chapterIndex != targetChapter) {
+                return@launch
+            }
+            if (targetChapter != null && chapterIndex == targetChapter) {
+                navigationTargetChapterIndex = null
+            }
             val safeChapterIndex = chapterIndex.coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
             val safeChapterPercent = chapterScrollPercent.coerceIn(0f, 1f)
             _uiState.update { current ->
@@ -379,7 +414,19 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun handleSelection(selection: SelectionData?) {
-        _uiState.update { it.copy(selection = selection) }
+        val now = System.currentTimeMillis()
+        if (selection != null) {
+            lastSelectionNonNullAt = now
+            _uiState.update { it.copy(selection = selection, showControls = false) }
+            return
+        }
+        _uiState.update { state ->
+            if (state.selection != null && now - lastSelectionNonNullAt < 620L) {
+                state
+            } else {
+                state.copy(selection = null)
+            }
+        }
     }
 
     fun clearSelection() {
@@ -421,7 +468,7 @@ class ReaderViewModel @Inject constructor(
                 bookId = book.id,
             )
             clearAddTerm()
-            loadChapter(state.chapterIndex, book.filePath)
+            loadChapter(state.chapterIndex, book.filePath, state.chapterScrollPercent)
         }
     }
 
@@ -460,7 +507,7 @@ class ReaderViewModel @Inject constructor(
                 bookId = book.id,
             )
             clearAddTerm()
-            loadChapter(state.chapterIndex, book.filePath)
+            loadChapter(state.chapterIndex, book.filePath, state.chapterScrollPercent)
         }
     }
 

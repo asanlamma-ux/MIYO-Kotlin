@@ -3,6 +3,12 @@ package com.miyu.reader.ui.settings
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -12,32 +18,16 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.DeleteSweep
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FormatAlignLeft
-import androidx.compose.material.icons.outlined.FormatIndentIncrease
-import androidx.compose.material.icons.outlined.Fullscreen
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Login
-import androidx.compose.material.icons.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material.icons.outlined.SdStorage
-import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.TextFields
-import androidx.compose.material.icons.outlined.TouchApp
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +39,8 @@ import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.domain.model.DownloadedDictionary
+import com.miyu.reader.ui.library.LibraryWorkspaceSurface
+import com.miyu.reader.ui.library.WorkspaceExitButton
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.SettingsViewModel
@@ -63,30 +55,17 @@ private data class SettingsDialogState(
 @Composable
 fun SettingsScreen(
     onOpenThemePicker: () -> Unit = {},
+    onOpenAdvancedSettings: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialogState by remember { mutableStateOf<SettingsDialogState?>(null) }
     var showDictionaryLibrary by remember { mutableStateOf(false) }
     var dictionaryImportUrl by remember { mutableStateOf("") }
+    var expandedSettingKey by remember { mutableStateOf<String?>(null) }
 
-    val storagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        }
-        viewModel.setStorageDirectoryUri(uri.toString())
-        dialogState = SettingsDialogState(
-            title = "Storage Updated",
-            message = "New watched folder: ${storageLabel(uri.toString())}",
-        )
-    }
     val dictionaryFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -101,7 +80,7 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(colors.background.copy(alpha = 0.94f))
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp),
+            .padding(bottom = 164.dp),
     ) {
         Text(
             "Settings",
@@ -163,7 +142,9 @@ fun SettingsScreen(
         }
 
         SettingsSection(title = "Appearance") {
-            SettingsRow(
+            ExpandableChoiceSetting(
+                expanded = expandedSettingKey == "theme_mode",
+                onExpandedChange = { expandedSettingKey = if (it) "theme_mode" else null },
                 icon = Icons.Outlined.DarkMode,
                 title = "App Theme",
                 subtitle = when (uiState.themeMode) {
@@ -171,22 +152,22 @@ fun SettingsScreen(
                     ThemeMode.LIGHT -> "Light mode"
                     ThemeMode.DARK -> "Dark mode"
                 },
-                onClick = {
-                    val options = ThemeMode.entries
-                    val next = (options.indexOf(uiState.themeMode) + 1) % options.size
-                    viewModel.setThemeMode(options[next])
-                },
                 accentColor = colors.accent,
-                trailing = {
-                    Text(
-                        when (uiState.themeMode) {
-                            ThemeMode.SYSTEM -> "Follow OS"
-                            ThemeMode.LIGHT -> "Light"
-                            ThemeMode.DARK -> "Dark"
-                        },
-                        color = colors.secondaryText,
-                    )
+                currentValue = when (uiState.themeMode) {
+                    ThemeMode.SYSTEM -> "Follow OS"
+                    ThemeMode.LIGHT -> "Light"
+                    ThemeMode.DARK -> "Dark"
                 },
+                choices = ThemeMode.entries,
+                choiceLabel = { mode ->
+                    when (mode) {
+                        ThemeMode.SYSTEM -> "Follow OS"
+                        ThemeMode.LIGHT -> "Light"
+                        ThemeMode.DARK -> "Dark"
+                    }
+                },
+                selectedChoice = uiState.themeMode,
+                onChoiceSelected = viewModel::setThemeMode,
             )
             SettingsRow(
                 icon = Icons.Outlined.Palette,
@@ -200,6 +181,13 @@ fun SettingsScreen(
                         color = colors.secondaryText,
                     )
                 },
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Advanced Settings",
+                subtitle = "Reader behavior, storage, maintenance, and deeper app controls.",
+                onClick = onOpenAdvancedSettings,
+                accentColor = colors.accent,
             )
         }
 
@@ -232,226 +220,28 @@ fun SettingsScreen(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
             )
-            SettingsRow(
+            ExpandableChoiceSetting(
+                expanded = expandedSettingKey == "text_align",
+                onExpandedChange = { expandedSettingKey = if (it) "text_align" else null },
                 icon = Icons.Outlined.FormatAlignLeft,
                 title = "Text Alignment",
                 subtitle = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
-                onClick = {
-                    viewModel.setTextAlign(
-                        if (uiState.typography.textAlign == TextAlign.LEFT) TextAlign.JUSTIFY else TextAlign.LEFT,
-                    )
-                },
                 accentColor = colors.accent,
+                currentValue = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
+                choices = TextAlign.entries,
+                choiceLabel = { align -> align.name.lowercase().replaceFirstChar { it.uppercase() } },
+                selectedChoice = uiState.typography.textAlign,
+                onChoiceSelected = viewModel::setTextAlign,
             )
         }
 
-        SettingsSection(title = "Reading") {
+        SettingsSection(title = "Advanced") {
             SettingsRow(
                 icon = Icons.Outlined.Tune,
-                title = "Page Animation",
-                subtitle = uiState.readingSettings.pageAnimation.name.lowercase().replaceFirstChar { it.uppercase() },
-                onClick = {
-                    val options = PageAnimation.entries
-                    val next = (options.indexOf(uiState.readingSettings.pageAnimation) + 1) % options.size
-                    viewModel.setPageAnimation(options[next])
-                },
+                title = "Advanced Settings",
+                subtitle = "Reader behavior, storage, maintenance, and deeper controls live on a dedicated screen.",
+                onClick = onOpenAdvancedSettings,
                 accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.TouchApp,
-                title = "Tap Zones",
-                subtitle = "Left/right reader edge taps scroll or change chapters.",
-                checked = uiState.readingSettings.tapZonesEnabled,
-                onCheckedChange = viewModel::setTapZonesEnabled,
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.TouchApp,
-                title = "Side Tap Action",
-                subtitle = when (uiState.readingSettings.tapZoneNavMode) {
-                    TapZoneNavMode.SCROLL -> "Scroll within chapter"
-                    TapZoneNavMode.CHAPTER -> "Previous/next chapter"
-                },
-                onClick = {
-                    viewModel.setTapZoneNavMode(
-                        if (uiState.readingSettings.tapZoneNavMode == TapZoneNavMode.SCROLL) {
-                            TapZoneNavMode.CHAPTER
-                        } else {
-                            TapZoneNavMode.SCROLL
-                        },
-                    )
-                },
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.FormatIndentIncrease,
-                title = "Margins",
-                subtitle = uiState.readingSettings.marginPreset.name.lowercase().replaceFirstChar { it.uppercase() },
-                onClick = {
-                    val options = MarginPreset.entries
-                    val next = (options.indexOf(uiState.readingSettings.marginPreset) + 1) % options.size
-                    viewModel.setMarginPreset(options[next])
-                },
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Info,
-                title = "Sleep Timer",
-                subtitle = if (uiState.readingSettings.sleepTimerMinutes == 0) {
-                    "Off"
-                } else {
-                    "${uiState.readingSettings.sleepTimerMinutes} minutes"
-                },
-                onClick = {
-                    val options = listOf(0, 15, 30, 45, 60, 90, 120)
-                    val next = (options.indexOf(uiState.readingSettings.sleepTimerMinutes).coerceAtLeast(0) + 1) % options.size
-                    viewModel.setSleepTimer(options[next])
-                },
-                accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.Sync,
-                title = "Continuous Chapter Loading",
-                subtitle = "Prepare the next chapter when you reach the end.",
-                checked = uiState.readingSettings.autoAdvanceChapter,
-                onCheckedChange = viewModel::setAutoAdvanceChapter,
-                accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.TouchApp,
-                title = "Volume Button Navigation",
-                subtitle = "Use hardware volume buttons to turn chapters.",
-                checked = uiState.readingSettings.volumeButtonPageTurn,
-                onCheckedChange = viewModel::setVolumeButtonPageTurn,
-                accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.TextFields,
-                title = "Bionic Reading",
-                subtitle = "Emphasize word beginnings in the reader.",
-                checked = uiState.readingSettings.bionicReading,
-                onCheckedChange = viewModel::setBionicReading,
-                accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.Fullscreen,
-                title = "Immersive Mode",
-                subtitle = "Hide the Android status and navigation bars while a book is open.",
-                checked = uiState.readingSettings.immersiveMode,
-                onCheckedChange = viewModel::setImmersiveMode,
-                accentColor = colors.accent,
-            )
-            SettingsToggle(
-                icon = Icons.Outlined.Fullscreen,
-                title = "Keep Screen On",
-                subtitle = "Prevent sleep while a book is open.",
-                checked = uiState.readingSettings.keepScreenOn,
-                onCheckedChange = viewModel::setKeepScreenOn,
-                accentColor = colors.accent,
-            )
-        }
-
-        SettingsSection(title = "Storage") {
-            SettingsRow(
-                icon = Icons.Outlined.Folder,
-                title = "Storage Location",
-                subtitle = "Pick the Android folder used for watched-folder rescans.",
-                onClick = { storagePicker.launch(null) },
-                accentColor = colors.accent,
-                trailing = {
-                    Text(storageLabel(uiState.storageDirectoryUri), color = colors.secondaryText)
-                },
-            )
-            SettingsRow(
-                icon = Icons.Outlined.SdStorage,
-                title = "Library Size",
-                subtitle = "${uiState.bookCount} book(s) on disk",
-                accentColor = colors.accent,
-                trailing = {
-                    Text(formatStorageBytes(uiState.libraryBytes), color = colors.secondaryText)
-                },
-            )
-            SettingsRow(
-                icon = Icons.Outlined.DeleteSweep,
-                title = "Clear Cache",
-                subtitle = "Remove temporary reader data without deleting books.",
-                onClick = {
-                    scope.launch {
-                        viewModel.clearCache()
-                        dialogState = SettingsDialogState("Cache Cleared", "Temporary reading cache was removed.")
-                    }
-                },
-                accentColor = Color(0xFFEF4444),
-            )
-        }
-
-        SettingsSection(title = "Maintenance") {
-            SettingsRow(
-                icon = Icons.Outlined.Sync,
-                title = "Rescan Library",
-                subtitle = "Re-import missing internal EPUB files and drop orphaned records.",
-                onClick = {
-                    scope.launch {
-                        val result = viewModel.rescanLibrary()
-                        dialogState = SettingsDialogState(
-                            title = "Rescan Complete",
-                            message = "Tracked books: ${result.tracked}\nImported: ${result.imported}\nRemoved missing entries: ${result.removed}",
-                        )
-                    }
-                },
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Security,
-                title = "Duplicate Audit",
-                subtitle = "Find repeated title/author or identifier groups in the local library.",
-                onClick = {
-                    scope.launch {
-                        val audit = viewModel.auditDuplicates()
-                        dialogState = SettingsDialogState(
-                            title = "Duplicate Audit",
-                            message = if (audit.exactGroups == 0) {
-                                "No duplicate groups were found."
-                            } else {
-                                buildString {
-                                    append("Duplicate groups: ${audit.exactGroups}")
-                                    if (audit.samples.isNotEmpty()) {
-                                        append("\n\nExamples:\n")
-                                        append(audit.samples.joinToString("\n"))
-                                    }
-                                }
-                            },
-                        )
-                    }
-                },
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Security,
-                title = "Open App Settings",
-                subtitle = "Open Android app settings for permissions and storage access.",
-                onClick = {
-                    context.startActivity(
-                        Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.fromParts("package", context.packageName, null),
-                        ),
-                    )
-                },
-                accentColor = colors.accent,
-            )
-            SettingsRow(
-                icon = Icons.Outlined.RestartAlt,
-                title = "Reset All Preferences",
-                subtitle = "Restore reading and display settings to their defaults.",
-                onClick = {
-                    viewModel.resetToDefaults()
-                    dialogState = SettingsDialogState(
-                        title = "Preferences Reset",
-                        message = "Reading settings, typography, and daily goal were restored to default values.",
-                    )
-                },
-                accentColor = Color(0xFFEF4444),
             )
         }
 
@@ -521,6 +311,331 @@ fun SettingsScreen(
                 }
             },
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AdvancedSettingsScreen(
+    onBack: () -> Unit,
+    onOpenReaderSettings: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = LocalMIYUColors.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var dialogState by remember { mutableStateOf<SettingsDialogState?>(null) }
+
+    val storagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        viewModel.setStorageDirectoryUri(uri.toString())
+        dialogState = SettingsDialogState(
+            title = "Storage Updated",
+            message = "New watched folder: ${storageLabel(uri.toString())}",
+        )
+    }
+
+    LibraryWorkspaceSurface {
+        WorkspaceExitButton(label = "Exit advanced settings", onClick = onBack)
+        Text(
+            "Advanced Settings",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+            color = colors.onBackground,
+        )
+        Text(
+            "This screen holds reader behavior, storage, and maintenance tools so the normal settings page stays compact.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.secondaryText,
+            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            SettingsSection(title = "Reader") {
+                SettingsRow(
+                    icon = Icons.Outlined.MenuBook,
+                    title = "Reader Settings",
+                    subtitle = "Page animation, tap behavior, chapter loading, immersion, and related controls.",
+                    onClick = onOpenReaderSettings,
+                    accentColor = colors.accent,
+                )
+            }
+
+            SettingsSection(title = "Storage") {
+                SettingsRow(
+                    icon = Icons.Outlined.Folder,
+                    title = "Storage Location",
+                    subtitle = "Pick the Android folder used for watched-folder rescans.",
+                    onClick = { storagePicker.launch(null) },
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(storageLabel(uiState.storageDirectoryUri), color = colors.secondaryText)
+                    },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Inventory2,
+                    title = "Library Size",
+                    subtitle = "${uiState.bookCount} book(s) on disk",
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(formatStorageBytes(uiState.libraryBytes), color = colors.secondaryText)
+                    },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.DeleteSweep,
+                    title = "Clear Cache",
+                    subtitle = "Remove temporary reader data without deleting books.",
+                    onClick = {
+                        scope.launch {
+                            viewModel.clearCache()
+                            dialogState = SettingsDialogState("Cache Cleared", "Temporary reading cache was removed.")
+                        }
+                    },
+                    accentColor = Color(0xFFEF4444),
+                )
+            }
+
+            SettingsSection(title = "Maintenance") {
+                SettingsRow(
+                    icon = Icons.Outlined.Autorenew,
+                    title = "Rescan Library",
+                    subtitle = "Re-import missing internal EPUB files and restore missing covers where possible.",
+                    onClick = {
+                        scope.launch {
+                            val result = viewModel.rescanLibrary()
+                            dialogState = SettingsDialogState(
+                                title = "Rescan Complete",
+                                message = "Tracked books: ${result.tracked}\nImported: ${result.imported}\nRemoved missing entries: ${result.removed}",
+                            )
+                        }
+                    },
+                    accentColor = colors.accent,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.FindInPage,
+                    title = "Duplicate Audit",
+                    subtitle = "Find repeated title/author or identifier groups in the local library.",
+                    onClick = {
+                        scope.launch {
+                            val audit = viewModel.auditDuplicates()
+                            dialogState = SettingsDialogState(
+                                title = "Duplicate Audit",
+                                message = if (audit.exactGroups == 0) {
+                                    "No duplicate groups were found."
+                                } else {
+                                    buildString {
+                                        append("Duplicate groups: ${audit.exactGroups}")
+                                        if (audit.samples.isNotEmpty()) {
+                                            append("\n\nExamples:\n")
+                                            append(audit.samples.joinToString("\n"))
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    },
+                    accentColor = colors.accent,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.OpenInNew,
+                    title = "Open App Settings",
+                    subtitle = "Open Android permission and storage settings for Miyo.",
+                    onClick = {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ),
+                        )
+                    },
+                    accentColor = colors.accent,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.RestartAlt,
+                    title = "Reset All Preferences",
+                    subtitle = "Restore reading and display settings to their defaults.",
+                    onClick = {
+                        viewModel.resetToDefaults()
+                        dialogState = SettingsDialogState(
+                            title = "Preferences Reset",
+                            message = "Reading settings, typography, and daily goal were restored to default values.",
+                        )
+                    },
+                    accentColor = Color(0xFFEF4444),
+                )
+            }
+            Spacer(Modifier.height(44.dp))
+        }
+    }
+
+    dialogState?.let { dialog ->
+        AlertDialog(
+            onDismissRequest = { dialogState = null },
+            title = { Text(dialog.title) },
+            text = { Text(dialog.message) },
+            confirmButton = {
+                TextButton(onClick = { dialogState = null }) {
+                    Text("OK")
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ReaderSettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = LocalMIYUColors.current
+    var expandedSettingKey by remember { mutableStateOf<String?>(null) }
+
+    LibraryWorkspaceSurface {
+        WorkspaceExitButton(label = "Exit reader settings", onClick = onBack)
+        Text(
+            "Reader Settings",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+            color = colors.onBackground,
+        )
+        Text(
+            "These controls define how the reading space behaves. Choice rows expand inline, while toggles apply immediately.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.secondaryText,
+            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            SettingsSection(title = "Flow") {
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "page_animation",
+                    onExpandedChange = { expandedSettingKey = if (it) "page_animation" else null },
+                    icon = Icons.Outlined.Tune,
+                    title = "Page Animation",
+                    subtitle = "Transition used when page navigation is triggered.",
+                    accentColor = colors.accent,
+                    currentValue = uiState.readingSettings.pageAnimation.name.lowercase().replaceFirstChar { it.uppercase() },
+                    choices = PageAnimation.entries,
+                    choiceLabel = { it.name.lowercase().replaceFirstChar { char -> char.uppercase() } },
+                    selectedChoice = uiState.readingSettings.pageAnimation,
+                    onChoiceSelected = viewModel::setPageAnimation,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TouchApp,
+                    title = "Tap Zones",
+                    subtitle = "Left and right edges can trigger scroll or chapter moves.",
+                    checked = uiState.readingSettings.tapZonesEnabled,
+                    onCheckedChange = viewModel::setTapZonesEnabled,
+                    accentColor = colors.accent,
+                )
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "side_tap",
+                    onExpandedChange = { expandedSettingKey = if (it) "side_tap" else null },
+                    icon = Icons.Outlined.TouchApp,
+                    title = "Side Tap Action",
+                    subtitle = "Choose whether edge taps scroll inside the chapter or switch chapters.",
+                    accentColor = colors.accent,
+                    currentValue = when (uiState.readingSettings.tapZoneNavMode) {
+                        TapZoneNavMode.SCROLL -> "Scroll within chapter"
+                        TapZoneNavMode.CHAPTER -> "Previous and next chapter"
+                    },
+                    choices = TapZoneNavMode.entries,
+                    choiceLabel = {
+                        when (it) {
+                            TapZoneNavMode.SCROLL -> "Scroll within chapter"
+                            TapZoneNavMode.CHAPTER -> "Previous and next chapter"
+                        }
+                    },
+                    selectedChoice = uiState.readingSettings.tapZoneNavMode,
+                    onChoiceSelected = viewModel::setTapZoneNavMode,
+                )
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "sleep_timer",
+                    onExpandedChange = { expandedSettingKey = if (it) "sleep_timer" else null },
+                    icon = Icons.Outlined.Info,
+                    title = "Sleep Timer",
+                    subtitle = "Automatically close the session after the selected duration.",
+                    accentColor = colors.accent,
+                    currentValue = if (uiState.readingSettings.sleepTimerMinutes == 0) "Off" else "${uiState.readingSettings.sleepTimerMinutes} minutes",
+                    choices = listOf(0, 15, 30, 45, 60, 90, 120),
+                    choiceLabel = { if (it == 0) "Off" else "$it min" },
+                    selectedChoice = uiState.readingSettings.sleepTimerMinutes,
+                    onChoiceSelected = viewModel::setSleepTimer,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.Sync,
+                    title = "Continuous Chapter Loading",
+                    subtitle = "Append the next chapter under the current one when enabled.",
+                    checked = uiState.readingSettings.autoAdvanceChapter,
+                    onCheckedChange = viewModel::setAutoAdvanceChapter,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TouchApp,
+                    title = "Volume Button Navigation",
+                    subtitle = "Use the hardware volume keys to move between chapters.",
+                    checked = uiState.readingSettings.volumeButtonPageTurn,
+                    onCheckedChange = viewModel::setVolumeButtonPageTurn,
+                    accentColor = colors.accent,
+                )
+            }
+
+            SettingsSection(title = "Display") {
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "margins",
+                    onExpandedChange = { expandedSettingKey = if (it) "margins" else null },
+                    icon = Icons.Outlined.FormatIndentIncrease,
+                    title = "Margins",
+                    subtitle = "Tune the horizontal padding inside the reading space.",
+                    accentColor = colors.accent,
+                    currentValue = uiState.readingSettings.marginPreset.name.lowercase().replaceFirstChar { it.uppercase() },
+                    choices = MarginPreset.entries,
+                    choiceLabel = { it.name.lowercase().replaceFirstChar { char -> char.uppercase() } },
+                    selectedChoice = uiState.readingSettings.marginPreset,
+                    onChoiceSelected = viewModel::setMarginPreset,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TextFields,
+                    title = "Bionic Reading",
+                    subtitle = "Emphasize word beginnings for faster scanning.",
+                    checked = uiState.readingSettings.bionicReading,
+                    onCheckedChange = viewModel::setBionicReading,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.Fullscreen,
+                    title = "Immersive Mode",
+                    subtitle = "Hide Android system bars while a book is open.",
+                    checked = uiState.readingSettings.immersiveMode,
+                    onCheckedChange = viewModel::setImmersiveMode,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.Fullscreen,
+                    title = "Keep Screen On",
+                    subtitle = "Prevent the device from sleeping during reading sessions.",
+                    checked = uiState.readingSettings.keepScreenOn,
+                    onCheckedChange = viewModel::setKeepScreenOn,
+                    accentColor = colors.accent,
+                )
+            }
+            Spacer(Modifier.height(22.dp))
+        }
     }
 }
 
@@ -699,6 +814,82 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
+private fun <T> ExpandableChoiceSetting(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    accentColor: Color,
+    currentValue: String,
+    choices: List<T>,
+    choiceLabel: (T) -> String,
+    selectedChoice: T,
+    onChoiceSelected: (T) -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        SettingsRow(
+            icon = icon,
+            title = title,
+            subtitle = subtitle,
+            onClick = { onExpandedChange(!expanded) },
+            accentColor = accentColor,
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(currentValue, color = colors.secondaryText, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = colors.secondaryText,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .rotate(if (expanded) 90f else 0f),
+                    )
+                }
+            },
+        )
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 56.dp, end = 18.dp, bottom = 16.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = colors.background.copy(alpha = if (colors.isDark) 0.34f else 0.56f),
+            ) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    choices.forEach { choice ->
+                        FilterChip(
+                            selected = selectedChoice == choice,
+                            onClick = {
+                                onChoiceSelected(choice)
+                                onExpandedChange(false)
+                            },
+                            label = { Text(choiceLabel(choice), fontWeight = FontWeight.SemiBold) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SettingsSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
@@ -750,10 +941,10 @@ private fun SettingsRow(
         trailingContent = trailing ?: {
             if (onClick != null) {
                 Icon(
-                    Icons.Default.ChevronRight,
+                    Icons.AutoMirrored.Outlined.ArrowForwardIos,
                     contentDescription = null,
                     tint = colors.secondaryText,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(14.dp),
                 )
             }
         },

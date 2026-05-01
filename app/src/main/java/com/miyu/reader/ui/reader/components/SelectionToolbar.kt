@@ -18,12 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
 data class SelectionData(
@@ -82,10 +83,20 @@ fun SelectionToolbar(
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
-    val toolbarHeight = if (showColorRow) 142.dp else 82.dp
-    val toolbarWidth = (screenWidth - 28.dp).coerceAtMost(390.dp)
-    val anchorTop = with(density) { (selection.y + selection.height + 8f).toDp() }
-        .coerceIn(8.dp, screenHeight - toolbarHeight - 8.dp)
+    val selectionTop = with(density) { selection.y.toDp() }.coerceAtLeast(0.dp)
+    val selectionHeight = with(density) { selection.height.toDp() }.coerceAtLeast(20.dp)
+    val toolbarHeight = if (showColorRow) 98.dp else 54.dp
+    val toolbarWidth = (screenWidth - 24.dp).coerceAtMost(276.dp)
+    val anchorLeft = (
+        with(density) { selection.x.toDp() } - (toolbarWidth / 2)
+        ).coerceIn(12.dp, (screenWidth - toolbarWidth - 12.dp).coerceAtLeast(12.dp))
+    val belowTop = selectionTop + selectionHeight + 30.dp
+    val aboveTop = selectionTop - toolbarHeight - 20.dp
+    val anchorTop = when {
+        belowTop + toolbarHeight <= screenHeight - 20.dp -> belowTop
+        aboveTop >= 12.dp -> aboveTop
+        else -> (screenHeight - toolbarHeight - 12.dp).coerceAtLeast(12.dp)
+    }
 
     // Note Modal
     if (showNoteModal) {
@@ -106,13 +117,12 @@ fun SelectionToolbar(
         return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = anchorTop, start = 14.dp, end = 14.dp),
-        contentAlignment = Alignment.TopCenter,
+    Popup(
+        offset = IntOffset(
+            x = with(density) { anchorLeft.roundToPx() },
+            y = with(density) { anchorTop.roundToPx() },
+        ),
     ) {
-        // Toolbar Card
         Surface(
             modifier = Modifier
                 .width(toolbarWidth),
@@ -120,33 +130,12 @@ fun SelectionToolbar(
             color = bgColor,
             shadowElevation = 8.dp,
         ) {
-            Column(modifier = Modifier.padding(bottom = 8.dp, top = 5.dp)) {
-                // Drag handle hint
-                Box(
-                    modifier = Modifier
-                        .width(36.dp)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.22f))
-                        .align(Alignment.CenterHorizontally),
-                )
-                
-                Text(
-                    "Swipe sideways for more tools",
-                    color = Color.White.copy(alpha = 0.42f),
-                    fontSize = 10.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 3.dp, bottom = 4.dp),
-                    textAlign = TextAlign.Center,
-                )
-
-                // Icons Row
+            Column(modifier = Modifier.padding(bottom = 6.dp, top = 6.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 6.dp),
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ToolbarItem("Note", Icons.Outlined.Edit) { showNoteModal = true }
@@ -187,20 +176,20 @@ fun SelectionToolbar(
                 // Expanded Color Row
                 AnimatedVisibility(visible = showColorRow) {
                     Column {
-                        Divider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 8.dp))
+                        Divider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 6.dp))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 6.dp),
+                                .padding(horizontal = 14.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             HIGHLIGHT_COLORS.forEach { hex ->
                                 val color = Color(android.graphics.Color.parseColor(hex))
                                 val isSelected = selectedHighlightColor == hex
                                 Box(
                                     modifier = Modifier
-                                        .size(if (isSelected) 34.dp else 28.dp)
+                                        .size(if (isSelected) 32.dp else 26.dp)
                                         .clip(CircleShape)
                                         .background(color)
                                         .border(
@@ -232,9 +221,9 @@ fun SelectionToolbar(
                                         onHighlight(HighlightData(selection.text, selectedHighlightColor, null, hex))
                                         showColorRow = false
                                         onClose()
-                                    }.padding(4.dp)
+                                        }.padding(3.dp)
                                 ) {
-                                    Text("A", color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text("A", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     Box(modifier = Modifier.width(16.dp).height(2.dp).background(color))
                                 }
                             }
@@ -260,16 +249,16 @@ private fun ToolbarItem(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .background(if (isActive) Color.White.copy(alpha = 0.1f) else Color.Transparent)
-            .padding(horizontal = 9.dp, vertical = 6.dp)
-            .widthIn(min = 46.dp),
+            .padding(horizontal = 7.dp, vertical = 5.dp)
+            .widthIn(min = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(3.dp))
+        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             label,
             color = if (isActive) activeColor else Color.White.copy(alpha = 0.78f),
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
         )

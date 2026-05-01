@@ -39,6 +39,8 @@ data class OnlineNovelBrowserUiState(
     val hasMore: Boolean = false,
     val loading: Boolean = false,
     val downloading: Boolean = false,
+    val downloadCompletedChapters: Int = 0,
+    val downloadTotalChapters: Int = 0,
     val statusMessage: String = "Open WTR-LAB and complete verification if prompted.",
     val error: String? = null,
     val wtrBridgeReady: Boolean = false,
@@ -73,6 +75,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                 selectedProviderId = providerId,
                 results = emptyList(),
                 selectedNovel = null,
+                downloadCompletedChapters = 0,
+                downloadTotalChapters = 0,
                 page = 1,
                 nextCursor = null,
                 hasMore = false,
@@ -208,7 +212,14 @@ class OnlineNovelBrowserViewModel @Inject constructor(
     }
 
     fun backToResults() {
-        _uiState.update { it.copy(selectedNovel = null, error = null) }
+        _uiState.update {
+            it.copy(
+                selectedNovel = null,
+                downloadCompletedChapters = 0,
+                downloadTotalChapters = 0,
+                error = null,
+            )
+        }
     }
 
     fun setChapterStart(value: String) {
@@ -248,6 +259,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     downloading = true,
+                    downloadCompletedChapters = 0,
+                    downloadTotalChapters = selectedChapters.size,
                     error = null,
                     statusMessage = "Fetching ${selectedChapters.size} WTR-LAB chapters...",
                 )
@@ -262,13 +275,22 @@ class OnlineNovelBrowserViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(downloading = true, error = null, statusMessage = "Downloading chapters...") }
+            _uiState.update {
+                it.copy(
+                    downloading = true,
+                    downloadCompletedChapters = 0,
+                    downloadTotalChapters = selectedChapters.size,
+                    error = null,
+                    statusMessage = "Downloading chapters...",
+                )
+            }
             runCatching {
                 onlineNovelRepository.downloadAsEpub(novel, start, end)
             }.onSuccess { generated ->
                 _uiState.update {
                     it.copy(
                         downloading = false,
+                        downloadCompletedChapters = it.downloadTotalChapters,
                         generatedEpub = generated,
                         statusMessage = "EPUB generated. Importing into library...",
                     )
@@ -277,6 +299,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         downloading = false,
+                        downloadCompletedChapters = 0,
+                        downloadTotalChapters = 0,
                         error = error.message ?: "Download failed.",
                         statusMessage = "Download failed.",
                     )
@@ -286,7 +310,13 @@ class OnlineNovelBrowserViewModel @Inject constructor(
     }
 
     fun consumeGeneratedEpub() {
-        _uiState.update { it.copy(generatedEpub = null) }
+        _uiState.update {
+            it.copy(
+                generatedEpub = null,
+                downloadCompletedChapters = 0,
+                downloadTotalChapters = 0,
+            )
+        }
     }
 
     fun consumeBridgeCommand(id: String) {
@@ -321,6 +351,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                         captchaBody = message.optString("body").take(900),
                         loading = false,
                         downloading = false,
+                        downloadCompletedChapters = 0,
+                        downloadTotalChapters = 0,
                         statusMessage = "Complete WTR-LAB verification in the browser card.",
                     )
                 }
@@ -332,6 +364,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                     it.copy(
                         loading = false,
                         downloading = false,
+                        downloadCompletedChapters = 0,
+                        downloadTotalChapters = 0,
                         error = message.optString("error").ifBlank { "WTR-LAB request failed." },
                         statusMessage = "WTR-LAB request failed.",
                     )
@@ -378,6 +412,12 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                     fetched = plan.fetched + chapter,
                     nextIndex = plan.nextIndex + 1,
                 )
+                _uiState.update {
+                    it.copy(
+                        downloadCompletedChapters = (plan.fetched.size + 1).coerceAtMost(plan.chapters.size),
+                        downloadTotalChapters = plan.chapters.size,
+                    )
+                }
                 requestNextWtrChapter()
             }
             is PendingRequest.Chapters -> {
@@ -441,6 +481,7 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         downloading = false,
+                        downloadCompletedChapters = it.downloadTotalChapters,
                         generatedEpub = generated,
                         statusMessage = "WTR-LAB EPUB generated. Importing into library...",
                     )
@@ -449,6 +490,8 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         downloading = false,
+                        downloadCompletedChapters = 0,
+                        downloadTotalChapters = 0,
                         error = error.message ?: "Could not build the WTR-LAB EPUB.",
                         statusMessage = "EPUB build failed.",
                     )

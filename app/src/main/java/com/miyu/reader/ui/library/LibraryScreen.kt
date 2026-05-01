@@ -1,6 +1,5 @@
 package com.miyu.reader.ui.library
 
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,14 +44,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,14 +58,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
@@ -87,67 +81,27 @@ import com.miyu.reader.viewmodel.LibraryViewModel
 fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
+    onOpenBookDetails: (String) -> Unit = {},
+    onOpenOnline: () -> Unit = {},
+    onOpenOpds: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayedBooks by viewModel.displayedBooks.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
-    val context = LocalContext.current
 
     var showSortMenu by remember { mutableStateOf(false) }
-    var selectedBook by remember { mutableStateOf<Book?>(null) }
-    var showBookAction by remember { mutableStateOf(false) }
-    var showOpdsCatalogs by remember { mutableStateOf(false) }
-    var showOnlineBrowser by remember { mutableStateOf(false) }
-    var coverTargetBookId by remember { mutableStateOf<String?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         uri?.let { viewModel.importBookFromUri(it) }
     }
-    val coverPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri: Uri? ->
-        val bookId = coverTargetBookId
-        if (uri != null && bookId != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            viewModel.updateBookCover(bookId, uri)
-        }
-        coverTargetBookId = null
-    }
 
-    Scaffold(
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { filePickerLauncher.launch(arrayOf("application/epub+zip", "application/epub", "application/octet-stream")) },
-                modifier = Modifier.navigationBarsPadding(),
-                containerColor = colors.accent,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(22.dp),
-            ) {
-                if (uiState.isImporting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    Icon(Icons.Filled.Add, contentDescription = "Import")
-                }
-                Spacer(Modifier.width(8.dp))
-                Text("Import", fontWeight = FontWeight.Bold)
-            }
-        },
-        containerColor = Color.Transparent,
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .blur(if (showBookAction) 2.dp else 0.dp)
                 .background(colors.background.copy(alpha = 0.94f))
-                .padding(padding)
                 .padding(horizontal = 16.dp),
         ) {
             LibraryTopBar(
@@ -161,8 +115,8 @@ fun LibraryScreen(
                     viewModel.setSortOption(it)
                     showSortMenu = false
                 },
-                onOpenOnline = { showOnlineBrowser = true },
-                onOpenOpds = { showOpdsCatalogs = true },
+                onOpenOnline = onOpenOnline,
+                onOpenOpds = onOpenOpds,
                 onToggleView = viewModel::toggleViewMode,
             )
 
@@ -203,7 +157,7 @@ fun LibraryScreen(
                 uiState.viewMode == ViewMode.GRID -> LazyVerticalGrid(
                     modifier = Modifier.weight(1f),
                     columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 104.dp),
+                    contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 112.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
@@ -211,93 +165,56 @@ fun LibraryScreen(
                         GridBookCard(
                             book = book,
                             onPress = { onOpenBook(book.id) },
-                            onLongPress = {
-                                selectedBook = book
-                                showBookAction = true
-                            },
-                            onMore = {
-                                selectedBook = book
-                                showBookAction = true
-                            },
+                            onLongPress = { onOpenBookDetails(book.id) },
+                            onMore = { onOpenBookDetails(book.id) },
                         )
                     }
                 }
 
                 else -> LazyColumn(
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(bottom = 104.dp),
+                    contentPadding = PaddingValues(bottom = 112.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(displayedBooks, key = { it.id }) { book ->
                         ListBookCard(
                             book = book,
                             onPress = { onOpenBook(book.id) },
-                            onLongPress = {
-                                selectedBook = book
-                                showBookAction = true
-                            },
-                            onMore = {
-                                selectedBook = book
-                                showBookAction = true
-                            },
+                            onLongPress = { onOpenBookDetails(book.id) },
+                            onMore = { onOpenBookDetails(book.id) },
                         )
                     }
                 }
             }
         }
-
-        if (showBookAction && selectedBook != null) {
-            BookActionSheet(
-                book = selectedBook!!,
-                onDismiss = {
-                    showBookAction = false
-                    selectedBook = null
-                },
-                onStatusSelected = { status ->
-                    selectedBook?.let { viewModel.updateBookStatus(it.id, status) }
-                    showBookAction = false
-                    selectedBook = null
-                },
-                onDelete = {
-                    selectedBook?.let { viewModel.deleteBook(it.id) }
-                    showBookAction = false
-                    selectedBook = null
-                },
-                onChangeCover = {
-                    coverTargetBookId = selectedBook?.id
-                    showBookAction = false
-                    selectedBook = null
-                    coverPickerLauncher.launch(arrayOf("image/*"))
-                },
-            )
+        ExtendedFloatingActionButton(
+            onClick = { filePickerLauncher.launch(arrayOf("application/epub+zip", "application/epub", "application/octet-stream")) },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 16.dp, bottom = 0.dp)
+                .offset(y = 18.dp),
+            containerColor = colors.accent,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(22.dp),
+        ) {
+            if (uiState.isImporting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+            } else {
+                Icon(Icons.Filled.Add, contentDescription = "Import")
+            }
+            Spacer(Modifier.width(8.dp))
+            Text("Import", fontWeight = FontWeight.Bold)
         }
 
         ImportFeedbackDialog(
             viewModel = viewModel,
             onOpenBook = onOpenBook,
         )
-
-        if (showOpdsCatalogs) {
-            OpdsCatalogSheet(
-                onDismiss = { showOpdsCatalogs = false },
-                onImportEntry = { entry, href ->
-                    viewModel.importBookFromRemoteEpub(href, entry.title)
-                },
-            )
-        }
-
-        if (showOnlineBrowser) {
-            OnlineNovelBrowserSheet(
-                onDismiss = { showOnlineBrowser = false },
-                onImportGeneratedEpub = { generated ->
-                    viewModel.importGeneratedOnlineNovelEpub(
-                        filePath = generated.filePath,
-                        fileName = generated.fileName,
-                        suggestedTitle = generated.title,
-                    )
-                },
-            )
-        }
     }
 }
 
@@ -415,7 +332,9 @@ private fun EmptyLibraryState(
 ) {
     val colors = LocalMIYUColors.current
     Box(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 84.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(28.dp)) {
@@ -605,72 +524,6 @@ private fun BookStatusDot(
         modifier = modifier.size(9.dp),
         shadowElevation = 1.dp,
     ) {}
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BookActionSheet(
-    book: Book,
-    onDismiss: () -> Unit,
-    onStatusSelected: (ReadingStatus) -> Unit,
-    onDelete: () -> Unit,
-    onChangeCover: () -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.cardBackground) {
-        Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BookCover(book = book, modifier = Modifier.size(82.dp, 116.dp), cornerRadius = 14)
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        book.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        color = colors.onBackground,
-                    )
-                    Text(book.author, style = MaterialTheme.typography.bodyMedium, color = colors.secondaryText)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${book.totalChapters} chapters · ${book.progress.toInt()}%",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.secondaryText,
-                    )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Change Cover") },
-                supportingContent = { Text("Import an image and fit it to the book card.") },
-                leadingContent = { Icon(Icons.Outlined.Image, contentDescription = null, tint = colors.accent) },
-                modifier = Modifier.clickable(onClick = onChangeCover),
-            )
-            ReadingStatus.entries.forEach { status ->
-                val icon = when (status) {
-                    ReadingStatus.UNREAD -> Icons.Outlined.BookmarkBorder
-                    ReadingStatus.READING -> Icons.Outlined.MenuBook
-                    ReadingStatus.FINISHED -> Icons.Outlined.CheckCircle
-                }
-                ListItem(
-                    headlineContent = { Text(status.actionLabel()) },
-                    leadingContent = { Icon(icon, contentDescription = null, tint = colors.accent) },
-                    trailingContent = {
-                        if (book.readingStatus == status) Icon(Icons.Filled.Check, contentDescription = null, tint = colors.accent)
-                    },
-                    modifier = Modifier.clickable { onStatusSelected(status) },
-                )
-            }
-            HorizontalDivider()
-            ListItem(
-                headlineContent = { Text("Delete Book", color = MaterialTheme.colorScheme.error) },
-                leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                modifier = Modifier.clickable(onClick = onDelete),
-            )
-            Spacer(Modifier.height(24.dp))
-        }
-    }
 }
 
 @Composable

@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
-import android.view.MotionEvent
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -235,16 +234,6 @@ fun ReaderScreen(
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = SecureReaderWebViewClient()
-                        setOnTouchListener { view, event ->
-                            if (event.action == MotionEvent.ACTION_UP &&
-                                event.eventTime - event.downTime < 260L &&
-                                event.x > view.width * 0.32f &&
-                                event.x < view.width * 0.68f
-                            ) {
-                                view.postDelayed({ jsInterface.onReaderTap() }, 80L)
-                            }
-                            false
-                        }
                     }.also { readerWebViewRef.set(it) }
                 },
                 update = { webView ->
@@ -465,7 +454,7 @@ fun ReaderScreen(
 
                         // Settings panel
                         IconButton(onClick = { viewModel.toggleLayoutPanel() }) {
-                            Icon(Icons.Outlined.Settings, "Layout", tint = textColor)
+                            Icon(Icons.Outlined.Tune, "Layout", tint = textColor)
                         }
 
                         // Next chapter
@@ -838,6 +827,7 @@ body {
   margin-right: auto;
   column-count: $columnCount;
   column-gap: 36px;
+  transform: translateY(0px);
 }
 body :not(a) { color: $textColor !important; }
 a { color: $accentColor !important; text-decoration: none; }
@@ -976,6 +966,7 @@ private fun readerBridgeScript(
 <script>
 document.addEventListener('click', function(event) {
     if (event.target && event.target.closest && event.target.closest('a, button, input, textarea, select')) return;
+    if (window.__miyuSelectionActiveUntil && Date.now() < window.__miyuSelectionActiveUntil) return;
     var term = event.target && event.target.closest ? event.target.closest('.miyu-term') : null;
     if (term) {
         event.preventDefault();
@@ -1005,8 +996,11 @@ document.addEventListener('click', function(event) {
             return;
         }
     }
-    // Center tap is handled by the native WebView touch fallback. Relying on
-    // both native and JS clicks causes double-toggle glitches on some devices.
+    var selection = window.getSelection ? window.getSelection() : null;
+    var hasSelection = !!(selection && !selection.isCollapsed && normalizeSelectionText(selection.toString()).length > 0);
+    if (!hasSelection && window.AndroidBridge) {
+        window.AndroidBridge.onReaderTap();
+    }
 });
 
 function normalizeSelectionText(value) {
@@ -1042,28 +1036,37 @@ function originalTextForSelection(selection) {
 }
 
 document.addEventListener('selectionchange', function() {
-    var sel = window.getSelection();
-    if (!sel || sel.isCollapsed) {
-        return;
+    if (window.__miyuSelectionTimer) {
+        clearTimeout(window.__miyuSelectionTimer);
     }
-    var text = sel.toString().trim();
-    if (text.length === 0) {
-        return;
-    }
-    try {
-        var rect = sel.getRangeAt(0).getBoundingClientRect();
-        var originalText = originalTextForSelection(sel);
-        var data = {
-            text: text,
-            originalText: originalText,
-            x: rect.left + rect.width / 2,
-            y: rect.bottom,
-            width: rect.width,
-            height: 0
-        };
-        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
-	    } catch (e) {}
-	});
+    window.__miyuSelectionTimer = setTimeout(function() {
+        var sel = window.getSelection ? window.getSelection() : null;
+        if (!sel || sel.isCollapsed) {
+            if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
+            return;
+        }
+        var text = normalizeSelectionText(sel.toString());
+        if (text.length === 0) {
+            if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
+            return;
+        }
+        try {
+            var rect = sel.getRangeAt(0).getBoundingClientRect();
+            if (!rect || (!rect.width && !rect.height)) return;
+            var originalText = originalTextForSelection(sel);
+            window.__miyuSelectionActiveUntil = Date.now() + 680;
+            var data = {
+                text: text,
+                originalText: originalText,
+                x: rect.left + rect.width / 2,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height
+            };
+            if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
+        } catch (e) {}
+    }, 280);
+});
 	(function() {
 	    var lastProgressPost = 0;
 	    var loadedThroughChapterIndex = $initialChapterIndex;
@@ -1141,19 +1144,26 @@ document.addEventListener('selectionchange', function() {
 	            document.body.appendChild(pullHint);
 	        }
 	        var percent = Math.max(0, Math.min(1, distance / 88));
-	        pullHint.textContent = percent >= 1 ? 'Release to load next chapter' : 'Pull for next chapter';
+	        pullHint.textContent = percent >= 1
+	            ? ($autoAdvance ? 'Release to load next chapter' : 'Release for next chapter')
+	            : ($autoAdvance ? 'Pull for next chapter' : 'Pull for next chapter');
 	        pullHint.className = 'miyu-pull-next visible';
 	    }
-	    function hidePullHint() {
+	    function resetPullInteraction() {
 	        if (pullHint) pullHint.className = 'miyu-pull-next';
 	        pullDistance = 0;
+	        document.body.style.transform = 'translateY(0px)';
 	    }
 	    function maybeRequestNextChapter(force) {
 	        if (!$autoAdvance || appendRequestInFlight) return;
 	        if (totalChapters > 0 && loadedThroughChapterIndex >= totalChapters - 1) return;
-	        if (!force || remainingScroll() > 28) return;
+	        if (force) {
+	            if (remainingScroll() > 28) return;
+	        } else if (remainingScroll() > 14) {
+	            return;
+	        }
 	        appendRequestInFlight = true;
-	        hidePullHint();
+	        resetPullInteraction();
 	        showContinuousLoader();
 	        postProgress(true);
 	        if (window.AndroidBridge) window.AndroidBridge.onReaderAppendNextChapter();
@@ -1202,23 +1212,37 @@ document.addEventListener('selectionchange', function() {
 	    };
 	    window.addEventListener('scroll', function() {
 	        postProgress(false);
+	        maybeRequestNextChapter(false);
 	    }, { passive: true });
 	    window.addEventListener('touchstart', function(event) {
 	        touchStartY = event.touches && event.touches.length ? event.touches[0].clientY : 0;
 	        pullDistance = 0;
 	    }, { passive: true });
 	    window.addEventListener('touchmove', function(event) {
-	        if (!$autoAdvance || appendRequestInFlight || remainingScroll() > 28) return;
+	        if (appendRequestInFlight || remainingScroll() > 28) return;
 	        var currentY = event.touches && event.touches.length ? event.touches[0].clientY : touchStartY;
 	        pullDistance = Math.max(0, touchStartY - currentY);
-	        if (pullDistance > 18) showPullHint(pullDistance);
+	        if (pullDistance > 18) {
+	            showPullHint(pullDistance);
+	            var resistance = Math.min(26, pullDistance * 0.16);
+	            document.body.style.transform = 'translateY(' + (-resistance) + 'px)';
+	        } else {
+	            document.body.style.transform = 'translateY(0px)';
+	        }
 	    }, { passive: true });
 	    window.addEventListener('touchend', function() {
 	        if (pullDistance > 88) {
-	            maybeRequestNextChapter(true);
+	            if ($autoAdvance) {
+	                maybeRequestNextChapter(true);
+	            } else if (window.AndroidBridge && (!totalChapters || loadedThroughChapterIndex < totalChapters - 1)) {
+	                resetPullInteraction();
+	                window.AndroidBridge.onReaderEdgeTap(1);
+	                return;
+	            }
 	        } else {
-	            hidePullHint();
+	            resetPullInteraction();
 	        }
+	        resetPullInteraction();
 	    }, { passive: true });
 	    window.addEventListener('pagehide', function() { postProgress(true); });
 	    window.addEventListener('beforeunload', function() { postProgress(true); });

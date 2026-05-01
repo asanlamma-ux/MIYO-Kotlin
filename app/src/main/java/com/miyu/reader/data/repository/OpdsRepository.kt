@@ -108,16 +108,16 @@ class OpdsRepository @Inject constructor(
     }
 
     private fun parseFeed(xml: String, baseUrl: String): OpdsFeed {
+        val sanitizedXml = xml.replace(Regex("<!DOCTYPE[\\s\\S]*?>", RegexOption.IGNORE_CASE), "")
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            trySetFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
             trySetFeature("http://xml.org/sax/features/external-general-entities", false)
             trySetFeature("http://xml.org/sax/features/external-parameter-entities", false)
             trySetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
             isXIncludeAware = false
             isExpandEntityReferences = false
         }
-        val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
+        val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(sanitizedXml.toByteArray(Charsets.UTF_8)))
         val feed = document.documentElement ?: error("Could not parse this OPDS feed.")
         val links = parseLinks(feed.childElements("link"), baseUrl)
         val entries = feed.childElements("entry").mapIndexed { index, entry ->

@@ -13,14 +13,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -41,13 +40,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,7 +58,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,7 +76,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OnlineNovelBrowserSheet(
+fun OnlineNovelBrowserWorkspace(
     onDismiss: () -> Unit,
     onImportGeneratedEpub: (GeneratedOnlineNovelEpub) -> Unit,
     viewModel: OnlineNovelBrowserViewModel = hiltViewModel(),
@@ -101,100 +98,119 @@ fun OnlineNovelBrowserSheet(
         viewModel.consumeGeneratedEpub()
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = colors.background,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        Column(
+    LibraryWorkspaceSurface {
+        LazyColumn(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.94f)
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            WorkspaceExitButton(label = "Exit online browser", onClick = onDismiss)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Online MTL Browser",
-                        color = colors.onBackground,
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    )
-                    Text(
-                        "RN-style providers, protected WTR verification, and EPUB export.",
-                        color = colors.secondaryText,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                if (state.loading || state.downloading) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = colors.accent)
+            item {
+                WorkspaceExitButton(label = "Exit online browser", onClick = onDismiss)
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Online MTL Browser",
+                            color = colors.onBackground,
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                        Text(
+                            "RN-style providers, protected WTR verification, and EPUB export.",
+                            color = colors.secondaryText,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (state.loading || state.downloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp), color = colors.accent)
+                    }
                 }
             }
-
-            Spacer(Modifier.height(12.dp))
-            ProviderRow(
-                providers = state.providers,
-                selectedProviderId = state.selectedProviderId,
-                onSelectProvider = viewModel::selectProvider,
-            )
-
+            item {
+                ProviderRow(
+                    providers = state.providers,
+                    selectedProviderId = state.selectedProviderId,
+                    onSelectProvider = viewModel::selectProvider,
+                )
+            }
             if (selectedProvider?.requiresBrowserVerification == true) {
-                Spacer(Modifier.height(10.dp))
-                WtrLabVerificationCard(
-                    bridgeReady = state.wtrBridgeReady,
-                    captchaRequired = state.captchaRequired,
-                    captchaBody = state.captchaBody,
-                    webViewRef = webViewRef,
-                    onBridgeMessage = viewModel::handleWtrBridgeMessage,
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = viewModel::setQuery,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    placeholder = { Text("Search novels...") },
-                )
-                Button(
-                    onClick = { viewModel.search(loadMore = false) },
-                    enabled = !state.loading && !state.downloading,
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Text("Search")
+                item {
+                    WtrLabVerificationCard(
+                        bridgeReady = state.wtrBridgeReady,
+                        captchaRequired = state.captchaRequired,
+                        captchaBody = state.captchaBody,
+                        webViewRef = webViewRef,
+                        onBridgeMessage = viewModel::handleWtrBridgeMessage,
+                    )
                 }
             }
-
-            StatusCard(
-                message = state.statusMessage,
-                error = state.error,
-                provider = selectedProvider,
-            )
-
-            Spacer(Modifier.height(10.dp))
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = viewModel::setQuery,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        placeholder = { Text("Search novels...") },
+                    )
+                    Button(
+                        onClick = { viewModel.search(loadMore = false) },
+                        enabled = !state.loading && !state.downloading,
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text("Search")
+                    }
+                }
+            }
+            item {
+                StatusCard(
+                    message = state.statusMessage,
+                    error = state.error,
+                    provider = selectedProvider,
+                )
+            }
             if (state.selectedNovel == null) {
-                ResultsList(
-                    results = state.results,
-                    hasMore = state.hasMore,
-                    loading = state.loading,
-                    onOpenNovel = viewModel::openNovel,
-                    onLoadMore = { viewModel.search(loadMore = true) },
-                )
+                if (state.results.isEmpty() && !state.loading) {
+                    item {
+                        Text(
+                            "No loaded novels yet. Search a provider to begin.",
+                            color = colors.secondaryText,
+                            modifier = Modifier.padding(vertical = 18.dp),
+                        )
+                    }
+                }
+                items(state.results, key = { "${it.providerId}:${it.path}:${it.rawId}" }) { item ->
+                    OnlineNovelCard(item = item, onClick = { viewModel.openNovel(item) })
+                }
+                if (state.hasMore) {
+                    item {
+                        OutlinedButton(
+                            onClick = { viewModel.search(loadMore = true) },
+                            enabled = !state.loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Load more")
+                        }
+                    }
+                }
             } else {
-                NovelDetailPanel(
-                    novel = state.selectedNovel!!,
-                    chapterStart = state.chapterStart,
-                    chapterEnd = state.chapterEnd,
-                    downloading = state.downloading,
-                    onBack = viewModel::backToResults,
-                    onChapterStartChange = viewModel::setChapterStart,
-                    onChapterEndChange = viewModel::setChapterEnd,
-                    onDownload = viewModel::downloadSelectedNovel,
-                )
+                item {
+                    NovelDetailPanel(
+                        novel = state.selectedNovel!!,
+                        chapterStart = state.chapterStart,
+                        chapterEnd = state.chapterEnd,
+                        downloading = state.downloading,
+                        downloadCompletedChapters = state.downloadCompletedChapters,
+                        downloadTotalChapters = state.downloadTotalChapters,
+                        statusMessage = state.statusMessage,
+                        onBack = viewModel::backToResults,
+                        onChapterStartChange = viewModel::setChapterStart,
+                        onChapterEndChange = viewModel::setChapterEnd,
+                        onDownload = viewModel::downloadSelectedNovel,
+                    )
+                }
             }
         }
     }
@@ -351,26 +367,6 @@ private fun WtrLabVerificationCard(
 }
 
 @Composable
-private fun WorkspaceExitButton(
-    label: String,
-    onClick: () -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.padding(bottom = 8.dp),
-        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-    ) {
-        Text(
-            "> $label",
-            color = colors.secondaryText,
-            textDecoration = TextDecoration.Underline,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
 private fun StatusCard(
     message: String,
     error: String?,
@@ -400,48 +396,6 @@ private fun StatusCard(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp),
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResultsList(
-    results: List<OnlineNovelSummary>,
-    hasMore: Boolean,
-    loading: Boolean,
-    onOpenNovel: (OnlineNovelSummary) -> Unit,
-    onLoadMore: () -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 520.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 26.dp),
-    ) {
-        if (results.isEmpty() && !loading) {
-            item {
-                Text(
-                    "No loaded novels yet. Search a provider to begin.",
-                    color = colors.secondaryText,
-                    modifier = Modifier.padding(vertical = 18.dp),
-                )
-            }
-        }
-        items(results, key = { "${it.providerId}:${it.path}:${it.rawId}" }) { item ->
-            OnlineNovelCard(item = item, onClick = { onOpenNovel(item) })
-        }
-        if (hasMore) {
-            item {
-                OutlinedButton(
-                    onClick = onLoadMore,
-                    enabled = !loading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Load more")
                 }
             }
         }
@@ -493,113 +447,124 @@ private fun NovelDetailPanel(
     chapterStart: String,
     chapterEnd: String,
     downloading: Boolean,
+    downloadCompletedChapters: Int,
+    downloadTotalChapters: Int,
+    statusMessage: String,
     onBack: () -> Unit,
     onChapterStartChange: (String) -> Unit,
     onChapterEndChange: (String) -> Unit,
     onDownload: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = 560.dp),
-        contentPadding = PaddingValues(bottom = 26.dp),
+            .padding(top = 2.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            TextButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                Text("Back to results")
-            }
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        TextButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
+            Text("Back to results")
+        }
+        Card(
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    CoverThumb(url = novel.coverUrl, title = novel.title, modifier = Modifier.size(92.dp, 132.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(novel.title, color = colors.onBackground, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                        Text(novel.author, color = colors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "${novel.providerLabel} · ${novel.status}",
-                            color = colors.secondaryText,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                        novel.chapterCount?.let {
-                            Text("$it chapters", color = colors.secondaryText, style = MaterialTheme.typography.bodySmall)
-                        }
+                CoverThumb(url = novel.coverUrl, title = novel.title, modifier = Modifier.size(92.dp, 132.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(novel.title, color = colors.onBackground, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(novel.author, color = colors.secondaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        "${novel.providerLabel} · ${novel.status}",
+                        color = colors.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    novel.chapterCount?.let {
+                        Text("$it chapters", color = colors.secondaryText, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                if (novel.summary.isNotBlank()) {
-                    Text(
-                        novel.summary,
-                        color = colors.secondaryText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(horizontal = 14.dp).padding(bottom = 14.dp),
-                    )
-                }
+            }
+            if (novel.summary.isNotBlank()) {
+                Text(
+                    novel.summary,
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp)
+                        .padding(bottom = 14.dp),
+                )
             }
         }
-        item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("Chapter Range", color = colors.onBackground, fontWeight = FontWeight.Bold)
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text("Chapter Range", color = colors.onBackground, fontWeight = FontWeight.Bold)
+                Text(
+                    "Select a safe range to export. Large provider downloads are intentionally chunked.",
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = chapterStart,
+                        onValueChange = onChapterStartChange,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        label = { Text("Start") },
+                    )
+                    OutlinedTextField(
+                        value = chapterEnd,
+                        onValueChange = onChapterEndChange,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        label = { Text("End") },
+                    )
+                }
+                if (downloadTotalChapters > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { (downloadCompletedChapters.toFloat() / downloadTotalChapters.toFloat()).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
                     Text(
-                        "Select a safe range to export. Large provider downloads are intentionally chunked.",
+                        "$downloadCompletedChapters / $downloadTotalChapters chapters · $statusMessage",
                         color = colors.secondaryText,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
-                            value = chapterStart,
-                            onValueChange = onChapterStartChange,
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            label = { Text("Start") },
-                        )
-                        OutlinedTextField(
-                            value = chapterEnd,
-                            onValueChange = onChapterEndChange,
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            label = { Text("End") },
-                        )
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = onDownload,
+                    enabled = !downloading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    if (downloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = onDownload,
-                        enabled = !downloading,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        if (downloading) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                        } else {
-                            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text(if (downloading) "Downloading..." else "Export EPUB")
-                    }
+                    Text(if (downloading) "Downloading..." else "Export EPUB")
                 }
             }
         }
-        item {
-            Text(
-                "Loaded chapters: ${novel.chapters.size}",
-                color = colors.secondaryText,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        Text(
+            "Loaded chapters: ${novel.chapters.size}",
+            color = colors.secondaryText,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -620,7 +585,7 @@ private fun CoverThumb(
             AsyncImage(
                 model = url,
                 contentDescription = title,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Text(

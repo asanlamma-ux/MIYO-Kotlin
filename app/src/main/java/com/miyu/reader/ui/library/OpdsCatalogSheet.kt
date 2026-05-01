@@ -5,11 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,17 +31,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,7 +49,7 @@ import com.miyu.reader.viewmodel.OpdsCatalogViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OpdsCatalogSheet(
+fun OpdsCatalogWorkspace(
     onDismiss: () -> Unit,
     onImportEntry: (OpdsEntry, String) -> Unit,
     viewModel: OpdsCatalogViewModel = hiltViewModel(),
@@ -65,189 +62,162 @@ fun OpdsCatalogSheet(
         viewModel.open()
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = colors.background,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        Column(
+    LibraryWorkspaceSurface {
+        LazyColumn(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            WorkspaceExitButton(label = "Exit OPDS", onClick = onDismiss)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "OPDS Catalogs",
-                        color = colors.onBackground,
-                        style = androidx.compose.material3.MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    )
-                    Text(
-                        "Browse online catalogs and import EPUBs directly.",
-                        color = colors.secondaryText,
-                    )
-                }
-                if (state.loading) {
-                    CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
-                }
+            item {
+                WorkspaceExitButton(label = "Exit OPDS", onClick = onDismiss)
             }
-
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = state.catalogUrl,
-                    onValueChange = viewModel::setCatalogUrl,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Outlined.Language, contentDescription = null) },
-                    placeholder = { Text("Add HTTPS OPDS URL") },
-                )
-                Button(
-                    onClick = viewModel::addCatalog,
-                    enabled = state.catalogUrl.isNotBlank() && !state.savingCatalog,
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    if (state.savingCatalog) {
-                        CircularProgressIndicator(strokeWidth = 2.dp)
-                    } else {
-                        Text("Add")
-                    }
-                }
-            }
-
-            if (state.catalogs.isNotEmpty()) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                ) {
-                    items(state.catalogs, key = { it.id }) { catalog ->
-                        FilterChip(
-                            selected = state.activeCatalogId == catalog.id,
-                            onClick = { viewModel.loadFeed(catalog.url, pushHistory = false, catalogId = catalog.id) },
-                            label = { Text(catalog.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            leadingIcon = {
-                                Icon(
-                                    if (state.activeCatalogId == catalog.id) Icons.Filled.Check else Icons.Outlined.Language,
-                                    contentDescription = null,
-                                )
-                            },
-                            trailingIcon = {
-                                if (!catalog.isDefault) {
-                                    IconButton(onClick = { viewModel.removeCatalog(catalog.id) }) {
-                                        Icon(Icons.Outlined.Delete, contentDescription = "Remove catalog")
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = viewModel::setQuery,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                placeholder = { Text("Filter loaded entries...") },
-            )
-
-            state.error?.let {
-                Text(
-                    it,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-
-            Row(
-                modifier = Modifier.padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (state.feedStack.isNotEmpty()) {
-                    TextButton(onClick = viewModel::goBackFeed) {
-                        Icon(Icons.Outlined.ArrowBack, contentDescription = null)
-                        Text("Back")
-                    }
-                }
-                state.feed?.previousUrl?.let { url ->
-                    TextButton(onClick = { viewModel.loadFeed(url, pushHistory = false) }) {
-                        Text("Previous")
-                    }
-                }
-                state.feed?.nextUrl?.let { url ->
-                    TextButton(onClick = { viewModel.loadFeed(url, pushHistory = false) }) {
-                        Text("Next")
-                    }
-                }
-            }
-
-            Text(
-                state.feed?.title ?: "No catalog loaded",
-                color = colors.onBackground,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                state.feed?.url ?: "Save or select a catalog to start.",
-                color = colors.secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            Spacer(Modifier.height(10.dp))
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 28.dp),
-            ) {
-                if (!state.loading && entries.isEmpty()) {
-                    item {
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "No entries found in this feed.",
+                            "OPDS Catalogs",
+                            color = colors.onBackground,
+                            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        )
+                        Text(
+                            "Browse online catalogs and import EPUBs directly.",
                             color = colors.secondaryText,
-                            modifier = Modifier.padding(vertical = 18.dp),
                         )
                     }
+                    if (state.loading) {
+                        CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
-                items(entries, key = { it.id }) { entry ->
-                    OpdsEntryCard(
-                        entry = entry,
-                        importing = state.importingEntryId == entry.id,
-                        onOpenNavigation = { link -> viewModel.loadFeed(link, pushHistory = true) },
-                        onImport = { link ->
-                            viewModel.markImporting(entry.id)
-                            onImportEntry(entry, link)
-                            viewModel.markImporting(null)
-                        },
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = state.catalogUrl,
+                        onValueChange = viewModel::setCatalogUrl,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Outlined.Language, contentDescription = null) },
+                        placeholder = { Text("Add HTTPS OPDS URL") },
+                    )
+                    Button(
+                        onClick = viewModel::addCatalog,
+                        enabled = state.catalogUrl.isNotBlank() && !state.savingCatalog,
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        if (state.savingCatalog) {
+                            CircularProgressIndicator(strokeWidth = 2.dp)
+                        } else {
+                            Text("Add")
+                        }
+                    }
+                }
+            }
+            if (state.catalogs.isNotEmpty()) {
+                item {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                    ) {
+                        items(state.catalogs, key = { it.id }) { catalog ->
+                            FilterChip(
+                                selected = state.activeCatalogId == catalog.id,
+                                onClick = { viewModel.loadFeed(catalog.url, pushHistory = false, catalogId = catalog.id) },
+                                label = { Text(catalog.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                leadingIcon = {
+                                    Icon(
+                                        if (state.activeCatalogId == catalog.id) Icons.Filled.Check else Icons.Outlined.Language,
+                                        contentDescription = null,
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (!catalog.isDefault) {
+                                        IconButton(onClick = { viewModel.removeCatalog(catalog.id) }) {
+                                            Icon(Icons.Outlined.Delete, contentDescription = "Remove catalog")
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = viewModel::setQuery,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    placeholder = { Text("Filter loaded entries...") },
+                )
+            }
+            state.error?.let { error ->
+                item {
+                    Text(
+                        error,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
                     )
                 }
+            }
+            item {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (state.feedStack.isNotEmpty()) {
+                        TextButton(onClick = viewModel::goBackFeed) {
+                            Icon(Icons.Outlined.ArrowBack, contentDescription = null)
+                            Text("Back")
+                        }
+                    }
+                    state.feed?.previousUrl?.let { url ->
+                        TextButton(onClick = { viewModel.loadFeed(url, pushHistory = false) }) {
+                            Text("Previous")
+                        }
+                    }
+                    state.feed?.nextUrl?.let { url ->
+                        TextButton(onClick = { viewModel.loadFeed(url, pushHistory = false) }) {
+                            Text("Next")
+                        }
+                    }
+                }
+            }
+            item {
+                Text(
+                    state.feed?.title ?: "No catalog loaded",
+                    color = colors.onBackground,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    state.feed?.url ?: "Save or select a catalog to start.",
+                    color = colors.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!state.loading && entries.isEmpty()) {
+                item {
+                    Text(
+                        "No entries found in this feed.",
+                        color = colors.secondaryText,
+                        modifier = Modifier.padding(vertical = 18.dp),
+                    )
+                }
+            }
+            items(entries, key = { it.id }) { entry ->
+                OpdsEntryCard(
+                    entry = entry,
+                    importing = state.importingEntryId == entry.id,
+                    onOpenNavigation = { link -> viewModel.loadFeed(link, pushHistory = true) },
+                    onImport = { link ->
+                        viewModel.markImporting(entry.id)
+                        onImportEntry(entry, link)
+                        viewModel.markImporting(null)
+                    },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun WorkspaceExitButton(
-    label: String,
-    onClick: () -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.padding(bottom = 8.dp),
-        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-    ) {
-        Text(
-            "> $label",
-            color = colors.secondaryText,
-            textDecoration = TextDecoration.Underline,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }
 
