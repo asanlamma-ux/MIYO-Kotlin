@@ -117,11 +117,11 @@ fun TranslationSheetBottomSheet(
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Open in Browser", color = readerTheme.background, fontWeight = FontWeight.SemiBold)
+                    Text("Open in Google Translate", color = readerTheme.background, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "This fallback opens a live translator while the in-app provider stack is still being ported.",
+                    "In-app translation uses Google Cloud Translate when MIYU_GOOGLE_TRANSLATE_API_KEY is configured.",
                     color = readerTheme.secondaryText.copy(alpha = 0.75f),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,

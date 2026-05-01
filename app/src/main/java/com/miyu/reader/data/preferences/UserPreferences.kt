@@ -38,15 +38,16 @@ class UserPreferences @Inject constructor(
 
     // Typography
     val typography: Flow<TypographySettings> = context.dataStore.data.map { prefs ->
+        val defaults = TypographySettings()
         TypographySettings(
-            fontFamily = prefs[KEY_FONT_FAMILY] ?: "default",
-            fontSize = prefs[KEY_FONT_SIZE] ?: 16f,
-            lineHeight = prefs[KEY_LINE_HEIGHT] ?: 1.6f,
-            letterSpacing = prefs[KEY_LETTER_SPACING] ?: 0f,
-            paragraphSpacing = prefs[KEY_PARAGRAPH_SPACING] ?: 0f,
-            textAlign = TextAlign.valueOf(prefs[KEY_TEXT_ALIGN] ?: TextAlign.JUSTIFY.name),
+            fontFamily = prefs[KEY_FONT_FAMILY] ?: defaults.fontFamily,
+            fontSize = prefs[KEY_FONT_SIZE] ?: defaults.fontSize,
+            lineHeight = prefs[KEY_LINE_HEIGHT] ?: defaults.lineHeight,
+            letterSpacing = prefs[KEY_LETTER_SPACING] ?: defaults.letterSpacing,
+            paragraphSpacing = prefs[KEY_PARAGRAPH_SPACING] ?: defaults.paragraphSpacing,
+            textAlign = TextAlign.valueOf(prefs[KEY_TEXT_ALIGN] ?: defaults.textAlign.name),
             fontWeight = BodyFontWeight.entries.firstOrNull { it.value == (prefs[KEY_FONT_WEIGHT] ?: 400) }
-                ?: BodyFontWeight.W400,
+                ?: defaults.fontWeight,
         )
     }
 
@@ -64,20 +65,26 @@ class UserPreferences @Inject constructor(
 
     // Reading settings
     val readingSettings: Flow<ReadingSettings> = context.dataStore.data.map { prefs ->
+        val defaults = ReadingSettings()
         ReadingSettings(
-            pageAnimation = PageAnimation.valueOf(prefs[KEY_PAGE_ANIMATION] ?: PageAnimation.SLIDE.name),
-            tapZonesEnabled = prefs[KEY_TAP_ZONES_ENABLED] ?: true,
-            tapScrollPageRatio = prefs[KEY_TAP_SCROLL_RATIO] ?: 0.9f,
-            tapZoneNavMode = TapZoneNavMode.valueOf(prefs[KEY_TAP_ZONE_MODE] ?: TapZoneNavMode.SCROLL.name),
-            volumeButtonPageTurn = prefs[KEY_VOLUME_TURN] ?: false,
-            autoScrollSpeed = prefs[KEY_AUTO_SCROLL] ?: 0f,
-            immersiveMode = prefs[KEY_IMMERSIVE] ?: false,
+            pageAnimation = PageAnimation.valueOf(prefs[KEY_PAGE_ANIMATION] ?: defaults.pageAnimation.name),
+            tapZonesEnabled = prefs[KEY_TAP_ZONES_ENABLED] ?: defaults.tapZonesEnabled,
+            tapScrollPageRatio = prefs[KEY_TAP_SCROLL_RATIO] ?: defaults.tapScrollPageRatio,
+            tapZoneNavMode = TapZoneNavMode.valueOf(prefs[KEY_TAP_ZONE_MODE] ?: defaults.tapZoneNavMode.name),
+            volumeButtonPageTurn = prefs[KEY_VOLUME_TURN] ?: defaults.volumeButtonPageTurn,
+            autoScrollSpeed = prefs[KEY_AUTO_SCROLL] ?: defaults.autoScrollSpeed,
+            immersiveMode = prefs[KEY_IMMERSIVE] ?: defaults.immersiveMode,
             brightnessOverride = prefs[KEY_BRIGHTNESS],
-            blueLightFilter = prefs[KEY_BLUE_LIGHT] ?: false,
-            reducedMotion = prefs[KEY_REDUCED_MOTION] ?: false,
-            marginPreset = MarginPreset.valueOf(prefs[KEY_MARGIN_PRESET] ?: MarginPreset.MEDIUM.name),
-            contentColumnWidth = prefs[KEY_COLUMN_WIDTH],
-            readerColumnLayout = ReaderColumnLayout.valueOf(prefs[KEY_COLUMN_LAYOUT] ?: ReaderColumnLayout.SINGLE.name),
+            blueLightFilter = prefs[KEY_BLUE_LIGHT] ?: defaults.blueLightFilter,
+            reducedMotion = prefs[KEY_REDUCED_MOTION] ?: defaults.reducedMotion,
+            keepScreenOn = prefs[KEY_KEEP_SCREEN_ON] ?: defaults.keepScreenOn,
+            bionicReading = prefs[KEY_BIONIC_READING] ?: defaults.bionicReading,
+            autoAdvanceChapter = prefs[KEY_AUTO_ADVANCE_CHAPTER] ?: defaults.autoAdvanceChapter,
+            sleepTimerMinutes = prefs[KEY_SLEEP_TIMER_MINUTES] ?: defaults.sleepTimerMinutes,
+            readingFlowMode = ReaderFlowMode.valueOf(prefs[KEY_READING_FLOW_MODE] ?: defaults.readingFlowMode.name),
+            marginPreset = MarginPreset.valueOf(prefs[KEY_MARGIN_PRESET] ?: defaults.marginPreset.name),
+            contentColumnWidth = prefs[KEY_COLUMN_WIDTH] ?: defaults.contentColumnWidth,
+            readerColumnLayout = ReaderColumnLayout.valueOf(prefs[KEY_COLUMN_LAYOUT] ?: defaults.readerColumnLayout.name),
         )
     }
 
@@ -94,6 +101,11 @@ class UserPreferences @Inject constructor(
             else it.remove(KEY_BRIGHTNESS)
             it[KEY_BLUE_LIGHT] = settings.blueLightFilter
             it[KEY_REDUCED_MOTION] = settings.reducedMotion
+            it[KEY_KEEP_SCREEN_ON] = settings.keepScreenOn
+            it[KEY_BIONIC_READING] = settings.bionicReading
+            it[KEY_AUTO_ADVANCE_CHAPTER] = settings.autoAdvanceChapter
+            it[KEY_SLEEP_TIMER_MINUTES] = settings.sleepTimerMinutes
+            it[KEY_READING_FLOW_MODE] = settings.readingFlowMode.name
             it[KEY_MARGIN_PRESET] = settings.marginPreset.name
             if (settings.contentColumnWidth != null) it[KEY_COLUMN_WIDTH] = settings.contentColumnWidth
             else it.remove(KEY_COLUMN_WIDTH)
@@ -151,11 +163,18 @@ class UserPreferences @Inject constructor(
         private val KEY_BRIGHTNESS = floatPreferencesKey("brightness")
         private val KEY_BLUE_LIGHT = booleanPreferencesKey("blue_light")
         private val KEY_REDUCED_MOTION = booleanPreferencesKey("reduced_motion")
+        private val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        private val KEY_BIONIC_READING = booleanPreferencesKey("bionic_reading")
+        private val KEY_AUTO_ADVANCE_CHAPTER = booleanPreferencesKey("auto_advance_chapter")
+        private val KEY_SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
+        private val KEY_READING_FLOW_MODE = stringPreferencesKey("reading_flow_mode")
         private val KEY_MARGIN_PRESET = stringPreferencesKey("margin_preset")
         private val KEY_COLUMN_WIDTH = intPreferencesKey("column_width")
         private val KEY_COLUMN_LAYOUT = stringPreferencesKey("column_layout")
         private val KEY_LAST_BOOK_ID = stringPreferencesKey("last_book_id")
-        private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id")
+        // v2 intentionally ignores stale values from early broken builds where
+        // the picker could persist Night Mode as the apparent first-run theme.
+        private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id_v2")
         private val KEY_DAILY_GOAL_MINUTES = intPreferencesKey("daily_goal_minutes")
         private val KEY_STORAGE_DIRECTORY_URI = stringPreferencesKey("storage_directory_uri")
     }

@@ -71,6 +71,120 @@ std::string readZipTextLoose(ZipArchive& zip, const std::string& path) {
     return "";
 }
 
+std::string normalizeZipPath(std::string path) {
+    std::replace(path.begin(), path.end(), '\\', '/');
+
+    std::vector<std::string> parts;
+    std::stringstream current;
+    while (!path.empty() && path.front() == '/') {
+        path.erase(path.begin());
+    }
+    for (char c : path) {
+        if (c == '/') {
+            std::string part = current.str();
+            current.str("");
+            current.clear();
+            if (part.empty() || part == ".") continue;
+            if (part == "..") {
+                if (!parts.empty()) parts.pop_back();
+            } else {
+                parts.push_back(part);
+            }
+        } else {
+            current << c;
+        }
+    }
+    std::string tail = current.str();
+    if (!tail.empty() && tail != ".") {
+        if (tail == "..") {
+            if (!parts.empty()) parts.pop_back();
+        } else {
+            parts.push_back(tail);
+        }
+    }
+
+    std::ostringstream normalized;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (i > 0) normalized << "/";
+        normalized << parts[i];
+    }
+    return normalized.str();
+}
+
+std::string dirName(const std::string& path) {
+    const std::string normalized = normalizeZipPath(path);
+    const size_t slash = normalized.find_last_of('/');
+    return slash == std::string::npos ? "" : normalized.substr(0, slash);
+}
+
+std::vector<unsigned char> readZipBinaryLoose(ZipArchive& zip, const std::string& path) {
+    std::vector<unsigned char> data = zip.readBinary(path);
+    if (!data.empty()) return data;
+
+    const std::string normalized = normalizeZipPath(path);
+    const std::string lowerTarget = to_lower_copy(normalized);
+    for (const auto& entry : zip.entries()) {
+        const std::string lowerEntry = to_lower_copy(normalizeZipPath(entry.name));
+        if (lowerEntry == lowerTarget || ends_with(lowerEntry, "/" + lowerTarget)) {
+            data = zip.readBinary(entry.name);
+            if (!data.empty()) return data;
+        }
+    }
+    return {};
+}
+
+std::string inlineChapterImages(ZipArchive& zip, const std::string& html, const std::string& chapterPath) {
+    std::regex imgSrcRegex(R"((<img\b[^>]*?\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>))", std::regex::icase);
+    std::string result;
+    result.reserve(html.size());
+
+    const std::string chapterDir = dirName(chapterPath);
+    size_t last = 0;
+    auto begin = std::sregex_iterator(html.begin(), html.end(), imgSrcRegex);
+    auto end = std::sregex_iterator();
+    for (auto it = begin; it != end; ++it) {
+        const std::smatch& match = *it;
+        const std::string src = match[2].str();
+        std::string replacementSrc = src;
+        const std::string lowerSrc = to_lower_copy(src);
+
+        if (!lowerSrc.empty() &&
+            lowerSrc.find("data:") != 0 &&
+            lowerSrc.find("http://") != 0 &&
+            lowerSrc.find("https://") != 0) {
+            std::string cleanSrc = src;
+            const size_t fragment = cleanSrc.find('#');
+            if (fragment != std::string::npos) cleanSrc = cleanSrc.substr(0, fragment);
+            const size_t query = cleanSrc.find('?');
+            if (query != std::string::npos) cleanSrc = cleanSrc.substr(0, query);
+
+            const std::vector<std::string> candidates = {
+                normalizeZipPath(chapterDir.empty() ? cleanSrc : chapterDir + "/" + cleanSrc),
+                normalizeZipPath(cleanSrc),
+                normalizeZipPath(cleanSrc.substr(cleanSrc.find_last_of('/') == std::string::npos ? 0 : cleanSrc.find_last_of('/') + 1)),
+            };
+
+            for (const auto& candidate : candidates) {
+                const auto data = readZipBinaryLoose(zip, candidate);
+                const std::string dataUri = image_data_uri(candidate, data);
+                if (!dataUri.empty()) {
+                    replacementSrc = dataUri;
+                    break;
+                }
+            }
+        }
+
+        result.append(html, last, static_cast<size_t>(match.position()) - last);
+        result += match[1].str();
+        result += replacementSrc;
+        result += match[3].str();
+        last = static_cast<size_t>(match.position() + match.length());
+    }
+
+    result.append(html, last, std::string::npos);
+    return result;
+}
+
 EpubMetadata parseOpfMetadata(const std::string& opfXml) {
     EpubMetadata meta;
     meta.title = stripTags(extractTag(opfXml, "dc:title"));
@@ -134,6 +248,7 @@ std::vector<EpubChapter> parseChapters(ZipArchive& zip, const std::string& opfXm
 
         std::string content = readZipTextLoose(zip, fullPath);
         if (content.empty()) continue;
+        content = inlineChapterImages(zip, content, fullPath);
 
         std::string title = stripTags(extractTag(content, "title"));
         if (title.empty()) {

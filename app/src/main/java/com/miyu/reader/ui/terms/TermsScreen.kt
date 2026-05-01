@@ -71,13 +71,6 @@ fun TermsScreen(
                 Icon(Icons.Default.Add, contentDescription = "Create", tint = MaterialTheme.colorScheme.onPrimary)
             }
         }
-        Text(
-            "Group creation and book-linked replacement are active. Export and community term packs stay hidden until the Kotlin port has working package flows.",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.secondaryText,
-            modifier = Modifier.padding(horizontal = 20.dp),
-        )
-
         // ── Search ──────────────────────────────────────────────────
         OutlinedTextField(
             value = uiState.searchQuery,
@@ -86,7 +79,8 @@ fun TermsScreen(
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 20.dp)
+                .padding(top = 8.dp),
             shape = RoundedCornerShape(12.dp),
             singleLine = true,
         )

@@ -1,6 +1,8 @@
 package com.miyu.reader.viewmodel
 
 import android.content.Context
+import android.net.Uri
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
@@ -145,6 +147,34 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(keepScreenOn = enabled))
+        }
+    }
+
+    fun setBionicReading(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(bionicReading = enabled))
+        }
+    }
+
+    fun setAutoAdvanceChapter(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(autoAdvanceChapter = enabled))
+        }
+    }
+
+    fun setSleepTimer(minutes: Int) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(sleepTimerMinutes = minutes.coerceIn(0, 240)))
+        }
+    }
+
     fun setTapZoneNavMode(mode: TapZoneNavMode) {
         viewModelScope.launch {
             val current = _uiState.value.readingSettings
@@ -206,9 +236,18 @@ class SettingsViewModel @Inject constructor(
 
         var removed = 0
         existingBooks.forEach { book ->
-            if (!File(book.filePath).exists()) {
+            val file = File(book.filePath)
+            if (!file.exists()) {
                 bookRepository.deleteBook(book.id)
                 removed += 1
+            } else if (book.coverUri.isNullOrBlank()) {
+                val coverUri = epubEngine.extractCoverImage(file.absolutePath)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
+                    ?.let { persistCoverImage(book.id, it) ?: it }
+                if (!coverUri.isNullOrBlank()) {
+                    bookRepository.saveBook(book.copy(coverUri = coverUri))
+                }
             }
         }
 
@@ -235,6 +274,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.setTypography(TypographySettings())
             preferences.setReadingSettings(ReadingSettings())
+            preferences.setReaderThemeId(DefaultReaderThemeId)
+            preferences.setThemeMode(ThemeMode.LIGHT)
             preferences.setDailyGoalMinutes(30)
         }
     }
@@ -246,19 +287,20 @@ class SettingsViewModel @Inject constructor(
         val totalChapters = parsed.optInt("totalChapters", 0)
         if (totalChapters <= 0) return
 
-        val coverBase64 = epubEngine.extractCoverImage(file.absolutePath)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
-
         val title = metadata?.optString("title")?.takeIf { it.isNotBlank() }
             ?: file.nameWithoutExtension.replace("_", " ")
         val author = metadata?.optString("author")?.takeIf { it.isNotBlank() } ?: "Unknown"
+        val bookId = UUID.randomUUID().toString()
+        val coverUri = epubEngine.extractCoverImage(file.absolutePath)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
+            ?.let { persistCoverImage(bookId, it) ?: it }
 
         val book = Book(
-            id = UUID.randomUUID().toString(),
+            id = bookId,
             title = title,
             author = author,
-            coverUri = coverBase64,
+            coverUri = coverUri,
             filePath = file.absolutePath,
             fileName = file.name,
             epubIdentifier = metadata?.optString("identifier")?.takeIf { it.isNotBlank() },
@@ -267,5 +309,29 @@ class SettingsViewModel @Inject constructor(
             dateAdded = java.time.Instant.now().toString(),
         )
         bookRepository.importBook(book)
+    }
+
+    private fun persistCoverImage(bookId: String, dataUri: String): String? {
+        val match = Regex(
+            pattern = "^data:([^;,]+);base64,(.*)$",
+            options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        ).find(dataUri.trim())
+        val mime = match?.groupValues?.getOrNull(1).orEmpty()
+        val base64Payload = match?.groupValues?.getOrNull(2)?.replace(Regex("\\s"), "").orEmpty()
+        if (base64Payload.isBlank()) return null
+
+        val extension = when {
+            mime.contains("png", ignoreCase = true) -> "png"
+            mime.contains("webp", ignoreCase = true) -> "webp"
+            mime.contains("gif", ignoreCase = true) -> "gif"
+            else -> "jpg"
+        }
+
+        return runCatching {
+            val coverDir = File(appContext.filesDir, "covers").apply { mkdirs() }
+            val coverFile = File(coverDir, "$bookId.$extension")
+            coverFile.writeBytes(Base64.decode(base64Payload, Base64.DEFAULT))
+            Uri.fromFile(coverFile).toString()
+        }.getOrNull()
     }
 }

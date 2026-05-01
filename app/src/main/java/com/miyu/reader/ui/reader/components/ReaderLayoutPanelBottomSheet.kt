@@ -3,6 +3,7 @@ package com.miyu.reader.ui.reader.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,7 +89,71 @@ fun ReaderLayoutPanelBottomSheet(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                // Margins
+                SectionHeader("FLOW", Icons.Outlined.Tune, readerTheme)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    PageAnimation.entries.forEach { animation ->
+                        val active = settings.pageAnimation == animation
+                        Chip(
+                            label = animation.name.lowercase().replaceFirstChar { it.uppercase() },
+                            active = active,
+                            readerTheme = readerTheme,
+                            onClick = { onSettingsChanged(settings.copy(pageAnimation = animation)) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                ToggleRow(
+                    title = "Tap zones",
+                    subtitle = "Use reader edges for page movement",
+                    icon = Icons.Outlined.TouchApp,
+                    active = settings.tapZonesEnabled,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(tapZonesEnabled = !settings.tapZonesEnabled)) },
+                )
+                Spacer(Modifier.height(10.dp))
+                ToggleRow(
+                    title = "Chapter edge taps",
+                    subtitle = "When off, side taps scroll within the chapter",
+                    icon = Icons.Outlined.FormatIndentIncrease,
+                    active = settings.tapZoneNavMode == TapZoneNavMode.CHAPTER,
+                    readerTheme = readerTheme,
+                    onToggle = {
+                        onSettingsChanged(
+                            settings.copy(
+                                tapZoneNavMode = if (settings.tapZoneNavMode == TapZoneNavMode.CHAPTER) {
+                                    TapZoneNavMode.SCROLL
+                                } else {
+                                    TapZoneNavMode.CHAPTER
+                                },
+                            ),
+                        )
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                ToggleRow(
+                    title = "Continuous chapters",
+                    subtitle = "Advance when the scroll reaches the end",
+                    icon = Icons.Outlined.Sync,
+                    active = settings.autoAdvanceChapter,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(autoAdvanceChapter = !settings.autoAdvanceChapter)) },
+                )
+                Spacer(Modifier.height(10.dp))
+                ToggleRow(
+                    title = "Bionic reading",
+                    subtitle = "Bold word openings for faster scanning",
+                    icon = Icons.Outlined.TextFields,
+                    active = settings.bionicReading,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(bionicReading = !settings.bionicReading)) },
+                )
+                Spacer(Modifier.height(24.dp))
+
                 SectionHeader("MARGINS", Icons.Outlined.AlignHorizontalCenter, readerTheme)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     MarginPreset.entries.forEach { preset ->
@@ -103,20 +168,36 @@ fun ReaderLayoutPanelBottomSheet(
                 }
                 Spacer(Modifier.height(24.dp))
 
-                Surface(
-                    color = readerTheme.background.copy(alpha = 0.8f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                SectionHeader("COLUMN WIDTH", Icons.Outlined.ViewColumn, readerTheme)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                 ) {
-                    Text(
-                        "Only margin width is live in the Kotlin reader right now. Column width, reading flow, text columns, auto-scroll, bionic reading, and keep-screen-on stay hidden until the runtime actually supports them.",
-                        color = readerTheme.secondaryText,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(14.dp),
-                    )
+                    listOf(null, 560, 640, 720, 840).forEach { width ->
+                        val active = settings.contentColumnWidth == width
+                        Chip(
+                            label = width?.let { "${it}px" } ?: "Full",
+                            active = active,
+                            readerTheme = readerTheme,
+                            onClick = { onSettingsChanged(settings.copy(contentColumnWidth = width)) },
+                        )
+                    }
                 }
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    ReaderColumnLayout.entries.forEach { layout ->
+                        val active = settings.readerColumnLayout == layout
+                        Chip(
+                            label = if (layout == ReaderColumnLayout.SINGLE) "Single" else "Two columns",
+                            active = active,
+                            readerTheme = readerTheme,
+                            onClick = { onSettingsChanged(settings.copy(readerColumnLayout = layout)) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
             }
         }
     }

@@ -2,6 +2,7 @@ package com.miyu.reader.di
 
 import android.content.Context
 import androidx.room.Room
+import com.miyu.reader.BuildConfig
 import com.miyu.reader.data.local.MIYUDatabase
 import com.miyu.reader.data.local.dao.BookDao
 import com.miyu.reader.data.local.dao.DictionaryDao
@@ -44,8 +45,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
-        supabaseUrl = "https://your-project.supabase.co",
-        supabaseKey = "your-anon-key",
+        supabaseUrl = BuildConfig.SUPABASE_URL.ifBlank { "https://disabled.supabase.co" },
+        supabaseKey = BuildConfig.SUPABASE_ANON_KEY.ifBlank { "disabled-anon-key" },
     ) {
         install(Postgrest)
         install(Auth)

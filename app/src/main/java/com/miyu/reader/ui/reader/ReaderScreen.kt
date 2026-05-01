@@ -7,9 +7,15 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +50,9 @@ import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.ReaderViewModel
 import com.miyu.reader.domain.model.MarginPreset
+import com.miyu.reader.domain.model.PageAnimation
+import com.miyu.reader.domain.model.ReaderColumnLayout
+import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 
 import android.webkit.JavascriptInterface
@@ -73,10 +83,16 @@ fun ReaderScreen(
         ReaderJsInterface(viewModel)
     }
 
-    DisposableEffect(readingSettings.immersiveMode, context) {
+    DisposableEffect(readingSettings.immersiveMode, readingSettings.keepScreenOn, context) {
         val activity = context.findActivity()
         val window = activity?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+
+        if (readingSettings.keepScreenOn) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
 
         if (window != null && controller != null && readingSettings.immersiveMode) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -89,6 +105,7 @@ fun ReaderScreen(
 
         onDispose {
             if (window != null && controller != null) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 WindowCompat.setDecorFitsSystemWindows(window, true)
                 controller.show(WindowInsetsCompat.Type.systemBars())
             }
@@ -103,10 +120,37 @@ fun ReaderScreen(
         // ── Loading state ───────────────────────────────────────────
         if (uiState.isLoading && uiState.chapterHtml.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = accentColor)
+                BookLoadingIndicator(accentColor = accentColor, textColor = readerTheme.secondaryText)
+            }
+        } else if (uiState.errorMessage != null && uiState.chapterHtml.isBlank()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(28.dp),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = readerTheme.cardBackground,
+                    ) {
+                        Icon(
+                            Icons.Outlined.ErrorOutline,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.padding(22.dp).size(34.dp),
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
-                    Text("Loading book…", color = readerTheme.secondaryText)
+                    Text(
+                        "Reader could not open this chapter",
+                        color = textColor,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        uiState.errorMessage.orEmpty(),
+                        color = readerTheme.secondaryText,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
             }
         } else {
@@ -120,6 +164,14 @@ fun ReaderScreen(
                 lineHeight = typography.lineHeight,
                 textAlign = typography.textAlign,
                 marginPreset = readingSettings.marginPreset,
+                contentColumnWidth = readingSettings.contentColumnWidth,
+                readerColumnLayout = readingSettings.readerColumnLayout,
+                pageAnimation = readingSettings.pageAnimation,
+                tapZonesEnabled = readingSettings.tapZonesEnabled,
+                tapScrollPageRatio = readingSettings.tapScrollPageRatio,
+                tapZoneNavMode = readingSettings.tapZoneNavMode,
+                bionicReading = readingSettings.bionicReading,
+                autoAdvanceChapter = readingSettings.autoAdvanceChapter,
             )
 
             AndroidView(
@@ -146,7 +198,11 @@ fun ReaderScreen(
                         ?.substringBeforeLast('/', missingDelimiterValue = "")
                         ?.takeIf { it.isNotBlank() }
                         ?.let { "file://$it/" }
-                    webView.loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "UTF-8", null)
+                    val loadKey = "${baseUrl.orEmpty()}#${htmlContent.hashCode()}"
+                    if (webView.tag != loadKey) {
+                        webView.tag = loadKey
+                        webView.loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "UTF-8", null)
+                    }
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -440,6 +496,55 @@ fun ReaderScreen(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+@Composable
+private fun BookLoadingIndicator(
+    accentColor: Color,
+    textColor: Color,
+) {
+    val transition = rememberInfiniteTransition(label = "book-loading")
+    val pageAngle by transition.animateFloat(
+        initialValue = -18f,
+        targetValue = 18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 760),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "page-angle",
+    )
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(width = 96.dp, height = 72.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(accentColor.copy(alpha = 0.12f))
+                .padding(14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 28.dp, height = 42.dp)
+                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                        .background(accentColor.copy(alpha = 0.62f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 28.dp, height = 42.dp)
+                        .graphicsLayer {
+                            rotationY = pageAngle
+                            cameraDistance = 10f * density
+                        }
+                        .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                        .background(accentColor),
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Loading book...", color = textColor)
+    }
+}
+
 private fun colorToHex(color: Color): String {
     val argb = color.toArgb()
     return String.format("#%06X", 0xFFFFFF and argb)
@@ -454,7 +559,18 @@ private fun buildReaderHtml(
     lineHeight: Float,
     textAlign: TextAlign,
     marginPreset: MarginPreset,
+    contentColumnWidth: Int?,
+    readerColumnLayout: ReaderColumnLayout,
+    pageAnimation: PageAnimation,
+    tapZonesEnabled: Boolean,
+    tapScrollPageRatio: Float,
+    tapZoneNavMode: TapZoneNavMode,
+    bionicReading: Boolean,
+    autoAdvanceChapter: Boolean,
 ): String {
+    val scrollBehavior = if (pageAnimation == PageAnimation.NONE) "auto" else "smooth"
+    val maxWidthCss = contentColumnWidth?.let { "${it.coerceIn(360, 1200)}px" } ?: "none"
+    val columnCount = if (readerColumnLayout == ReaderColumnLayout.TWO) 2 else 1
     val themeCss = """
 html, body {
   background: $bgColor !important;
@@ -467,6 +583,16 @@ html, body {
   word-wrap: break-word;
   overflow-wrap: break-word;
   -webkit-text-size-adjust: 100%;
+  -webkit-user-select: text;
+  user-select: text;
+  scroll-behavior: $scrollBehavior;
+}
+body {
+  max-width: $maxWidthCss;
+  margin-left: auto;
+  margin-right: auto;
+  column-count: $columnCount;
+  column-gap: 36px;
 }
 body :not(a) { color: $textColor !important; }
 a { color: $accentColor !important; text-decoration: none; }
@@ -474,6 +600,9 @@ img { max-width: 100%; height: auto; }
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
 p { margin-bottom: 0.8em; }
 blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
+@media (max-width: 720px) {
+  body { max-width: none; column-count: 1; }
+}
 .miyu-empty-chapter {
   border: 1px solid rgba(154, 119, 71, 0.25);
   border-radius: 18px;
@@ -481,33 +610,6 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
   background: rgba(255, 251, 245, 0.42);
 }
 """.trimIndent()
-
-    if (chapterHtml.contains("<html", ignoreCase = true)) {
-        val themedHtml = if (Regex("<style[^>]*id=[\"']miyu-reader-theme[\"'][^>]*>", RegexOption.IGNORE_CASE).containsMatchIn(chapterHtml)) {
-            chapterHtml.replace(
-                Regex("<style[^>]*id=[\"']miyu-reader-theme[\"'][^>]*>.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)),
-                "<style id=\"miyu-reader-theme\">\n$themeCss\n</style>",
-            )
-        } else {
-            chapterHtml.replace(
-                Regex("</head>", RegexOption.IGNORE_CASE),
-                "<style id=\"miyu-reader-theme\">\n$themeCss\n</style></head>",
-            )
-        }
-        val withBody = if (extractBodyContent(themedHtml).isBlank()) {
-            themedHtml.replace(
-                Regex("<body[^>]*>", RegexOption.IGNORE_CASE),
-                "$0<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>",
-            )
-        } else {
-            themedHtml
-        }
-        return if (Regex("</body>", RegexOption.IGNORE_CASE).containsMatchIn(withBody)) {
-            withBody.replace(Regex("</body>", RegexOption.IGNORE_CASE), "${readerBridgeScript()}</body>")
-        } else {
-            "$withBody${readerBridgeScript()}"
-        }
-    }
 
     val bodyContent = extractBodyContent(chapterHtml).takeIf { it.isNotBlank() }
         ?: "<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>"
@@ -523,9 +625,9 @@ $themeCss
 </style>
 </head>
 <body>
-$bodyContent
-${readerBridgeScript()}
-</body>
+	$bodyContent
+	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter)}
+	</body>
 </html>
 """.trimIndent()
 }
@@ -541,12 +643,40 @@ private fun extractBodyContent(html: String): String {
     return bodyMatch?.groupValues?.getOrNull(1) ?: html
 }
 
-private fun readerBridgeScript(): String = """
+private fun readerBridgeScript(
+    tapZonesEnabled: Boolean,
+    tapScrollPageRatio: Float,
+    tapZoneNavMode: TapZoneNavMode,
+    bionicReading: Boolean,
+    autoAdvanceChapter: Boolean,
+): String {
+    val tapZones = if (tapZonesEnabled) "true" else "false"
+    val bionic = if (bionicReading) "true" else "false"
+    val autoAdvance = if (autoAdvanceChapter) "true" else "false"
+    val scrollRatio = tapScrollPageRatio.coerceIn(0.25f, 1f)
+    val navMode = tapZoneNavMode.name
+    return """
 <script>
-document.addEventListener('click', function() {
+document.addEventListener('click', function(event) {
+    if (event.target && event.target.closest && event.target.closest('a, button, input, textarea, select')) return;
+    var tapZonesEnabled = $tapZones;
+    var navMode = "$navMode";
+    if (tapZonesEnabled) {
+        var x = event.clientX || 0;
+        var width = window.innerWidth || document.documentElement.clientWidth || 1;
+        if (x < width * 0.24 || x > width * 0.76) {
+            var delta = x < width * 0.24 ? -1 : 1;
+            if (navMode === "CHAPTER") {
+                if (window.AndroidBridge) window.AndroidBridge.onReaderEdgeTap(delta);
+            } else {
+                window.scrollBy({ top: delta * window.innerHeight * $scrollRatio, behavior: "${if (tapZoneNavMode == TapZoneNavMode.SCROLL) "smooth" else "auto"}" });
+            }
+            return;
+        }
+    }
     if (window.AndroidBridge) window.AndroidBridge.onReaderTap();
 });
-document.addEventListener('selectionchange', function() {
+	document.addEventListener('selectionchange', function() {
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
         if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
@@ -567,10 +697,58 @@ document.addEventListener('selectionchange', function() {
             height: rect.height
         };
         if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
-    } catch (e) {}
-});
-</script>
+	    } catch (e) {}
+	});
+	(function() {
+	    if ($bionic) {
+	        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+	            acceptNode: function(node) {
+	                var parent = node.parentElement;
+	                if (!parent) return NodeFilter.FILTER_REJECT;
+	                var tag = parent.tagName ? parent.tagName.toLowerCase() : '';
+	                if (tag === 'script' || tag === 'style' || tag === 'textarea' || tag === 'input') return NodeFilter.FILTER_REJECT;
+	                return node.nodeValue && node.nodeValue.trim().length > 2 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+	            }
+	        });
+	        var nodes = [];
+	        while (walker.nextNode()) nodes.push(walker.currentNode);
+	        nodes.forEach(function(node) {
+	            var parts = node.nodeValue.split(/(\s+)/);
+	            var frag = document.createDocumentFragment();
+	            parts.forEach(function(part) {
+	                if (/^\s+$/.test(part) || part.length < 4) {
+	                    frag.appendChild(document.createTextNode(part));
+	                    return;
+	                }
+	                var strongCount = Math.max(1, Math.ceil(part.length * 0.42));
+	                var span = document.createElement('span');
+	                var strong = document.createElement('strong');
+	                strong.textContent = part.slice(0, strongCount);
+	                span.appendChild(strong);
+	                span.appendChild(document.createTextNode(part.slice(strongCount)));
+	                frag.appendChild(span);
+	            });
+	            if (node.parentNode) node.parentNode.replaceChild(frag, node);
+	        });
+	    }
+	    if ($autoAdvance) {
+	        var advanced = false;
+	        window.addEventListener('scroll', function() {
+	            if (advanced) return;
+	            var doc = document.documentElement;
+	            var remaining = doc.scrollHeight - (window.scrollY + window.innerHeight);
+	            if (remaining < 48) {
+	                advanced = true;
+	                setTimeout(function() {
+	                    if (window.AndroidBridge) window.AndroidBridge.onReaderEdgeTap(1);
+	                }, 260);
+	            }
+	        }, { passive: true });
+	    }
+	})();
+	</script>
 """.trimIndent()
+}
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -609,5 +787,10 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     @JavascriptInterface
     fun onReaderTap() {
         viewModel.handleReaderTap()
+    }
+
+    @JavascriptInterface
+    fun onReaderEdgeTap(delta: Int) {
+        viewModel.navigateChapter(delta)
     }
 }

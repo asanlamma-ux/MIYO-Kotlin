@@ -7,6 +7,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+fun org.gradle.api.Project.secret(name: String): String =
+    providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+        ?: ""
+
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 android {
     namespace = "com.miyu.reader"
     compileSdk = 34
@@ -23,6 +31,10 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        buildConfigField("String", "SUPABASE_URL", buildConfigString(project.secret("MIYU_SUPABASE_URL")))
+        buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigString(project.secret("MIYU_SUPABASE_ANON_KEY")))
+        buildConfigField("String", "GOOGLE_TRANSLATE_API_KEY", buildConfigString(project.secret("MIYU_GOOGLE_TRANSLATE_API_KEY")))
 
         ndkVersion = "26.1.10909125"
 

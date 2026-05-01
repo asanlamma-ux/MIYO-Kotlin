@@ -29,6 +29,8 @@ import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -41,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.MarginPreset
+import com.miyu.reader.domain.model.PageAnimation
+import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.ui.theme.LocalMIYUColors
@@ -98,7 +102,13 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Login,
                 title = "Sign In / Sign Up",
-                subtitle = "Auth and cloud sync are still being ported from the React Native build.",
+                subtitle = "Uses Supabase when MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY are configured.",
+                onClick = {
+                    dialogState = SettingsDialogState(
+                        title = "Supabase Configuration",
+                        message = "Set MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY as Gradle properties or environment variables before building.",
+                    )
+                },
                 accentColor = colors.accent,
             )
         }
@@ -217,6 +227,43 @@ fun SettingsScreen(
 
         SettingsSection(title = "Reading") {
             SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Page Animation",
+                subtitle = uiState.readingSettings.pageAnimation.name.lowercase().replaceFirstChar { it.uppercase() },
+                onClick = {
+                    val options = PageAnimation.entries
+                    val next = (options.indexOf(uiState.readingSettings.pageAnimation) + 1) % options.size
+                    viewModel.setPageAnimation(options[next])
+                },
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.TouchApp,
+                title = "Tap Zones",
+                subtitle = "Left/right reader edge taps scroll or change chapters.",
+                checked = uiState.readingSettings.tapZonesEnabled,
+                onCheckedChange = viewModel::setTapZonesEnabled,
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.TouchApp,
+                title = "Side Tap Action",
+                subtitle = when (uiState.readingSettings.tapZoneNavMode) {
+                    TapZoneNavMode.SCROLL -> "Scroll within chapter"
+                    TapZoneNavMode.CHAPTER -> "Previous/next chapter"
+                },
+                onClick = {
+                    viewModel.setTapZoneNavMode(
+                        if (uiState.readingSettings.tapZoneNavMode == TapZoneNavMode.SCROLL) {
+                            TapZoneNavMode.CHAPTER
+                        } else {
+                            TapZoneNavMode.SCROLL
+                        },
+                    )
+                },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
                 icon = Icons.Outlined.FormatIndentIncrease,
                 title = "Margins",
                 subtitle = uiState.readingSettings.marginPreset.name.lowercase().replaceFirstChar { it.uppercase() },
@@ -227,6 +274,45 @@ fun SettingsScreen(
                 },
                 accentColor = colors.accent,
             )
+            SettingsRow(
+                icon = Icons.Outlined.Info,
+                title = "Sleep Timer",
+                subtitle = if (uiState.readingSettings.sleepTimerMinutes == 0) {
+                    "Off"
+                } else {
+                    "${uiState.readingSettings.sleepTimerMinutes} minutes"
+                },
+                onClick = {
+                    val options = listOf(0, 15, 30, 45, 60, 90, 120)
+                    val next = (options.indexOf(uiState.readingSettings.sleepTimerMinutes).coerceAtLeast(0) + 1) % options.size
+                    viewModel.setSleepTimer(options[next])
+                },
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.Sync,
+                title = "Continuous Chapter Loading",
+                subtitle = "Prepare the next chapter when you reach the end.",
+                checked = uiState.readingSettings.autoAdvanceChapter,
+                onCheckedChange = viewModel::setAutoAdvanceChapter,
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.TouchApp,
+                title = "Volume Button Navigation",
+                subtitle = "Use hardware volume buttons to turn chapters.",
+                checked = uiState.readingSettings.volumeButtonPageTurn,
+                onCheckedChange = viewModel::setVolumeButtonPageTurn,
+                accentColor = colors.accent,
+            )
+            SettingsToggle(
+                icon = Icons.Outlined.TextFields,
+                title = "Bionic Reading",
+                subtitle = "Emphasize word beginnings in the reader.",
+                checked = uiState.readingSettings.bionicReading,
+                onCheckedChange = viewModel::setBionicReading,
+                accentColor = colors.accent,
+            )
             SettingsToggle(
                 icon = Icons.Outlined.Fullscreen,
                 title = "Immersive Mode",
@@ -235,12 +321,13 @@ fun SettingsScreen(
                 onCheckedChange = viewModel::setImmersiveMode,
                 accentColor = colors.accent,
             )
-            HorizontalDivider(color = colors.secondaryText.copy(alpha = 0.12f))
-            Text(
-                "Other reader behavior controls such as tap zones, volume turns, and motion profiles are still being ported. They stay hidden until the Kotlin reader actually consumes them.",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.secondaryText,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            SettingsToggle(
+                icon = Icons.Outlined.Fullscreen,
+                title = "Keep Screen On",
+                subtitle = "Prevent sleep while a book is open.",
+                checked = uiState.readingSettings.keepScreenOn,
+                onCheckedChange = viewModel::setKeepScreenOn,
+                accentColor = colors.accent,
             )
         }
 
@@ -352,7 +439,7 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Info,
                 title = "MIYU Reader",
-                subtitle = "Kotlin port in active parity work with the React Native app.",
+                subtitle = "Version 1.0.0",
                 accentColor = colors.accent,
             )
         }

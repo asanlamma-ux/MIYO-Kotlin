@@ -7,6 +7,7 @@ import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.data.repository.DictionaryRepository
 import com.miyu.reader.data.repository.TermRepository
+import com.miyu.reader.data.repository.TranslationRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +45,7 @@ data class ReaderUiState(
     val downloadedDictionaryCount: Int = 0,
     val highlights: List<Highlight> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
+    val errorMessage: String? = null,
 )
 
 @HiltViewModel
@@ -52,6 +54,7 @@ class ReaderViewModel @Inject constructor(
     private val bookRepository: BookRepository,
     private val termRepository: TermRepository,
     private val dictionaryRepository: DictionaryRepository,
+    private val translationRepository: TranslationRepository,
     private val epubEngine: EpubEngineBridge,
     private val preferences: UserPreferences,
 ) : ViewModel() {
@@ -78,7 +81,16 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val book = bookRepository.getBook(bookId) ?: return@launch
+                val book = bookRepository.getBook(bookId)
+                if (book == null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "This book is no longer in the library.",
+                        )
+                    }
+                    return@launch
+                }
                 val position = bookRepository.getReadingPosition(bookId)
                 val chapterIndex = position?.chapterIndex ?: 0
 
@@ -88,6 +100,7 @@ class ReaderViewModel @Inject constructor(
                         chapterIndex = chapterIndex,
                         totalChapters = book.totalChapters,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
+                        errorMessage = null,
                     )
                 }
 
@@ -106,15 +119,19 @@ class ReaderViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-            } finally {
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Could not open this book.",
+                    )
+                }
             }
         }
     }
 
     private fun loadChapter(index: Int, filePath: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val book = _uiState.value.book
                 val replacements = if (book != null) {
@@ -123,17 +140,34 @@ class ReaderViewModel @Inject constructor(
                     emptyMap()
                 }
                 val html = epubEngine.renderChapter(filePath, index, replacements)
+                if (html.isBlank()) {
+                    _uiState.update {
+                        it.copy(
+                            chapterHtml = "",
+                            chapterIndex = index,
+                            isLoading = false,
+                            errorMessage = "This chapter imported without readable content.",
+                        )
+                    }
+                    return@launch
+                }
                 _uiState.update {
                     it.copy(
                         chapterHtml = html,
                         chapterIndex = index,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
                         isLoading = false,
+                        errorMessage = null,
                     )
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Could not render this chapter.",
+                    )
+                }
             }
         }
     }
@@ -329,9 +363,17 @@ class ReaderViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 translationText = text,
-                translationStatus = "Inline translation providers from the React Native build are not ported yet. Use the browser fallback for now.",
+                translationStatus = "Translating...",
                 selection = null,
             )
+        }
+        viewModelScope.launch {
+            val result = translationRepository.translateToEnglish(text)
+            _uiState.update {
+                it.copy(
+                    translationStatus = result.statusMessage,
+                )
+            }
         }
     }
 

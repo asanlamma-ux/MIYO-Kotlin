@@ -37,11 +37,11 @@ enum class ThemeMode { LIGHT, DARK }
 @Serializable
 data class TypographySettings(
     val fontFamily: String = "default",
-    val fontSize: Float = 16f, // 12-28
+    val fontSize: Float = 18f, // 12-28
     val lineHeight: Float = 1.6f, // 1.2-2.0
     val letterSpacing: Float = 0f, // -0.05 to 0.2
-    val paragraphSpacing: Float = 0f,
-    val textAlign: TextAlign = TextAlign.JUSTIFY,
+    val paragraphSpacing: Float = 16f,
+    val textAlign: TextAlign = TextAlign.LEFT,
     val fontWeight: BodyFontWeight = BodyFontWeight.W400,
 )
 
@@ -61,11 +61,14 @@ enum class ReaderColumnLayout { SINGLE, TWO }
 enum class TapZoneNavMode { SCROLL, CHAPTER }
 
 @Keep
+enum class ReaderFlowMode { SCROLL, PAGED }
+
+@Keep
 @Serializable
 data class ReadingSettings(
     val pageAnimation: PageAnimation = PageAnimation.SLIDE,
     val tapZonesEnabled: Boolean = true,
-    val tapScrollPageRatio: Float = 0.9f,
+    val tapScrollPageRatio: Float = 0.82f,
     val tapZoneNavMode: TapZoneNavMode = TapZoneNavMode.SCROLL,
     val volumeButtonPageTurn: Boolean = false,
     val autoScrollSpeed: Float = 0f,
@@ -73,8 +76,13 @@ data class ReadingSettings(
     val brightnessOverride: Float? = null,
     val blueLightFilter: Boolean = false,
     val reducedMotion: Boolean = false,
+    val keepScreenOn: Boolean = true,
+    val bionicReading: Boolean = false,
+    val autoAdvanceChapter: Boolean = true,
+    val sleepTimerMinutes: Int = 0,
+    val readingFlowMode: ReaderFlowMode = ReaderFlowMode.SCROLL,
     val marginPreset: MarginPreset = MarginPreset.MEDIUM,
-    val contentColumnWidth: Int? = 640,
+    val contentColumnWidth: Int? = 720,
     val readerColumnLayout: ReaderColumnLayout = ReaderColumnLayout.SINGLE,
 )
 

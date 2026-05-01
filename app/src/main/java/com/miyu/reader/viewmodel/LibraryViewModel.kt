@@ -3,6 +3,7 @@ package com.miyu.reader.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.repository.BookRepository
@@ -150,11 +151,6 @@ class LibraryViewModel @Inject constructor(
                     error("The EPUB imported, but no readable chapters were found.")
                 }
 
-                // Extract cover
-                val coverBase64 = epubEngine.extractCoverImage(destFile.absolutePath)
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
-
                 val title = metadata?.optString("title")
                     ?.takeIf { it.isNotBlank() }
                     ?: destFile.nameWithoutExtension.replace("_", " ")
@@ -162,12 +158,16 @@ class LibraryViewModel @Inject constructor(
                     ?.takeIf { it.isNotBlank() }
                     ?: "Unknown"
                 val bookId = UUID.randomUUID().toString()
+                val coverUri = epubEngine.extractCoverImage(destFile.absolutePath)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
+                    ?.let { persistCoverImage(bookId, it) ?: it }
 
                 val book = Book(
                     id = bookId,
                     title = title,
                     author = author,
-                    coverUri = coverBase64,
+                    coverUri = coverUri,
                     filePath = destFile.absolutePath,
                     fileName = fileName,
                     epubIdentifier = metadata?.optString("identifier")?.takeIf { it.isNotBlank() },
@@ -215,5 +215,29 @@ class LibraryViewModel @Inject constructor(
         val cleaned = fileName.replace(Regex("""[<>:"/\\|?*]"""), "_").trim()
         val withFallback = cleaned.ifBlank { "book_${System.currentTimeMillis()}.epub" }
         return if (withFallback.endsWith(".epub", ignoreCase = true)) withFallback else "$withFallback.epub"
+    }
+
+    private fun persistCoverImage(bookId: String, dataUri: String): String? {
+        val match = Regex(
+            pattern = "^data:([^;,]+);base64,(.*)$",
+            options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        ).find(dataUri.trim())
+        val mime = match?.groupValues?.getOrNull(1).orEmpty()
+        val base64Payload = match?.groupValues?.getOrNull(2)?.replace(Regex("\\s"), "").orEmpty()
+        if (base64Payload.isBlank()) return null
+
+        val extension = when {
+            mime.contains("png", ignoreCase = true) -> "png"
+            mime.contains("webp", ignoreCase = true) -> "webp"
+            mime.contains("gif", ignoreCase = true) -> "gif"
+            else -> "jpg"
+        }
+
+        return runCatching {
+            val coverDir = File(appContext.filesDir, "covers").apply { mkdirs() }
+            val coverFile = File(coverDir, "$bookId.$extension")
+            coverFile.writeBytes(Base64.decode(base64Payload, Base64.DEFAULT))
+            Uri.fromFile(coverFile).toString()
+        }.getOrNull()
     }
 }
