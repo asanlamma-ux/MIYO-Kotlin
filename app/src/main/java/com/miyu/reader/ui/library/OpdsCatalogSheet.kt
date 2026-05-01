@@ -5,9 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,11 +35,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -65,8 +68,16 @@ fun OpdsCatalogSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.background,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+        ) {
+            WorkspaceExitButton(label = "Exit OPDS", onClick = onDismiss)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -190,7 +201,7 @@ fun OpdsCatalogSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp),
+                    .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 28.dp),
             ) {
@@ -217,6 +228,26 @@ fun OpdsCatalogSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WorkspaceExitButton(
+    label: String,
+    onClick: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.padding(bottom = 8.dp),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+    ) {
+        Text(
+            "> $label",
+            color = colors.secondaryText,
+            textDecoration = TextDecoration.Underline,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

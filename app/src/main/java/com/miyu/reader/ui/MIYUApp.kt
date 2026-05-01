@@ -181,6 +181,8 @@ fun MIYUApp() {
             InitialSetupBottomSheet(
                 initialReaderThemeId = readerThemeId,
                 onSkip = themeViewModel::skipInitialSetup,
+                onPreviewThemeMode = themeViewModel::setThemeMode,
+                onPreviewReaderTheme = themeViewModel::setReaderThemeId,
                 onSave = themeViewModel::saveInitialSetup,
             )
         }

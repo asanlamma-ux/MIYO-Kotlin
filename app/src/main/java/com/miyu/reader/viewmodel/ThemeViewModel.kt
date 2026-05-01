@@ -6,6 +6,7 @@ import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.domain.model.ReadingSettings
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.domain.model.TypographySettings
+import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -47,6 +48,7 @@ class ThemeViewModel @Inject constructor(
     fun skipInitialSetup() {
         viewModelScope.launch {
             preferences.setThemeMode(ThemeMode.SYSTEM)
+            preferences.setReaderThemeId(DefaultReaderThemeId)
             preferences.setInitialSetupComplete(true)
         }
     }

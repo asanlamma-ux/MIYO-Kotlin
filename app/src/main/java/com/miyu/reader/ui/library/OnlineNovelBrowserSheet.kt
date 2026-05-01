@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -46,15 +47,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -98,13 +104,16 @@ fun OnlineNovelBrowserSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.background,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.94f)
                 .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 6.dp),
         ) {
+            WorkspaceExitButton(label = "Exit online browser", onClick = onDismiss)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -227,6 +236,12 @@ private fun WtrLabVerificationCard(
     onBridgeMessage: (String) -> Unit,
 ) {
     val colors = LocalMIYUColors.current
+    var showBrowser by rememberSaveable { mutableStateOf(!bridgeReady) }
+
+    LaunchedEffect(bridgeReady, captchaRequired) {
+        showBrowser = captchaRequired || !bridgeReady
+    }
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
@@ -250,8 +265,19 @@ private fun WtrLabVerificationCard(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                IconButton(onClick = { webViewRef.get()?.reload() }) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Reload WTR-LAB")
+                if (bridgeReady && !captchaRequired) {
+                    TextButton(onClick = { showBrowser = !showBrowser }) {
+                        Text(
+                            if (showBrowser) "Hide verifier" else "Show verifier",
+                            color = colors.accent,
+                        )
+                    }
+                }
+                IconButton(onClick = {
+                    showBrowser = true
+                    webViewRef.get()?.reload()
+                }) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Reload WTR-LAB", tint = colors.accent)
                 }
             }
             if (captchaBody.isNotBlank()) {
@@ -264,13 +290,19 @@ private fun WtrLabVerificationCard(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(if (showBrowser) 8.dp else 1.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (bridgeReady && !captchaRequired) 180.dp else 360.dp)
+                    .height(
+                        when {
+                            !showBrowser -> 1.dp
+                            bridgeReady && !captchaRequired -> 150.dp
+                            else -> 360.dp
+                        }
+                    )
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color.Black.copy(alpha = 0.04f)),
+                    .background(Color.Black.copy(alpha = if (showBrowser) 0.04f else 0f)),
             ) {
                 AndroidView(
                     factory = { context ->
@@ -305,10 +337,36 @@ private fun WtrLabVerificationCard(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (bridgeReady && !captchaRequired) 180.dp else 360.dp),
+                        .height(
+                            when {
+                                !showBrowser -> 1.dp
+                                bridgeReady && !captchaRequired -> 150.dp
+                                else -> 360.dp
+                            }
+                        ),
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun WorkspaceExitButton(
+    label: String,
+    onClick: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.padding(bottom = 8.dp),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+    ) {
+        Text(
+            "> $label",
+            color = colors.secondaryText,
+            textDecoration = TextDecoration.Underline,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

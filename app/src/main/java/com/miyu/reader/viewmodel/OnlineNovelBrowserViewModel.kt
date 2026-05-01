@@ -232,20 +232,32 @@ class OnlineNovelBrowserViewModel @Inject constructor(
         }
 
         if (novel.providerId == OnlineNovelProviderId.WTR_LAB) {
-            downloadPlan = WtrDownloadPlan(
-                novel = novel,
-                chapters = selectedChapters,
-                fetched = emptyList(),
-                nextIndex = 0,
-            )
+            val chaptersPayload = JSONArray().apply {
+                selectedChapters.forEach { chapter ->
+                    put(
+                        JSONObject()
+                            .put("order", chapter.order)
+                            .put("title", chapter.title)
+                            .put("path", chapter.path)
+                    )
+                }
+            }
+            val payload = novel.toWtrPayload()
+                .put("chapters", chaptersPayload)
+                .put("maxConcurrency", 4)
             _uiState.update {
                 it.copy(
                     downloading = true,
                     error = null,
-                    statusMessage = "Fetching WTR-LAB chapter 1 of ${selectedChapters.size}...",
+                    statusMessage = "Fetching ${selectedChapters.size} WTR-LAB chapters...",
                 )
             }
-            requestNextWtrChapter()
+            sendWtrRequest(
+                type = "chapters",
+                payload = payload,
+                pendingRequest = PendingRequest.Chapters(novel),
+                statusMessage = "Fetching ${selectedChapters.size} WTR-LAB chapters...",
+            )
             return
         }
 
@@ -368,6 +380,32 @@ class OnlineNovelBrowserViewModel @Inject constructor(
                 )
                 requestNextWtrChapter()
             }
+            is PendingRequest.Chapters -> {
+                val chapters = payload.optJSONArray("chapters").toChapterContents()
+                viewModelScope.launch {
+                    runCatching {
+                        onlineNovelRepository.createGeneratedEpub(request.novel, chapters)
+                    }.onSuccess { generated ->
+                        _uiState.update {
+                            it.copy(
+                                loading = false,
+                                downloading = false,
+                                generatedEpub = generated,
+                                statusMessage = "WTR-LAB EPUB generated. Importing into library...",
+                            )
+                        }
+                    }.onFailure { error ->
+                        _uiState.update {
+                            it.copy(
+                                loading = false,
+                                downloading = false,
+                                error = error.message ?: "Could not build the WTR-LAB EPUB.",
+                                statusMessage = "EPUB build failed.",
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -478,6 +516,15 @@ true;
             html = payload.optString("html").take(MAX_CHAPTER_HTML_CHARS),
         )
 
+    private fun JSONArray?.toChapterContents(): List<OnlineChapterContent> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (index in 0 until length()) {
+                optJSONObject(index)?.let { add(parseChapterPayload(it)) }
+            }
+        }.sortedBy { it.order }
+    }
+
     private fun JSONArray?.toNovelSummaries(): List<OnlineNovelSummary> {
         if (this == null) return emptyList()
         return buildList {
@@ -582,6 +629,7 @@ true;
         data class Search(val loadMore: Boolean) : PendingRequest
         object Details : PendingRequest
         object Chapter : PendingRequest
+        data class Chapters(val novel: OnlineNovelDetails) : PendingRequest
     }
 
     private data class WtrDownloadPlan(

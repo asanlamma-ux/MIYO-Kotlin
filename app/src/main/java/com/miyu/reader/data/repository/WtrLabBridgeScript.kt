@@ -473,12 +473,100 @@ object WtrLabBridgeScript {
     return { order: chapterNo, title: title, html: sanitizeHtml(html) };
   }
 
+  async function fallbackChapterFromPage(payload, reason) {
+    var chapterNo = Number(payload && payload.chapterNo);
+    var title = String((payload && payload.chapterTitle) || ('Chapter ' + chapterNo));
+    var rawId = Number(payload && payload.rawId);
+    var slug = String((payload && payload.slug) || '');
+    var path = payload && payload.path ? String(payload.path) : '/en/novel/' + rawId + '/' + slug + '/chapter-' + chapterNo;
+    var html = await fetchText('https://wtr-lab.com' + path, {
+      headers: { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' }
+    });
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var titleNode = doc.querySelector('h1') || doc.querySelector('h2') || doc.querySelector('meta[property="og:title"]');
+    var content = doc.querySelector('article') ||
+      doc.querySelector('[data-reader-content]') ||
+      doc.querySelector('.reader-content') ||
+      doc.querySelector('.chapter-content') ||
+      doc.querySelector('.prose') ||
+      doc.querySelector('main') ||
+      doc.body;
+    if (!content) throw new Error(reason || 'Could not fetch the requested chapter.');
+    var cloned = content.cloneNode(true);
+    Array.prototype.slice.call(cloned.querySelectorAll('script,style,iframe,ins,nav,header,footer,.ads,.ad,.comments')).forEach(function (node) {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+    var bodyHtml = sanitizeHtml(cloned.innerHTML || '');
+    if (!stripHtml(bodyHtml)) throw new Error(reason || 'Could not fetch the requested chapter.');
+    var pageTitle = asText(titleNode && (titleNode.getAttribute('content') || titleNode.textContent)) || title;
+    return {
+      order: chapterNo,
+      title: pageTitle,
+      html: '<p><small>Recovered from the WTR-LAB reader page after API fallback.</small></p>' + bodyHtml
+    };
+  }
+
+  async function fetchWtrChapterRobust(payload) {
+    var lastError = '';
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await fetchWtrChapter(payload);
+      } catch (error) {
+        lastError = error && error.message ? error.message : String(error);
+        await delay(500 + attempt * 650);
+      }
+    }
+    return fallbackChapterFromPage(payload, lastError);
+  }
+
+  async function fetchWtrChaptersBatch(payload) {
+    var chapters = ensureArray(payload && payload.chapters);
+    if (!chapters.length) throw new Error('No WTR-LAB chapters were selected.');
+    var concurrency = Math.max(1, Math.min(Number(payload && payload.maxConcurrency) || 4, 6));
+    var cursor = 0;
+    var results = new Array(chapters.length);
+    var failures = [];
+    async function worker() {
+      while (cursor < chapters.length) {
+        var index = cursor;
+        cursor += 1;
+        var chapter = chapters[index] || {};
+        var request = Object.assign({}, payload, {
+          chapterNo: Number(chapter.order || chapter.chapterNo || index + 1),
+          chapterTitle: String(chapter.title || ('Chapter ' + (index + 1))),
+          path: chapter.path || payload.path
+        });
+        try {
+          results[index] = await fetchWtrChapterRobust(request);
+        } catch (error) {
+          failures.push('Chapter ' + request.chapterNo + ': ' + (error && error.message ? error.message : String(error)));
+          results[index] = {
+            order: request.chapterNo,
+            title: request.chapterTitle,
+            html: '<p><em>Chapter download failed after retries: ' + escapeHtml(error && error.message ? error.message : String(error)) + '</em></p>'
+          };
+        }
+      }
+    }
+    var workers = [];
+    for (var i = 0; i < Math.min(concurrency, chapters.length); i += 1) workers.push(worker());
+    await Promise.all(workers);
+    var downloaded = results.filter(Boolean).sort(function (a, b) { return a.order - b.order; });
+    if (!downloaded.length) throw new Error(failures[0] || 'No chapters could be downloaded.');
+    return {
+      chapters: downloaded,
+      failedCount: failures.length,
+      failures: failures.slice(0, 8)
+    };
+  }
+
   async function executeRequest(request) {
     if (isChallengePage()) throw new Error('Verification is required before WTR-LAB can load inside Miyo.');
     var payload = request && request.payload ? request.payload : {};
     if (request.type === 'search') return searchWtr(payload);
     if (request.type === 'details') return fetchWtrNovelDetails(payload);
-    if (request.type === 'chapter') return fetchWtrChapter(payload);
+    if (request.type === 'chapter') return fetchWtrChapterRobust(payload);
+    if (request.type === 'chapters') return fetchWtrChaptersBatch(payload);
     throw new Error('Unsupported WTR-LAB bridge request.');
   }
 

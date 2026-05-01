@@ -155,6 +155,18 @@ object ReaderColors {
         isSpecial = true,
     )
 
+    val PeachBlossomNight = ReaderThemeColors(
+        id = "rose-garden-night",
+        name = "Peach Blossom",
+        background = Color(0xFF171116),
+        text = Color(0xFFF1E4EA),
+        accent = Color(0xFFE07C98),
+        secondaryText = Color(0xFFC1A8B3),
+        cardBackground = Color(0xFF211920),
+        isDark = true,
+        isSpecial = true,
+    )
+
     val DarkCoffee = ReaderThemeColors(
         id = "dark-coffee",
         name = "Dark Coffee",
@@ -164,6 +176,18 @@ object ReaderColors {
         secondaryText = Color(0xFFA89888),
         cardBackground = Color(0xFF2A2420),
         isDark = true,
+        isSpecial = true,
+    )
+
+    val CoffeeCream = ReaderThemeColors(
+        id = "coffee-cream",
+        name = "Dark Coffee",
+        background = Color(0xFFF4EDE4),
+        text = Color(0xFF35271F),
+        accent = Color(0xFF9E7444),
+        secondaryText = Color(0xFF6E5B4C),
+        cardBackground = Color(0xFFFFFAF4),
+        isDark = false,
         isSpecial = true,
     )
 
@@ -234,4 +258,14 @@ object ReaderColors {
 
     fun findById(id: String): ReaderThemeColors =
         allThemes.firstOrNull { it.id == id } ?: SepiaClassic
+
+    fun shellThemeFor(id: String, darkMode: Boolean): ReaderThemeColors {
+        val selected = findById(id)
+        return when (selected.id) {
+            SepiaClassic.id -> if (darkMode) NightMode else SepiaClassic
+            PeachBlossom.id -> if (darkMode) PeachBlossomNight else PeachBlossom
+            DarkCoffee.id -> if (darkMode) DarkCoffee else CoffeeCream
+            else -> selected
+        }
+    }
 }

@@ -67,6 +67,8 @@ import com.miyu.reader.ui.theme.ReaderThemeColors
 fun InitialSetupBottomSheet(
     initialReaderThemeId: String,
     onSkip: () -> Unit,
+    onPreviewThemeMode: (ThemeMode) -> Unit,
+    onPreviewReaderTheme: (String) -> Unit,
     onSave: (
         themeMode: ThemeMode,
         readerThemeId: String,
@@ -141,7 +143,10 @@ fun InitialSetupBottomSheet(
                 ThemeMode.entries.forEach { mode ->
                     ElevatedFilterChip(
                         selected = selectedThemeMode == mode,
-                        onClick = { selectedThemeMode = mode },
+                        onClick = {
+                            selectedThemeMode = mode
+                            onPreviewThemeMode(mode)
+                        },
                         label = {
                             Text(
                                 when (mode) {
@@ -170,7 +175,10 @@ fun InitialSetupBottomSheet(
                     ReaderThemeChoice(
                         theme = theme,
                         selected = selectedReaderThemeId == theme.id,
-                        onClick = { selectedReaderThemeId = theme.id },
+                        onClick = {
+                            selectedReaderThemeId = theme.id
+                            onPreviewReaderTheme(theme.id)
+                        },
                     )
                 }
             }

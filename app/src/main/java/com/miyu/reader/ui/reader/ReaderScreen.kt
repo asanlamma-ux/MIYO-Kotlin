@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
+import android.view.MotionEvent
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -226,6 +227,16 @@ fun ReaderScreen(
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = SecureReaderWebViewClient()
+                        setOnTouchListener { view, event ->
+                            if (event.action == MotionEvent.ACTION_UP &&
+                                event.eventTime - event.downTime < 260L &&
+                                event.x > view.width * 0.32f &&
+                                event.x < view.width * 0.68f
+                            ) {
+                                view.postDelayed({ jsInterface.onReaderTap() }, 80L)
+                            }
+                            false
+                        }
                     }.also { readerWebViewRef.set(it) }
                 },
                 update = { webView ->
@@ -770,6 +781,28 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
   letter-spacing: 0.06em;
   opacity: 0.82;
 }
+.miyu-pull-next {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 0.7em 1.05em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: white !important;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.miyu-pull-next.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
 @media (max-width: 720px) {
   body { max-width: none; column-count: 1; }
 }
@@ -869,7 +902,8 @@ document.addEventListener('click', function(event) {
             return;
         }
     }
-    if (window.AndroidBridge) window.AndroidBridge.onReaderTap();
+    // Center tap is handled by the native WebView touch fallback. Relying on
+    // both native and JS clicks causes double-toggle glitches on some devices.
 });
 
 function normalizeSelectionText(value) {
@@ -907,12 +941,10 @@ function originalTextForSelection(selection) {
 document.addEventListener('selectionchange', function() {
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
-        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
         return;
     }
     var text = sel.toString().trim();
     if (text.length === 0) {
-        if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
         return;
     }
     try {
@@ -935,6 +967,9 @@ document.addEventListener('selectionchange', function() {
 	    var totalChapters = $safeTotalChapters;
 	    var appendRequestInFlight = false;
 	    var appendLoader = null;
+	    var pullHint = null;
+	    var touchStartY = 0;
+	    var pullDistance = 0;
 	    function currentProgress() {
 	        var doc = document.documentElement;
 	        var scrollTop = window.scrollY || doc.scrollTop || 0;
@@ -996,11 +1031,26 @@ document.addEventListener('selectionchange', function() {
 	        if (appendLoader && appendLoader.parentNode) appendLoader.parentNode.removeChild(appendLoader);
 	        appendLoader = null;
 	    }
-	    function maybeRequestNextChapter() {
+	    function showPullHint(distance) {
+	        if (!pullHint) {
+	            pullHint = document.createElement('div');
+	            pullHint.className = 'miyu-pull-next';
+	            document.body.appendChild(pullHint);
+	        }
+	        var percent = Math.max(0, Math.min(1, distance / 88));
+	        pullHint.textContent = percent >= 1 ? 'Release to load next chapter' : 'Pull for next chapter';
+	        pullHint.className = 'miyu-pull-next visible';
+	    }
+	    function hidePullHint() {
+	        if (pullHint) pullHint.className = 'miyu-pull-next';
+	        pullDistance = 0;
+	    }
+	    function maybeRequestNextChapter(force) {
 	        if (!$autoAdvance || appendRequestInFlight) return;
 	        if (totalChapters > 0 && loadedThroughChapterIndex >= totalChapters - 1) return;
-	        if (remainingScroll() > 96) return;
+	        if (!force || remainingScroll() > 28) return;
 	        appendRequestInFlight = true;
+	        hidePullHint();
 	        showContinuousLoader();
 	        postProgress(true);
 	        if (window.AndroidBridge) window.AndroidBridge.onReaderAppendNextChapter();
@@ -1049,7 +1099,23 @@ document.addEventListener('selectionchange', function() {
 	    };
 	    window.addEventListener('scroll', function() {
 	        postProgress(false);
-	        maybeRequestNextChapter();
+	    }, { passive: true });
+	    window.addEventListener('touchstart', function(event) {
+	        touchStartY = event.touches && event.touches.length ? event.touches[0].clientY : 0;
+	        pullDistance = 0;
+	    }, { passive: true });
+	    window.addEventListener('touchmove', function(event) {
+	        if (!$autoAdvance || appendRequestInFlight || remainingScroll() > 28) return;
+	        var currentY = event.touches && event.touches.length ? event.touches[0].clientY : touchStartY;
+	        pullDistance = Math.max(0, touchStartY - currentY);
+	        if (pullDistance > 18) showPullHint(pullDistance);
+	    }, { passive: true });
+	    window.addEventListener('touchend', function() {
+	        if (pullDistance > 88) {
+	            maybeRequestNextChapter(true);
+	        } else {
+	            hidePullHint();
+	        }
 	    }, { passive: true });
 	    window.addEventListener('pagehide', function() { postProgress(true); });
 	    window.addEventListener('beforeunload', function() { postProgress(true); });
@@ -1058,7 +1124,6 @@ document.addEventListener('selectionchange', function() {
 	    });
 	    setTimeout(function() {
 	        postProgress(false);
-	        maybeRequestNextChapter();
 	    }, 500);
 	    if ($bionic) {
 	        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {

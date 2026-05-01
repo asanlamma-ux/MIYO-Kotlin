@@ -40,7 +40,7 @@ fun MIYUTheme(
         ThemeMode.LIGHT -> false
     }
 
-    val shellTheme = if (darkTheme) ReaderColors.NightMode else ReaderColors.SepiaClassic
+    val shellTheme = ReaderColors.shellThemeFor(readerThemeId, darkTheme)
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(

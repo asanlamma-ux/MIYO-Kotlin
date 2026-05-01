@@ -110,10 +110,10 @@ class OpdsRepository @Inject constructor(
     private fun parseFeed(xml: String, baseUrl: String): OpdsFeed {
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            trySetFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            trySetFeature("http://xml.org/sax/features/external-general-entities", false)
+            trySetFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            trySetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
             isXIncludeAware = false
             isExpandEntityReferences = false
         }
@@ -222,6 +222,12 @@ class OpdsRepository @Inject constructor(
     private fun Node.nodeNameMatches(expected: String): Boolean {
         val local = localName ?: nodeName.substringAfter(':', nodeName)
         return local.equals(expected, ignoreCase = true)
+    }
+
+    private fun DocumentBuilderFactory.trySetFeature(feature: String, enabled: Boolean) {
+        // Android XML parsers vary by API/OEM. Keep XXE hardening where supported
+        // without breaking valid OPDS feeds when a feature URI is unavailable.
+        runCatching { setFeature(feature, enabled) }
     }
 
     private fun isPrivateIpv4(host: String): Boolean =
