@@ -1,5 +1,6 @@
 package com.miyu.reader.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,14 +41,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.miyu.reader.R
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
+import com.miyu.reader.ui.theme.SpecialThemeAsset
+import com.miyu.reader.ui.theme.SpecialThemePreviewArt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +62,7 @@ fun ThemePickerBottomSheet(
     onDismiss: () -> Unit,
 ) {
     val shellColors = LocalMIYUColors.current
-    val selectedTheme = ReaderColors.findById(selectedThemeId)
+    val activeTheme = ReaderColors.shellThemeFor(selectedThemeId, shellColors.isDark)
     val normalThemes = ReaderColors.allThemes.filterNot { it.isSpecial }
     val specialThemes = ReaderColors.allThemes.filter { it.isSpecial }
 
@@ -111,7 +116,7 @@ fun ThemePickerBottomSheet(
                 }
             }
 
-            ActiveThemeCard(theme = selectedTheme)
+            ActiveThemeCard(theme = activeTheme)
 
             Spacer(Modifier.height(18.dp))
 
@@ -119,7 +124,7 @@ fun ThemePickerBottomSheet(
                 title = "Normal",
                 subtitle = "Calm everyday palettes for text-heavy reading.",
                 themes = normalThemes,
-                selectedThemeId = selectedTheme.id,
+                selectedThemeId = selectedThemeId,
                 onThemeSelected = onThemeSelected,
             )
 
@@ -127,9 +132,9 @@ fun ThemePickerBottomSheet(
 
             ThemeSection(
                 title = "Special",
-                subtitle = "Decorative RN palettes, kept as reader previews only.",
+                subtitle = "RN art packs with themed UI, loading scenes, and ambient motion.",
                 themes = specialThemes,
-                selectedThemeId = selectedTheme.id,
+                selectedThemeId = selectedThemeId,
                 onThemeSelected = onThemeSelected,
             )
 
@@ -177,7 +182,11 @@ private fun ActiveThemeCard(theme: ReaderThemeColors) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    if (theme.isDark) "Dark reader surface" else "Light reader surface",
+                    when {
+                        theme.isSpecial -> "Special art pack"
+                        theme.isDark -> "Dark reader surface"
+                        else -> "Light reader surface"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = shellColors.secondaryText,
                 )
@@ -255,6 +264,10 @@ private fun ThemeMiniPreview(
                 .background(theme.background)
                 .padding(12.dp),
         ) {
+            SpecialThemePreviewArt(
+                theme = theme,
+                modifier = Modifier.matchParentSize(),
+            )
             Column {
                 Box(
                     modifier = Modifier
@@ -316,6 +329,16 @@ private fun ThemeCard(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (theme.isSpecial) {
+                    Icon(
+                        painter = painterResource(specialThemeIcon(theme.assetPack)),
+                        contentDescription = null,
+                        tint = theme.accent,
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(18.dp),
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         theme.name,
@@ -347,3 +370,13 @@ private fun ThemeCard(
         }
     }
 }
+
+@DrawableRes
+private fun specialThemeIcon(asset: SpecialThemeAsset): Int =
+    when (asset) {
+        SpecialThemeAsset.BLOSSOM -> R.drawable.ic_theme_blossom
+        SpecialThemeAsset.COFFEE -> R.drawable.ic_theme_coffee
+        SpecialThemeAsset.PARCHMENT -> R.drawable.ic_theme_parchment
+        SpecialThemeAsset.MATCHA -> R.drawable.ic_theme_matcha
+        SpecialThemeAsset.NONE -> R.drawable.ic_miyu_library
+    }

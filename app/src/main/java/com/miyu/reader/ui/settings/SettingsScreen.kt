@@ -99,7 +99,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
+            .background(colors.background.copy(alpha = 0.94f))
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {

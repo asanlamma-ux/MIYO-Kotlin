@@ -61,6 +61,7 @@ import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
+import com.miyu.reader.ui.theme.SpecialThemePreviewArt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -362,6 +363,10 @@ private fun ReaderThemeChoice(
                     .clip(RoundedCornerShape(14.dp))
                     .background(theme.background),
             ) {
+                SpecialThemePreviewArt(
+                    theme = theme,
+                    modifier = Modifier.matchParentSize(),
+                )
                 Column(
                     modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -382,7 +387,7 @@ private fun ReaderThemeChoice(
                         maxLines = 1,
                     )
                     Text(
-                        if (theme.isDark) "Dark" else "Light",
+                        if (theme.isSpecial) "Special" else if (theme.isDark) "Dark" else "Light",
                         color = theme.secondaryText,
                         style = MaterialTheme.typography.labelSmall,
                     )

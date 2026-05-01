@@ -140,13 +140,13 @@ fun LibraryScreen(
                 Text("Import", fontWeight = FontWeight.Bold)
             }
         },
-        containerColor = colors.background,
+        containerColor = Color.Transparent,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .blur(if (showBookAction) 2.dp else 0.dp)
-                .background(colors.background)
+                .background(colors.background.copy(alpha = 0.94f))
                 .padding(padding)
                 .padding(horizontal = 16.dp),
         ) {

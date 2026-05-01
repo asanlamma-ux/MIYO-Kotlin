@@ -56,6 +56,9 @@ import com.miyu.reader.security.ReaderHtmlSanitizer
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
+import com.miyu.reader.ui.theme.SpecialThemeBackdrop
+import com.miyu.reader.ui.theme.ThemeBackdropVariant
+import com.miyu.reader.ui.theme.specialThemeSceneCopy
 import com.miyu.reader.viewmodel.ReaderViewModel
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
@@ -145,7 +148,12 @@ fun ReaderScreen(
         // ── Loading state ───────────────────────────────────────────
         if (uiState.isLoading && uiState.chapterHtml.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                BookLoadingIndicator(accentColor = accentColor, textColor = readerTheme.secondaryText)
+                SpecialThemeBackdrop(
+                    theme = readerTheme,
+                    modifier = Modifier.matchParentSize(),
+                    variant = ThemeBackdropVariant.LOADING,
+                )
+                BookLoadingIndicator(readerTheme = readerTheme, title = uiState.book?.title)
             }
         } else if (uiState.errorMessage != null && uiState.chapterHtml.isBlank()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -638,10 +646,19 @@ private fun TermDetailRow(
 
 @Composable
 private fun BookLoadingIndicator(
-    accentColor: Color,
-    textColor: Color,
+    readerTheme: ReaderThemeColors,
+    title: String?,
 ) {
     val transition = rememberInfiniteTransition(label = "book-loading")
+    val pulse by transition.animateFloat(
+        initialValue = 0.985f,
+        targetValue = 1.025f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "loading-card-pulse",
+    )
     val pageAngle by transition.animateFloat(
         initialValue = -18f,
         targetValue = 18f,
@@ -651,37 +668,123 @@ private fun BookLoadingIndicator(
         ),
         label = "page-angle",
     )
+    val progress by transition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.94f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2100),
+        ),
+        label = "loading-progress",
+    )
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 28.dp),
+    ) {
+        Surface(
+            color = readerTheme.cardBackground.copy(alpha = if (readerTheme.isDark) 0.94f else 0.96f),
+            shape = RoundedCornerShape(30.dp),
+            shadowElevation = 14.dp,
             modifier = Modifier
-                .size(width = 96.dp, height = 72.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(accentColor.copy(alpha = 0.12f))
-                .padding(14.dp),
-            contentAlignment = Alignment.Center,
+                .size(width = 188.dp, height = 198.dp)
+                .graphicsLayer {
+                    scaleX = pulse
+                    scaleY = pulse
+                },
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(
+                modifier = Modifier.padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(width = 28.dp, height = 42.dp)
-                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                        .background(accentColor.copy(alpha = 0.62f)),
+                        .align(Alignment.TopStart)
+                        .size(58.dp)
+                        .clip(CircleShape)
+                        .background(readerTheme.accent.copy(alpha = 0.14f)),
                 )
-                Box(
-                    modifier = Modifier
-                        .size(width = 28.dp, height = 42.dp)
-                        .graphicsLayer {
-                            rotationY = pageAngle
-                            cameraDistance = 10f * density
-                        }
-                        .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
-                        .background(accentColor),
-                )
+                Column(
+                    modifier = Modifier.align(Alignment.BottomStart),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.74f)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(readerTheme.accent.copy(alpha = 0.34f)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.56f)
+                            .height(9.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(readerTheme.secondaryText.copy(alpha = 0.20f)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.42f)
+                            .height(9.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(readerTheme.secondaryText.copy(alpha = 0.14f)),
+                    )
+                }
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 42.dp, height = 58.dp)
+                            .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+                            .background(readerTheme.accent.copy(alpha = 0.56f)),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(width = 42.dp, height = 58.dp)
+                            .graphicsLayer {
+                                rotationY = pageAngle
+                                cameraDistance = 12f * density
+                            }
+                            .clip(RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp))
+                            .background(readerTheme.accent),
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Loading book...", color = textColor)
+        Spacer(Modifier.height(28.dp))
+        Text(
+            if (title.isNullOrBlank()) "Opening book" else "Opening \"$title\"",
+            color = readerTheme.text,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            specialThemeSceneCopy(readerTheme),
+            color = readerTheme.secondaryText,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.widthIn(max = 320.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .widthIn(max = 260.dp)
+                .fillMaxWidth(0.72f)
+                .height(8.dp)
+                .clip(RoundedCornerShape(50))
+                .background(readerTheme.secondaryText.copy(alpha = 0.14f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(readerTheme.accent),
+            )
+        }
     }
 }
 

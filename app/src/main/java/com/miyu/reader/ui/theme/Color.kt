@@ -13,6 +13,14 @@ val BackgroundDark = Color(0xFF100D0B)
 val Error = Color(0xFFEF4444)
 const val DefaultReaderThemeId = "sepia-classic"
 
+enum class SpecialThemeAsset {
+    NONE,
+    BLOSSOM,
+    COFFEE,
+    PARCHMENT,
+    MATCHA,
+}
+
 // Reader themes — data class shared by the 16 built-in themes
 data class ReaderThemeColors(
     val id: String,
@@ -24,6 +32,7 @@ data class ReaderThemeColors(
     val cardBackground: Color,
     val isDark: Boolean,
     val isSpecial: Boolean = false,
+    val assetPack: SpecialThemeAsset = SpecialThemeAsset.NONE,
 )
 
 /**
@@ -97,6 +106,7 @@ object ReaderColors {
         cardBackground = Color(0xFFFFF8F0),
         isDark = false,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.PARCHMENT,
     )
 
     val Monochrome = ReaderThemeColors(
@@ -153,6 +163,7 @@ object ReaderColors {
         cardBackground = Color(0xFFFFF8F9),
         isDark = false,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.BLOSSOM,
     )
 
     val PeachBlossomNight = ReaderThemeColors(
@@ -165,6 +176,7 @@ object ReaderColors {
         cardBackground = Color(0xFF211920),
         isDark = true,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.BLOSSOM,
     )
 
     val DarkCoffee = ReaderThemeColors(
@@ -177,6 +189,7 @@ object ReaderColors {
         cardBackground = Color(0xFF2A2420),
         isDark = true,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.COFFEE,
     )
 
     val CoffeeCream = ReaderThemeColors(
@@ -189,6 +202,7 @@ object ReaderColors {
         cardBackground = Color(0xFFFFFAF4),
         isDark = false,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.COFFEE,
     )
 
     val MatchaPaper = ReaderThemeColors(
@@ -201,6 +215,7 @@ object ReaderColors {
         cardBackground = Color(0xFFF8FCF5),
         isDark = false,
         isSpecial = true,
+        assetPack = SpecialThemeAsset.MATCHA,
     )
 
     val InkStone = ReaderThemeColors(
