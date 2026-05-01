@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.FormatIndentIncrease
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Login
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.SdStorage
@@ -47,6 +48,7 @@ import com.miyu.reader.domain.model.PageAnimation
 import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
+import com.miyu.reader.domain.model.DownloadedDictionary
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.SettingsViewModel
@@ -68,6 +70,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dialogState by remember { mutableStateOf<SettingsDialogState?>(null) }
+    var showDictionaryLibrary by remember { mutableStateOf(false) }
+    var dictionaryImportUrl by remember { mutableStateOf("") }
 
     val storagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -82,6 +86,14 @@ fun SettingsScreen(
             title = "Storage Updated",
             message = "New watched folder: ${storageLabel(uri.toString())}",
         )
+    }
+    val dictionaryFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val message = runCatching { viewModel.importDictionaryFromUri(uri) }
+                .getOrElse { it.message ?: "Dictionary import failed." }
+            dialogState = SettingsDialogState("Dictionary Library", message)
+        }
     }
 
     Column(
@@ -443,6 +455,16 @@ fun SettingsScreen(
             )
         }
 
+        SettingsSection(title = "Language Tools") {
+            SettingsRow(
+                icon = Icons.Outlined.MenuBook,
+                title = "Dictionary Library",
+                subtitle = "${uiState.downloadedDictionaries.size} installed · offline lookup packs and imports",
+                onClick = { showDictionaryLibrary = true },
+                accentColor = colors.accent,
+            )
+        }
+
         SettingsSection(title = "About") {
             SettingsRow(
                 icon = Icons.Outlined.Info,
@@ -451,6 +473,41 @@ fun SettingsScreen(
                 accentColor = colors.accent,
             )
         }
+    }
+
+    if (showDictionaryLibrary) {
+        DictionaryLibrarySheet(
+            installed = uiState.downloadedDictionaries,
+            starterPacks = uiState.starterDictionaries,
+            busy = uiState.dictionaryBusy,
+            importUrl = dictionaryImportUrl,
+            onImportUrlChange = { dictionaryImportUrl = it },
+            onDismiss = { showDictionaryLibrary = false },
+            onInstallStarter = { id ->
+                scope.launch {
+                    val message = viewModel.installStarterDictionary(id)
+                    dialogState = SettingsDialogState("Dictionary Library", message)
+                }
+            },
+            onRemove = { id ->
+                scope.launch {
+                    val message = viewModel.removeDictionary(id)
+                    dialogState = SettingsDialogState("Dictionary Library", message)
+                }
+            },
+            onImportFile = { dictionaryFilePicker.launch(arrayOf("application/json", "application/zip", "application/octet-stream")) },
+            onImportUrl = {
+                val url = dictionaryImportUrl.trim()
+                if (url.isNotBlank()) {
+                    scope.launch {
+                        val message = runCatching { viewModel.importDictionaryFromUrl(url) }
+                            .onSuccess { dictionaryImportUrl = "" }
+                            .getOrElse { it.message ?: "Dictionary import failed." }
+                        dialogState = SettingsDialogState("Dictionary Library", message)
+                    }
+                }
+            },
+        )
     }
 
     dialogState?.let { dialog ->
@@ -465,6 +522,180 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DictionaryLibrarySheet(
+    installed: List<DownloadedDictionary>,
+    starterPacks: List<DownloadedDictionary>,
+    busy: Boolean,
+    importUrl: String,
+    onImportUrlChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onInstallStarter: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onImportFile: () -> Unit,
+    onImportUrl: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    val installedIds = installed.map { it.id }.toSet()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+        ) {
+            Text(
+                "Dictionary Library",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = colors.onBackground,
+            )
+            Text(
+                "Install RN starter dictionaries, import Miyo JSON/ZIP packs, and keep offline lookup available in the reader.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+                modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
+            )
+
+            SectionLabel("Starter Packs")
+            starterPacks.forEach { dictionary ->
+                DictionaryRow(
+                    dictionary = dictionary,
+                    installed = dictionary.id in installedIds,
+                    busy = busy,
+                    actionLabel = if (dictionary.id in installedIds) "Installed" else "Install",
+                    onAction = { if (dictionary.id !in installedIds) onInstallStarter(dictionary.id) },
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            SectionLabel("Import Package")
+            OutlinedTextField(
+                value = importUrl,
+                onValueChange = onImportUrlChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("HTTPS package URL") },
+                placeholder = { Text("https://example.com/dictionary.json") },
+                singleLine = true,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(top = 10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onImportFile,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Import file")
+                }
+                Button(
+                    onClick = onImportUrl,
+                    enabled = !busy && importUrl.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Import URL")
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            SectionLabel("Installed")
+            if (installed.isEmpty()) {
+                Text(
+                    "No dictionaries installed yet. Lookup will auto-install the starter packs the first time it runs.",
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            } else {
+                installed.forEach { dictionary ->
+                    DictionaryRow(
+                        dictionary = dictionary,
+                        installed = true,
+                        busy = busy,
+                        actionLabel = "Remove",
+                        destructive = true,
+                        onAction = { onRemove(dictionary.id) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(28.dp))
+        }
+    }
+}
+
+@Composable
+private fun DictionaryRow(
+    dictionary: DownloadedDictionary,
+    installed: Boolean,
+    busy: Boolean,
+    actionLabel: String,
+    destructive: Boolean = false,
+    onAction: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                Icons.Outlined.MenuBook,
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(dictionary.name, color = colors.onBackground, fontWeight = FontWeight.Bold)
+                Text(
+                    "${dictionary.entriesCount} entries · ${dictionary.language.uppercase()} · ${dictionary.version}",
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                dictionary.description?.let {
+                    Text(
+                        it,
+                        color = colors.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+            TextButton(
+                onClick = onAction,
+                enabled = !busy && (!installed || destructive),
+            ) {
+                Text(
+                    actionLabel,
+                    color = if (destructive) MaterialTheme.colorScheme.error else colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    val colors = LocalMIYUColors.current
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+        color = colors.secondaryText,
+        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+    )
 }
 
 @Composable

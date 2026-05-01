@@ -96,6 +96,8 @@ fun LibraryScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var selectedBook by remember { mutableStateOf<Book?>(null) }
     var showBookAction by remember { mutableStateOf(false) }
+    var showOpdsCatalogs by remember { mutableStateOf(false) }
+    var showOnlineBrowser by remember { mutableStateOf(false) }
     var coverTargetBookId by remember { mutableStateOf<String?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -159,6 +161,8 @@ fun LibraryScreen(
                     viewModel.setSortOption(it)
                     showSortMenu = false
                 },
+                onOpenOnline = { showOnlineBrowser = true },
+                onOpenOpds = { showOpdsCatalogs = true },
                 onToggleView = viewModel::toggleViewMode,
             )
 
@@ -272,6 +276,28 @@ fun LibraryScreen(
             viewModel = viewModel,
             onOpenBook = onOpenBook,
         )
+
+        if (showOpdsCatalogs) {
+            OpdsCatalogSheet(
+                onDismiss = { showOpdsCatalogs = false },
+                onImportEntry = { entry, href ->
+                    viewModel.importBookFromRemoteEpub(href, entry.title)
+                },
+            )
+        }
+
+        if (showOnlineBrowser) {
+            OnlineNovelBrowserSheet(
+                onDismiss = { showOnlineBrowser = false },
+                onImportGeneratedEpub = { generated ->
+                    viewModel.importGeneratedOnlineNovelEpub(
+                        filePath = generated.filePath,
+                        fileName = generated.fileName,
+                        suggestedTitle = generated.title,
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -284,6 +310,8 @@ private fun LibraryTopBar(
     onToggleSort: () -> Unit,
     onDismissSort: () -> Unit,
     onSortSelected: (SortOption) -> Unit,
+    onOpenOnline: () -> Unit,
+    onOpenOpds: () -> Unit,
     onToggleView: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
@@ -334,6 +362,18 @@ private fun LibraryTopBar(
                         )
                     }
                 }
+            }
+            FilledTonalIconButton(
+                onClick = onOpenOnline,
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Outlined.CloudDownload, contentDescription = "Online MTL browser")
+            }
+            FilledTonalIconButton(
+                onClick = onOpenOpds,
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Outlined.Public, contentDescription = "OPDS catalogs")
             }
             FilledTonalIconButton(
                 onClick = onToggleView,

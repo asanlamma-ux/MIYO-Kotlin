@@ -72,14 +72,14 @@ class TermRepository @Inject constructor(
     suspend fun saveGroup(group: TermGroup) {
         termDao.upsertGroup(TermGroupEntity(
             id = group.id,
-            name = group.name,
-            description = group.description,
+            name = group.name.sanitizePlainText(MAX_GROUP_NAME_CHARS),
+            description = group.description?.sanitizePlainText(MAX_CONTEXT_CHARS)?.takeIf { it.isNotBlank() },
             appliedToBooks = group.appliedToBooks,
             createdAt = group.createdAt,
             updatedAt = java.time.Instant.now().toString(),
         ))
         termDao.deleteTermsForGroup(group.id)
-        termDao.upsertTerms(group.terms.map { it.toEntity(group.id) })
+        termDao.upsertTerms(group.terms.map { it.sanitizedForStorage().toEntity(group.id) })
     }
 
     suspend fun deleteGroup(groupId: String) {
@@ -88,7 +88,7 @@ class TermRepository @Inject constructor(
     }
 
     suspend fun addTermToGroup(groupId: String, term: Term) {
-        termDao.upsertTerm(term.toEntity(groupId))
+        termDao.upsertTerm(term.sanitizedForStorage().toEntity(groupId))
     }
 
     suspend fun addTermToGroupAndApplyToBook(groupId: String, term: Term, bookId: String?) {
@@ -99,7 +99,7 @@ class TermRepository @Inject constructor(
             group.appliedToBooks
         }
         termDao.upsertGroup(group.copy(appliedToBooks = appliedBooks, updatedAt = java.time.Instant.now().toString()))
-        termDao.upsertTerm(term.toEntity(groupId))
+        termDao.upsertTerm(term.sanitizedForStorage().toEntity(groupId))
     }
 
     suspend fun applyGroupToBook(groupId: String, bookId: String) {
@@ -123,14 +123,32 @@ class TermRepository @Inject constructor(
     }
 
     private fun buildTermMarkup(groupName: String, term: Term): String {
-        val original = term.originalText.escapeHtml()
-        val corrected = term.correctedText.escapeHtml()
-        val translation = term.translationText.orEmpty().escapeHtml()
-        val context = term.context.orEmpty().escapeHtml()
-        val imageUri = term.imageUri.orEmpty().escapeHtml()
-        val group = groupName.escapeHtml()
+        val safeTerm = term.sanitizedForStorage()
+        val original = safeTerm.originalText.escapeHtml()
+        val corrected = safeTerm.correctedText.escapeHtml()
+        val translation = safeTerm.translationText.orEmpty().escapeHtml()
+        val context = safeTerm.context.orEmpty().escapeHtml()
+        val imageUri = safeTerm.imageUri.orEmpty().escapeHtml()
+        val group = groupName.sanitizePlainText(MAX_GROUP_NAME_CHARS).escapeHtml()
         return "<span class=\"miyu-term\" data-original=\"$original\" data-corrected=\"$corrected\" data-translation=\"$translation\" data-context=\"$context\" data-image-uri=\"$imageUri\" data-group=\"$group\">$corrected</span>"
     }
+
+    private fun Term.sanitizedForStorage(): Term =
+        copy(
+            originalText = originalText.sanitizePlainText(MAX_TERM_TEXT_CHARS),
+            correctedText = correctedText.sanitizePlainText(MAX_TERM_TEXT_CHARS),
+            translationText = translationText?.sanitizePlainText(MAX_TERM_TEXT_CHARS)?.takeIf { it.isNotBlank() },
+            context = context?.sanitizePlainText(MAX_CONTEXT_CHARS)?.takeIf { it.isNotBlank() },
+            imageUri = imageUri?.sanitizePlainText(MAX_URI_CHARS)?.takeIf { uri ->
+                uri.isNotBlank() &&
+                    (uri.startsWith("content://", ignoreCase = true) || uri.startsWith("file://", ignoreCase = true))
+            },
+        )
+
+    private fun String.sanitizePlainText(maxChars: Int): String =
+        replace(Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]"), "")
+            .trim()
+            .take(maxChars)
 
     private fun String.escapeHtml(): String = buildString {
         this@escapeHtml.forEach { char ->
@@ -143,5 +161,12 @@ class TermRepository @Inject constructor(
                 else -> append(char)
             }
         }
+    }
+
+    private companion object {
+        const val MAX_GROUP_NAME_CHARS = 120
+        const val MAX_TERM_TEXT_CHARS = 8_000
+        const val MAX_CONTEXT_CHARS = 12_000
+        const val MAX_URI_CHARS = 2_000
     }
 }

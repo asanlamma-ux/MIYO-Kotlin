@@ -8,6 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -48,6 +51,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.miyu.reader.security.ReaderHtmlSanitizer
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
@@ -64,6 +68,9 @@ import coil.compose.AsyncImage
 import com.miyu.reader.ui.reader.components.SelectionToolbar
 import com.miyu.reader.ui.reader.components.SelectionData
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
+
+private const val READER_BASE_URL = "https://miyo-reader.local/reader/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -198,31 +205,38 @@ fun ReaderScreen(
                     ReaderWebView(context).apply {
                         @SuppressLint("SetJavaScriptEnabled")
                         settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.allowFileAccess = true
-                        settings.allowContentAccess = true
-                        settings.allowFileAccessFromFileURLs = true
-                        settings.allowUniversalAccessFromFileURLs = true
+                        settings.domStorageEnabled = false
+                        settings.databaseEnabled = false
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.allowFileAccessFromFileURLs = false
+                        settings.allowUniversalAccessFromFileURLs = false
+                        settings.blockNetworkLoads = true
+                        settings.blockNetworkImage = true
+                        settings.javaScriptCanOpenWindowsAutomatically = false
+                        settings.mediaPlaybackRequiresUserGesture = true
+                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        settings.safeBrowsingEnabled = true
+                        settings.setGeolocationEnabled(false)
+                        settings.setSupportMultipleWindows(false)
+                        settings.cacheMode = WebSettings.LOAD_NO_CACHE
                         settings.loadsImagesAutomatically = true
                         settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
-                        webViewClient = WebViewClient()
+                        webViewClient = SecureReaderWebViewClient()
                     }.also { readerWebViewRef.set(it) }
                 },
                 update = { webView ->
                     webView.setBackgroundColor(bgColor.toArgb())
                     val restorePercent = uiState.chapterScrollPercent.coerceIn(0f, 1f)
-                    webView.webViewClient = object : WebViewClient() {
+                    webView.webViewClient = object : SecureReaderWebViewClient() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             view?.evaluateJavascript(restoreReaderScrollScript(restorePercent), null)
                         }
                     }
-                    val baseUrl = uiState.book?.filePath
-                        ?.substringBeforeLast('/', missingDelimiterValue = "")
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { "file://$it/" }
+                    val baseUrl = READER_BASE_URL
                     val loadKey = "${baseUrl.orEmpty()}#${htmlContent.hashCode()}"
                     if (webView.tag != loadKey) {
                         webView.tag = loadKey
@@ -231,7 +245,7 @@ fun ReaderScreen(
                     uiState.pendingChapterAppend?.let { append ->
                         if (append.id != lastAppendId) {
                             lastAppendId = append.id
-                            val quotedHtml = JSONObject.quote(append.bodyHtml)
+                            val quotedHtml = JSONObject.quote(ReaderHtmlSanitizer.sanitize(append.bodyHtml))
                             webView.evaluateJavascript(
                                 "if (window.MIYU_APPEND_CHAPTER) window.MIYU_APPEND_CHAPTER($quotedHtml, ${append.chapterIndex});",
                                 null,
@@ -767,7 +781,7 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
 }
 """.trimIndent()
 
-    val bodyContent = extractBodyContent(chapterHtml).takeIf { it.isNotBlank() }
+    val bodyContent = ReaderHtmlSanitizer.sanitize(extractBodyContent(chapterHtml)).takeIf { it.isNotBlank() }
         ?: "<section class=\"miyu-empty-chapter\"><h2>Chapter content unavailable</h2><p>This chapter imported without readable text. Try rescanning the book from Library.</p></section>"
     return """
 <!DOCTYPE html>
@@ -1094,6 +1108,25 @@ private class ReaderWebView(context: Context) : WebView(context) {
     override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
 }
 
+private open class SecureReaderWebViewClient : WebViewClient() {
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
+
+    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+        val scheme = request?.url?.scheme?.lowercase() ?: return null
+        return when (scheme) {
+            "about", "data" -> null
+            else -> emptyWebResourceResponse()
+        }
+    }
+
+    private fun emptyWebResourceResponse(): WebResourceResponse =
+        WebResourceResponse(
+            "text/plain",
+            "UTF-8",
+            ByteArrayInputStream(ByteArray(0)),
+        )
+}
+
 // Named class so Android lint can see @JavascriptInterface annotations
 private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     @JavascriptInterface
@@ -1102,16 +1135,20 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
             viewModel.handleSelection(null)
             return
         }
+        if (jsonStr.length > MAX_BRIDGE_PAYLOAD_CHARS) {
+            viewModel.handleSelection(null)
+            return
+        }
         try {
             val json = JSONObject(jsonStr)
-            val text = json.getString("text")
+            val text = sanitizeBridgeText(json.getString("text"))
             if (text.isBlank()) {
                 viewModel.handleSelection(null)
                 return
             }
             val selection = SelectionData(
                 text = text,
-                originalText = json.optString("originalText").takeIf { it.isNotBlank() },
+                originalText = sanitizeBridgeText(json.optString("originalText")).takeIf { it.isNotBlank() },
                 x = json.getDouble("x").toFloat(),
                 y = json.getDouble("y").toFloat(),
                 width = json.getDouble("width").toFloat(),
@@ -1119,7 +1156,7 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
             )
             viewModel.handleSelection(selection)
         } catch (e: Exception) {
-            e.printStackTrace()
+            viewModel.handleSelection(null)
         }
     }
 
@@ -1150,20 +1187,31 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
 
     @JavascriptInterface
     fun onTermTapped(jsonStr: String) {
+        if (jsonStr.isBlank() || jsonStr.length > MAX_BRIDGE_PAYLOAD_CHARS) return
         try {
             val json = JSONObject(jsonStr)
             viewModel.showTermDetail(
                 ReaderTermDetail(
-                    originalText = json.optString("originalText"),
-                    correctedText = json.optString("correctedText"),
-                    translationText = json.optString("translationText").takeIf { it.isNotBlank() },
-                    context = json.optString("context").takeIf { it.isNotBlank() },
+                    originalText = sanitizeBridgeText(json.optString("originalText")),
+                    correctedText = sanitizeBridgeText(json.optString("correctedText")),
+                    translationText = sanitizeBridgeText(json.optString("translationText")).takeIf { it.isNotBlank() },
+                    context = sanitizeBridgeText(json.optString("context")).takeIf { it.isNotBlank() },
                     imageUri = json.optString("imageUri").takeIf { it.isNotBlank() },
-                    groupName = json.optString("groupName").takeIf { it.isNotBlank() },
+                    groupName = sanitizeBridgeText(json.optString("groupName")).takeIf { it.isNotBlank() },
                 )
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            // Ignore malformed bridge payloads from reader content.
         }
+    }
+
+    private fun sanitizeBridgeText(value: String): String =
+        value
+            .replace(Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]"), "")
+            .take(MAX_SELECTION_TEXT_CHARS)
+
+    private companion object {
+        const val MAX_BRIDGE_PAYLOAD_CHARS = 32_000
+        const val MAX_SELECTION_TEXT_CHARS = 8_000
     }
 }

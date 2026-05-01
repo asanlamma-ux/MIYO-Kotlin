@@ -2,11 +2,13 @@ package com.miyu.reader.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.BookRepository
+import com.miyu.reader.data.repository.DictionaryRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
@@ -30,6 +32,9 @@ data class SettingsUiState(
     val dailyGoalMinutes: Int = 30,
     val storageDirectoryUri: String? = null,
     val libraryBytes: Long = 0L,
+    val starterDictionaries: List<DownloadedDictionary> = emptyList(),
+    val downloadedDictionaries: List<DownloadedDictionary> = emptyList(),
+    val dictionaryBusy: Boolean = false,
 )
 
 data class RescanSummary(
@@ -47,6 +52,7 @@ data class DuplicateAuditSummary(
 class SettingsViewModel @Inject constructor(
     private val preferences: UserPreferences,
     private val bookRepository: BookRepository,
+    private val dictionaryRepository: DictionaryRepository,
     private val epubEngine: EpubEngineBridge,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -94,6 +100,16 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
                 _uiState.update { it.copy(bookCount = books.size, libraryBytes = libraryBytes) }
+            }
+        }
+        viewModelScope.launch {
+            dictionaryRepository.getDownloadedDictionaries().collect { dictionaries ->
+                _uiState.update {
+                    it.copy(
+                        starterDictionaries = dictionaryRepository.getStarterDictionaries(),
+                        downloadedDictionaries = dictionaries,
+                    )
+                }
             }
         }
     }
@@ -281,6 +297,73 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    suspend fun installStarterDictionary(dictionaryId: String): String = withContext(Dispatchers.IO) {
+        _uiState.update { it.copy(dictionaryBusy = true) }
+        try {
+            if (dictionaryRepository.installStarterDictionary(dictionaryId)) {
+                "Dictionary installed."
+            } else {
+                "Dictionary pack was not found."
+            }
+        } finally {
+            _uiState.update { it.copy(dictionaryBusy = false) }
+        }
+    }
+
+    suspend fun removeDictionary(dictionaryId: String): String = withContext(Dispatchers.IO) {
+        _uiState.update { it.copy(dictionaryBusy = true) }
+        try {
+            dictionaryRepository.removeDictionary(dictionaryId)
+            "Dictionary removed."
+        } finally {
+            _uiState.update { it.copy(dictionaryBusy = false) }
+        }
+    }
+
+    suspend fun importDictionaryFromUri(uri: Uri): String = withContext(Dispatchers.IO) {
+        _uiState.update { it.copy(dictionaryBusy = true) }
+        try {
+            val fileName = resolveDisplayName(uri) ?: uri.lastPathSegment ?: "dictionary.json"
+            val bytes = appContext.contentResolver.openInputStream(uri)
+                ?.use { input -> input.readBoundedBytes(MAX_DICTIONARY_PACKAGE_BYTES) }
+                ?: error("Could not open this dictionary package.")
+            val dictionary = dictionaryRepository.importDictionaryFromBytes(bytes, fileName)
+            "Imported ${dictionary.name} with ${dictionary.entriesCount} entries."
+        } finally {
+            _uiState.update { it.copy(dictionaryBusy = false) }
+        }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String? =
+        appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+
+    private fun java.io.InputStream.readBoundedBytes(maxBytes: Int): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val read = read(buffer)
+            if (read == -1) break
+            total += read
+            if (total > maxBytes) error("Dictionary packages are limited to ${maxBytes / 1024 / 1024} MB.")
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray()
+    }
+
+    suspend fun importDictionaryFromUrl(url: String): String = withContext(Dispatchers.IO) {
+        _uiState.update { it.copy(dictionaryBusy = true) }
+        try {
+            val dictionary = dictionaryRepository.importDictionaryFromUrl(url)
+            "Imported ${dictionary.name} with ${dictionary.entriesCount} entries."
+        } finally {
+            _uiState.update { it.copy(dictionaryBusy = false) }
+        }
+    }
+
     private suspend fun importBookFile(file: File) {
         val metadataJson = epubEngine.parseEpub(file.absolutePath)
         val parsed = JSONObject(metadataJson)
@@ -320,6 +403,9 @@ class SettingsViewModel @Inject constructor(
         val mime = match?.groupValues?.getOrNull(1).orEmpty()
         val base64Payload = match?.groupValues?.getOrNull(2)?.replace(Regex("\\s"), "").orEmpty()
         if (base64Payload.isBlank()) return null
+        if (!mime.startsWith("image/", ignoreCase = true)) return null
+        if (mime.contains("svg", ignoreCase = true)) return null
+        if (base64Payload.length > MAX_COVER_BASE64_CHARS) return null
 
         val extension = when {
             mime.contains("png", ignoreCase = true) -> "png"
@@ -334,5 +420,10 @@ class SettingsViewModel @Inject constructor(
             coverFile.writeBytes(Base64.decode(base64Payload, Base64.DEFAULT))
             Uri.fromFile(coverFile).toString()
         }.getOrNull()
+    }
+
+    private companion object {
+        const val MAX_COVER_BASE64_CHARS = 14 * 1024 * 1024
+        const val MAX_DICTIONARY_PACKAGE_BYTES = 12 * 1024 * 1024
     }
 }

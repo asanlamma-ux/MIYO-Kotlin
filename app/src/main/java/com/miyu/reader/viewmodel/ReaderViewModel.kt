@@ -145,7 +145,6 @@ class ReaderViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -195,7 +194,6 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -252,7 +250,6 @@ class ReaderViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 _uiState.update {
                     it.copy(errorMessage = e.message ?: "Could not append the next chapter.")
                 }

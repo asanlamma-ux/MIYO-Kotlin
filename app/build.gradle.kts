@@ -206,6 +206,9 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
     implementation("io.ktor:ktor-client-logging:2.3.11")
 
+    // HTML parsing for OPDS-adjacent online novel provider imports
+    implementation("org.jsoup:jsoup:1.17.2")
+
     // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.6.0")
 
