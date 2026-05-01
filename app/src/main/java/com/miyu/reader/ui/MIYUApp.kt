@@ -30,6 +30,7 @@ import com.miyu.reader.ui.home.HomeScreen
 import com.miyu.reader.ui.library.LibraryScreen
 import com.miyu.reader.ui.terms.TermsScreen
 import com.miyu.reader.ui.history.HistoryScreen
+import com.miyu.reader.ui.onboarding.InitialSetupBottomSheet
 import com.miyu.reader.ui.settings.SettingsScreen
 import com.miyu.reader.ui.reader.ReaderScreen
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
@@ -56,6 +57,7 @@ fun MIYUApp() {
     val themeViewModel: ThemeViewModel = hiltViewModel()
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
     val readerThemeId by themeViewModel.readerThemeId.collectAsStateWithLifecycle(initialValue = DefaultReaderThemeId)
+    val shouldShowInitialSetup by themeViewModel.shouldShowInitialSetup.collectAsStateWithLifecycle(initialValue = false)
 
     MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {
         val navController = rememberNavController()
@@ -172,6 +174,14 @@ fun MIYUApp() {
                 selectedThemeId = readerThemeId,
                 onThemeSelected = themeViewModel::setReaderThemeId,
                 onDismiss = { showThemePicker = false },
+            )
+        }
+
+        if (shouldShowInitialSetup) {
+            InitialSetupBottomSheet(
+                initialReaderThemeId = readerThemeId,
+                onSkip = themeViewModel::skipInitialSetup,
+                onSave = themeViewModel::saveInitialSetup,
             )
         }
     }

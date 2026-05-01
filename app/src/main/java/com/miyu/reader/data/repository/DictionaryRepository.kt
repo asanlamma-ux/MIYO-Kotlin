@@ -5,7 +5,9 @@ import com.miyu.reader.data.local.entity.DictionaryEntryEntity
 import com.miyu.reader.domain.model.DictionaryEntry
 import com.miyu.reader.domain.model.DictionaryLookupResult
 import com.miyu.reader.domain.model.LookupSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -54,15 +56,16 @@ class DictionaryRepository @Inject constructor(
     private suspend fun fetchOnlineDefinition(
         originalWord: String,
         normalizedWord: String,
-    ): DictionaryLookupResult? {
-        return runCatching {
+    ): DictionaryLookupResult? = withContext(Dispatchers.IO) {
+        runCatching {
             val encodedWord = URLEncoder.encode(normalizedWord, StandardCharsets.UTF_8.name())
             val sourceUrl = "https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord"
             val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 4000
-                readTimeout = 4000
+                connectTimeout = 8000
+                readTimeout = 10000
                 setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "MIYO-Kotlin/1.0")
             }
 
             if (connection.responseCode !in 200..299) {

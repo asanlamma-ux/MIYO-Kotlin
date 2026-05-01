@@ -25,7 +25,9 @@ data class ReaderUiState(
     val book: Book? = null,
     val chapterHtml: String = "",
     val chapterIndex: Int = 0,
+    val renderedChapterIndex: Int = 0,
     val chapterScrollPercent: Float = 0f,
+    val continuousLoadedThroughIndex: Int = 0,
     val totalChapters: Int = 0,
     val showControls: Boolean = false,
     val showChapterDrawer: Boolean = false,
@@ -48,6 +50,13 @@ data class ReaderUiState(
     val bookmarks: List<Bookmark> = emptyList(),
     val errorMessage: String? = null,
     val selectedTermDetail: ReaderTermDetail? = null,
+    val pendingChapterAppend: PendingChapterAppend? = null,
+)
+
+data class PendingChapterAppend(
+    val id: Long,
+    val chapterIndex: Int,
+    val bodyHtml: String,
 )
 
 data class ReaderTermDetail(
@@ -74,6 +83,7 @@ class ReaderViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ReaderUiState())
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
+    private var chapterAppendInFlight = false
 
     val readerThemeId: StateFlow<String> = preferences.readerThemeId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DefaultReaderThemeId)
@@ -112,7 +122,9 @@ class ReaderViewModel @Inject constructor(
                     it.copy(
                         book = book,
                         chapterIndex = chapterIndex,
+                        renderedChapterIndex = chapterIndex,
                         chapterScrollPercent = chapterScrollPercent,
+                        continuousLoadedThroughIndex = chapterIndex,
                         totalChapters = book.totalChapters,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
                         errorMessage = null,
@@ -160,6 +172,9 @@ class ReaderViewModel @Inject constructor(
                         it.copy(
                             chapterHtml = "",
                             chapterIndex = index,
+                            renderedChapterIndex = index,
+                            continuousLoadedThroughIndex = index,
+                            pendingChapterAppend = null,
                             isLoading = false,
                             errorMessage = "This chapter imported without readable content.",
                         )
@@ -170,6 +185,10 @@ class ReaderViewModel @Inject constructor(
                     it.copy(
                         chapterHtml = html,
                         chapterIndex = index,
+                        renderedChapterIndex = index,
+                        chapterScrollPercent = _uiState.value.chapterScrollPercent.takeIf { _uiState.value.chapterIndex == index } ?: 0f,
+                        continuousLoadedThroughIndex = index,
+                        pendingChapterAppend = null,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
                         isLoading = false,
                         errorMessage = null,
@@ -195,6 +214,61 @@ class ReaderViewModel @Inject constructor(
             loadChapter(newIndex, book.filePath)
             savePosition(newIndex, 0f)
             _uiState.update { it.copy(chapterScrollPercent = 0f) }
+        }
+    }
+
+    fun appendNextChapter() {
+        if (chapterAppendInFlight) return
+        viewModelScope.launch {
+            chapterAppendInFlight = true
+            val state = _uiState.value
+            val book = state.book ?: run {
+                chapterAppendInFlight = false
+                return@launch
+            }
+            val nextIndex = state.continuousLoadedThroughIndex + 1
+            if (nextIndex >= state.totalChapters) {
+                chapterAppendInFlight = false
+                return@launch
+            }
+
+            try {
+                val replacements = termRepository.getReplacementMarkupForBook(book.id)
+                val html = epubEngine.renderChapter(book.filePath, nextIndex, replacements)
+                val bodyHtml = extractBodyContent(html).takeIf { it.isNotBlank() } ?: run {
+                    chapterAppendInFlight = false
+                    return@launch
+                }
+
+                _uiState.update {
+                    it.copy(
+                        continuousLoadedThroughIndex = nextIndex,
+                        pendingChapterAppend = PendingChapterAppend(
+                            id = System.nanoTime(),
+                            chapterIndex = nextIndex,
+                            bodyHtml = bodyHtml,
+                        ),
+                        errorMessage = null,
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update {
+                    it.copy(errorMessage = e.message ?: "Could not append the next chapter.")
+                }
+            } finally {
+                chapterAppendInFlight = false
+            }
+        }
+    }
+
+    fun consumePendingChapterAppend(id: Long) {
+        _uiState.update { state ->
+            if (state.pendingChapterAppend?.id == id) {
+                state.copy(pendingChapterAppend = null)
+            } else {
+                state
+            }
         }
     }
 
@@ -257,32 +331,36 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun updateScrollProgress(chapterScrollPercent: Float) {
+        updateChapterScrollProgress(_uiState.value.chapterIndex, chapterScrollPercent)
+    }
+
+    fun updateChapterScrollProgress(chapterIndex: Int, chapterScrollPercent: Float) {
         viewModelScope.launch {
             val state = _uiState.value
             val book = state.book ?: return@launch
+            val safeChapterIndex = chapterIndex.coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
             val safeChapterPercent = chapterScrollPercent.coerceIn(0f, 1f)
             _uiState.update { current ->
-                if (current.chapterIndex == state.chapterIndex) {
-                    current.copy(chapterScrollPercent = safeChapterPercent)
-                } else {
-                    current
-                }
+                current.copy(
+                    chapterIndex = safeChapterIndex,
+                    chapterScrollPercent = safeChapterPercent,
+                )
             }
             val overallProgress = if (state.totalChapters > 0) {
-                ((state.chapterIndex + safeChapterPercent) / state.totalChapters * 100f).coerceIn(0f, 100f)
+                ((safeChapterIndex + safeChapterPercent) / state.totalChapters * 100f).coerceIn(0f, 100f)
             } else {
                 safeChapterPercent * 100f
             }
             bookRepository.saveReadingPosition(
                 ReadingPosition(
                     bookId = book.id,
-                    chapterIndex = state.chapterIndex,
+                    chapterIndex = safeChapterIndex,
                     scrollPosition = safeChapterPercent,
                     chapterScrollPercent = safeChapterPercent,
                     timestamp = java.time.Instant.now().toString(),
                 )
             )
-            bookRepository.updateProgress(book.id, state.chapterIndex, overallProgress)
+            bookRepository.updateProgress(book.id, safeChapterIndex, overallProgress)
         }
     }
 
@@ -534,5 +612,10 @@ class ReaderViewModel @Inject constructor(
 
     fun clearTermDetail() {
         _uiState.update { it.copy(selectedTermDetail = null) }
+    }
+
+    private fun extractBodyContent(html: String): String {
+        val bodyMatch = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)
+        return bodyMatch?.groupValues?.getOrNull(1) ?: html
     }
 }

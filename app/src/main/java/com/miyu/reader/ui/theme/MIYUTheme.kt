@@ -34,21 +34,13 @@ fun MIYUTheme(
     content: @Composable () -> Unit,
 ) {
     val systemDark = isSystemInDarkTheme()
-    val readerTheme = ReaderColors.findById(readerThemeId)
     val darkTheme = when (themeMode) {
         ThemeMode.SYSTEM -> systemDark
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
     }
 
-    val shellTheme = when {
-        themeMode == ThemeMode.LIGHT && readerTheme.isDark -> ReaderColors.SepiaClassic
-        themeMode == ThemeMode.DARK && !readerTheme.isDark -> ReaderColors.NightMode
-        themeMode == ThemeMode.SYSTEM && darkTheme != readerTheme.isDark -> {
-            if (darkTheme) ReaderColors.NightMode else ReaderColors.SepiaClassic
-        }
-        else -> readerTheme
-    }
+    val shellTheme = if (darkTheme) ReaderColors.NightMode else ReaderColors.SepiaClassic
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(

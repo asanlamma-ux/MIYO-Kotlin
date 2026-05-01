@@ -27,6 +27,14 @@ class UserPreferences @Inject constructor(
         context.dataStore.edit { it[THEME_MODE] = mode.name }
     }
 
+    val shouldShowInitialSetup: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_INITIAL_SETUP_COMPLETE]?.not() ?: isFreshInstallPreferences(prefs)
+    }
+
+    suspend fun setInitialSetupComplete(complete: Boolean) {
+        context.dataStore.edit { it[KEY_INITIAL_SETUP_COMPLETE] = complete }
+    }
+
     // Reader theme
     val readerThemeId: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_READER_THEME_ID] ?: DefaultReaderThemeId
@@ -177,5 +185,22 @@ class UserPreferences @Inject constructor(
         private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id_v2")
         private val KEY_DAILY_GOAL_MINUTES = intPreferencesKey("daily_goal_minutes")
         private val KEY_STORAGE_DIRECTORY_URI = stringPreferencesKey("storage_directory_uri")
+        private val KEY_INITIAL_SETUP_COMPLETE = booleanPreferencesKey("initial_setup_complete_v1")
+
+        private val SETUP_EXISTING_KEYS = setOf<Preferences.Key<*>>(
+            THEME_MODE,
+            KEY_READER_THEME_ID,
+            KEY_FONT_FAMILY,
+            KEY_FONT_SIZE,
+            KEY_LINE_HEIGHT,
+            KEY_PAGE_ANIMATION,
+            KEY_TAP_ZONES_ENABLED,
+            KEY_READING_FLOW_MODE,
+            KEY_DAILY_GOAL_MINUTES,
+            KEY_STORAGE_DIRECTORY_URI,
+        )
+
+        private fun isFreshInstallPreferences(prefs: Preferences): Boolean =
+            prefs.asMap().keys.none { key -> key in SETUP_EXISTING_KEYS }
     }
 }

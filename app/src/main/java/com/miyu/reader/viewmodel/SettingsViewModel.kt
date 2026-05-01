@@ -277,6 +277,7 @@ class SettingsViewModel @Inject constructor(
             preferences.setReaderThemeId(DefaultReaderThemeId)
             preferences.setThemeMode(ThemeMode.SYSTEM)
             preferences.setDailyGoalMinutes(30)
+            preferences.setInitialSetupComplete(false)
         }
     }
 

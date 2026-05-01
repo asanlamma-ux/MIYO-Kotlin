@@ -78,12 +78,14 @@ fun SelectionToolbar(
     if (selection == null) return
 
     val bgColor = Color(0xEB1A1A24) // Dark transluscent
-    val iconColor = Color.White
-    val labelColor = Color.White.copy(alpha = 0.78f)
     val density = LocalDensity.current
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val anchorTop = with(density) { (selection.y + selection.height + 12f).toDp() }
-        .coerceIn(24.dp, screenHeight - 190.dp)
+    val configuration = LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    val screenWidth = configuration.screenWidthDp.dp
+    val toolbarHeight = if (showColorRow) 142.dp else 82.dp
+    val toolbarWidth = (screenWidth - 28.dp).coerceAtMost(390.dp)
+    val anchorTop = with(density) { (selection.y + selection.height + 8f).toDp() }
+        .coerceIn(8.dp, screenHeight - toolbarHeight - 8.dp)
 
     // Note Modal
     if (showNoteModal) {
@@ -107,24 +109,23 @@ fun SelectionToolbar(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = anchorTop, start = 8.dp, end = 8.dp),
+            .padding(top = anchorTop, start = 14.dp, end = 14.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         // Toolbar Card
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 0.dp),
-            shape = RoundedCornerShape(22.dp),
+                .width(toolbarWidth),
+            shape = RoundedCornerShape(18.dp),
             color = bgColor,
-            shadowElevation = 12.dp,
+            shadowElevation = 8.dp,
         ) {
-            Column(modifier = Modifier.padding(bottom = 12.dp, top = 6.dp)) {
+            Column(modifier = Modifier.padding(bottom = 8.dp, top = 5.dp)) {
                 // Drag handle hint
                 Box(
                     modifier = Modifier
                         .width(36.dp)
-                        .height(4.dp)
+                        .height(3.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(Color.White.copy(alpha = 0.22f))
                         .align(Alignment.CenterHorizontally),
@@ -136,7 +137,7 @@ fun SelectionToolbar(
                     fontSize = 10.sp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 6.dp),
+                        .padding(top = 3.dp, bottom = 4.dp),
                     textAlign = TextAlign.Center,
                 )
 
@@ -145,7 +146,7 @@ fun SelectionToolbar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ToolbarItem("Note", Icons.Outlined.Edit) { showNoteModal = true }
@@ -259,16 +260,16 @@ private fun ToolbarItem(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .background(if (isActive) Color.White.copy(alpha = 0.1f) else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .widthIn(min = 52.dp),
+            .padding(horizontal = 9.dp, vertical = 6.dp)
+            .widthIn(min = 46.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(4.dp))
+        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             label,
             color = if (isActive) activeColor else Color.White.copy(alpha = 0.78f),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
         )
@@ -280,7 +281,7 @@ private fun ToolbarDivider() {
     Box(
         modifier = Modifier
             .width(1.dp)
-            .height(34.dp)
+            .height(30.dp)
             .background(Color.White.copy(alpha = 0.12f))
     )
 }

@@ -88,6 +88,7 @@ fun ReaderScreen(
         ReaderJsInterface(viewModel)
     }
     val readerWebViewRef = remember { java.util.concurrent.atomic.AtomicReference<WebView?>() }
+    var lastAppendId by remember { mutableStateOf(-1L) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -173,6 +174,8 @@ fun ReaderScreen(
             // ── WebView ─────────────────────────────────────────────
             val htmlContent = buildReaderHtml(
                 chapterHtml = uiState.chapterHtml,
+                chapterIndex = uiState.renderedChapterIndex,
+                totalChapters = uiState.totalChapters,
                 bgColor = colorToHex(bgColor),
                 textColor = colorToHex(textColor),
                 accentColor = colorToHex(accentColor),
@@ -224,6 +227,17 @@ fun ReaderScreen(
                     if (webView.tag != loadKey) {
                         webView.tag = loadKey
                         webView.loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "UTF-8", null)
+                    }
+                    uiState.pendingChapterAppend?.let { append ->
+                        if (append.id != lastAppendId) {
+                            lastAppendId = append.id
+                            val quotedHtml = JSONObject.quote(append.bodyHtml)
+                            webView.evaluateJavascript(
+                                "if (window.MIYU_APPEND_CHAPTER) window.MIYU_APPEND_CHAPTER($quotedHtml, ${append.chapterIndex});",
+                                null,
+                            )
+                            viewModel.consumePendingChapterAppend(append.id)
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -653,6 +667,8 @@ private fun colorToHex(color: Color): String {
 
 private fun buildReaderHtml(
     chapterHtml: String,
+    chapterIndex: Int,
+    totalChapters: Int,
     bgColor: String,
     textColor: String,
     accentColor: String,
@@ -709,6 +725,37 @@ img { max-width: 100%; height: auto; }
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
 p { margin-bottom: 0.8em; }
 blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
+.miyu-chapter {
+  display: block;
+  min-height: calc(100vh - 92px);
+}
+.miyu-continuous-divider {
+  margin: 2.4em 0 1.35em;
+  padding: 0.82em 0;
+  border-top: 1px solid rgba(154, 119, 71, 0.28);
+  border-bottom: 1px solid rgba(154, 119, 71, 0.18);
+  color: $accentColor !important;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72em;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+.miyu-continuous-loader {
+  margin: 2.1em auto 1.4em;
+  padding: 0.7em 1em;
+  width: fit-content;
+  border: 1px solid rgba(154, 119, 71, 0.22);
+  border-radius: 999px;
+  color: $accentColor !important;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  opacity: 0.82;
+}
 @media (max-width: 720px) {
   body { max-width: none; column-count: 1; }
 }
@@ -734,8 +781,10 @@ $themeCss
 </style>
 </head>
 <body>
+	<section class="miyu-chapter" data-miyu-chapter-index="$chapterIndex">
 	$bodyContent
-	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter)}
+	</section>
+	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter, chapterIndex, totalChapters)}
 	</body>
 </html>
 """.trimIndent()
@@ -763,12 +812,16 @@ private fun readerBridgeScript(
     tapZoneNavMode: TapZoneNavMode,
     bionicReading: Boolean,
     autoAdvanceChapter: Boolean,
+    chapterIndex: Int,
+    totalChapters: Int,
 ): String {
     val tapZones = if (tapZonesEnabled) "true" else "false"
     val bionic = if (bionicReading) "true" else "false"
     val autoAdvance = if (autoAdvanceChapter) "true" else "false"
     val scrollRatio = tapScrollPageRatio.coerceIn(0.25f, 1f)
     val navMode = tapZoneNavMode.name
+    val initialChapterIndex = chapterIndex.coerceAtLeast(0)
+    val safeTotalChapters = totalChapters.coerceAtLeast(0)
     return """
 <script>
 document.addEventListener('click', function(event) {
@@ -854,27 +907,95 @@ document.addEventListener('selectionchange', function() {
         var data = {
             text: text,
             originalText: originalText,
-            x: rect.left,
-            y: rect.top,
+            x: rect.left + rect.width / 2,
+            y: rect.bottom,
             width: rect.width,
-            height: rect.height
+            height: 0
         };
         if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged(JSON.stringify(data));
 	    } catch (e) {}
 	});
 	(function() {
 	    var lastProgressPost = 0;
+	    var loadedThroughChapterIndex = $initialChapterIndex;
+	    var totalChapters = $safeTotalChapters;
+	    var appendRequestInFlight = false;
+	    var appendLoader = null;
 	    function currentProgress() {
 	        var doc = document.documentElement;
-	        var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
-	        return Math.max(0, Math.min(1, (window.scrollY || doc.scrollTop || 0) / maxScroll));
+	        var scrollTop = window.scrollY || doc.scrollTop || 0;
+	        var sections = Array.prototype.slice.call(document.querySelectorAll('.miyu-chapter[data-miyu-chapter-index]'));
+	        if (sections.length === 0) {
+	            var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
+	            return {
+	                chapterIndex: loadedThroughChapterIndex,
+	                progress: Math.max(0, Math.min(1, scrollTop / maxScroll))
+	            };
+	        }
+	        var probeY = Math.max(42, window.innerHeight * 0.18);
+	        var active = sections[0];
+	        var nearest = Number.POSITIVE_INFINITY;
+	        sections.forEach(function(section) {
+	            var rect = section.getBoundingClientRect();
+	            var distance = rect.top <= probeY && rect.bottom >= probeY
+	                ? -1
+	                : Math.min(Math.abs(rect.top - probeY), Math.abs(rect.bottom - probeY));
+	            if (distance < nearest) {
+	                nearest = distance;
+	                active = section;
+	            }
+	        });
+	        var chapterIndex = parseInt(active.getAttribute('data-miyu-chapter-index') || loadedThroughChapterIndex, 10);
+	        if (isNaN(chapterIndex)) chapterIndex = loadedThroughChapterIndex;
+	        var activeRect = active.getBoundingClientRect();
+	        var sectionTop = scrollTop + activeRect.top;
+	        var sectionScrollable = Math.max(1, active.offsetHeight - Math.min(window.innerHeight, active.offsetHeight));
+	        var progress = Math.max(0, Math.min(1, (scrollTop - sectionTop) / sectionScrollable));
+	        if (activeRect.bottom <= window.innerHeight + 2) progress = 1;
+	        return { chapterIndex: chapterIndex, progress: progress };
 	    }
 	    function postProgress(force) {
 	        var now = Date.now();
 	        if (!force && now - lastProgressPost < 900) return;
 	        lastProgressPost = now;
 	        var progress = currentProgress();
-	        if (window.AndroidBridge) window.AndroidBridge.onScrollProgress(progress);
+	        if (window.AndroidBridge) {
+	            if (window.AndroidBridge.onChapterScrollProgress) {
+	                window.AndroidBridge.onChapterScrollProgress(progress.chapterIndex, progress.progress);
+	            } else {
+	                window.AndroidBridge.onScrollProgress(progress.progress);
+	            }
+	        }
+	    }
+	    function remainingScroll() {
+	        var doc = document.documentElement;
+	        return doc.scrollHeight - ((window.scrollY || doc.scrollTop || 0) + window.innerHeight);
+	    }
+	    function showContinuousLoader() {
+	        if (appendLoader) return;
+	        appendLoader = document.createElement('div');
+	        appendLoader.className = 'miyu-continuous-loader';
+	        appendLoader.textContent = 'Loading next chapter...';
+	        document.body.appendChild(appendLoader);
+	    }
+	    function hideContinuousLoader() {
+	        if (appendLoader && appendLoader.parentNode) appendLoader.parentNode.removeChild(appendLoader);
+	        appendLoader = null;
+	    }
+	    function maybeRequestNextChapter() {
+	        if (!$autoAdvance || appendRequestInFlight) return;
+	        if (totalChapters > 0 && loadedThroughChapterIndex >= totalChapters - 1) return;
+	        if (remainingScroll() > 96) return;
+	        appendRequestInFlight = true;
+	        showContinuousLoader();
+	        postProgress(true);
+	        if (window.AndroidBridge) window.AndroidBridge.onReaderAppendNextChapter();
+	        setTimeout(function() {
+	            if (appendRequestInFlight) {
+	                appendRequestInFlight = false;
+	                hideContinuousLoader();
+	            }
+	        }, 9000);
 	    }
 	    window.MIYU_POST_PROGRESS = function() { postProgress(true); };
 	    window.MIYU_RESTORE_SCROLL = function(percent) {
@@ -893,13 +1014,38 @@ document.addEventListener('selectionchange', function() {
 	        }
 	        requestAnimationFrame(applyRestore);
 	    };
-	    window.addEventListener('scroll', function() { postProgress(false); }, { passive: true });
+	    window.MIYU_APPEND_CHAPTER = function(bodyHtml, chapterIndex) {
+	        var parsedIndex = parseInt(chapterIndex, 10);
+	        if (isNaN(parsedIndex)) {
+	            appendRequestInFlight = false;
+	            hideContinuousLoader();
+	            return;
+	        }
+	        loadedThroughChapterIndex = Math.max(loadedThroughChapterIndex, parsedIndex);
+	        if (!document.querySelector('.miyu-chapter[data-miyu-chapter-index="' + parsedIndex + '"]')) {
+	            var section = document.createElement('section');
+	            section.className = 'miyu-chapter miyu-appended-chapter';
+	            section.setAttribute('data-miyu-chapter-index', String(parsedIndex));
+	            section.innerHTML = '<div class="miyu-continuous-divider">Chapter ' + (parsedIndex + 1) + '</div>' + bodyHtml;
+	            document.body.appendChild(section);
+	        }
+	        appendRequestInFlight = false;
+	        hideContinuousLoader();
+	        postProgress(true);
+	    };
+	    window.addEventListener('scroll', function() {
+	        postProgress(false);
+	        maybeRequestNextChapter();
+	    }, { passive: true });
 	    window.addEventListener('pagehide', function() { postProgress(true); });
 	    window.addEventListener('beforeunload', function() { postProgress(true); });
 	    document.addEventListener('visibilitychange', function() {
 	        if (document.visibilityState === 'hidden') postProgress(true);
 	    });
-	    setTimeout(function() { postProgress(false); }, 500);
+	    setTimeout(function() {
+	        postProgress(false);
+	        maybeRequestNextChapter();
+	    }, 500);
 	    if ($bionic) {
 	        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
 	            acceptNode: function(node) {
@@ -930,20 +1076,6 @@ document.addEventListener('selectionchange', function() {
 	            });
 	            if (node.parentNode) node.parentNode.replaceChild(frag, node);
 	        });
-	    }
-	    if ($autoAdvance) {
-	        var advanced = false;
-	        window.addEventListener('scroll', function() {
-	            if (advanced) return;
-	            var doc = document.documentElement;
-	            var remaining = doc.scrollHeight - (window.scrollY + window.innerHeight);
-	            if (remaining < 48) {
-	                advanced = true;
-	                setTimeout(function() {
-	                    if (window.AndroidBridge) window.AndroidBridge.onReaderEdgeTap(1);
-	                }, 260);
-	            }
-	        }, { passive: true });
 	    }
 	})();
 	</script>
@@ -1002,8 +1134,18 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     }
 
     @JavascriptInterface
+    fun onReaderAppendNextChapter() {
+        viewModel.appendNextChapter()
+    }
+
+    @JavascriptInterface
     fun onScrollProgress(progress: Double) {
         viewModel.updateScrollProgress(progress.toFloat())
+    }
+
+    @JavascriptInterface
+    fun onChapterScrollProgress(chapterIndex: Int, progress: Double) {
+        viewModel.updateChapterScrollProgress(chapterIndex, progress.toFloat())
     }
 
     @JavascriptInterface

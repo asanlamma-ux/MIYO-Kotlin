@@ -30,8 +30,8 @@ class TranslationRepository @Inject constructor() {
 
             val connection = (endpoint.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 15000
+                connectTimeout = 15000
+                readTimeout = 20000
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", "MIYO-Kotlin/1.0")
             }
