@@ -79,7 +79,17 @@ class LibraryViewModel @Inject constructor(
 
         // Sort
         list = when (state.sortOption) {
-            SortOption.RECENT -> list.sortedByDescending { it.lastReadAt ?: it.dateAdded }
+            SortOption.RECENT -> list.sortedWith(
+                compareBy<Book> { book ->
+                    when {
+                        book.readingStatus == ReadingStatus.READING || book.progress > 0f && book.progress < 100f -> 0
+                        book.lastReadAt == null -> 1
+                        else -> 2
+                    }
+                }
+                    .thenByDescending { it.dateAdded }
+                    .thenByDescending { it.lastReadAt ?: "" },
+            )
             SortOption.TITLE -> list.sortedBy { it.title.lowercase() }
             SortOption.AUTHOR -> list.sortedBy { it.author.lowercase() }
             SortOption.PROGRESS -> list.sortedByDescending { it.progress }
@@ -117,6 +127,13 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             val book = bookRepository.getBook(bookId) ?: return@launch
             bookRepository.saveBook(book.copy(readingStatus = status))
+        }
+    }
+
+    fun updateBookCover(bookId: String, coverUri: Uri) {
+        viewModelScope.launch {
+            val book = bookRepository.getBook(bookId) ?: return@launch
+            bookRepository.saveBook(book.copy(coverUri = coverUri.toString()))
         }
     }
 

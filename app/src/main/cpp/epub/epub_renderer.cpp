@@ -1,8 +1,10 @@
 #include "epub_renderer.h"
 #include "epub_parser.h"
 #include <android/log.h>
+#include <algorithm>
 #include <regex>
 #include <sstream>
+#include <vector>
 #include "../storage/cache_manager.h"
 
 #define LOG_TAG "EPUB_RENDERER"
@@ -17,17 +19,55 @@ std::string applyTermReplacements(const std::string& html,
                                    const std::map<std::string, std::string>& replacements) {
     if (replacements.empty()) return html;
 
-    std::string result = html;
+    std::vector<std::pair<std::string, std::string>> ordered;
+    ordered.reserve(replacements.size());
     for (const auto& [original, corrected] : replacements) {
-        if (original == corrected) continue;
-        // Simple case-sensitive replacement
-        // In production, this would use a text-node-aware DOM walk
-        size_t pos = 0;
-        while ((pos = result.find(original, pos)) != std::string::npos) {
-            // Check if we're inside a tag or already replaced
-            result.replace(pos, original.length(), corrected);
-            pos += corrected.length();
+        if (!original.empty() && original != corrected) {
+            ordered.emplace_back(original, corrected);
         }
+    }
+    std::sort(ordered.begin(), ordered.end(), [](const auto& left, const auto& right) {
+        return left.first.size() > right.first.size();
+    });
+
+    auto replaceText = [&ordered](const std::string& text) {
+        std::string out;
+        out.reserve(text.size());
+        size_t i = 0;
+        while (i < text.size()) {
+            bool matched = false;
+            for (const auto& [original, corrected] : ordered) {
+                if (i + original.size() <= text.size() &&
+                    text.compare(i, original.size(), original) == 0) {
+                    out += corrected;
+                    i += original.size();
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                out += text[i];
+                i += 1;
+            }
+        }
+        return out;
+    };
+
+    std::regex tagRegex(R"(<[^>]+>)");
+    std::sregex_iterator it(html.begin(), html.end(), tagRegex);
+    std::sregex_iterator end;
+    std::string result;
+    size_t cursor = 0;
+    for (; it != end; ++it) {
+        const auto& match = *it;
+        if (static_cast<size_t>(match.position()) > cursor) {
+            result += replaceText(html.substr(cursor, match.position() - cursor));
+        }
+        result += match.str();
+        cursor = match.position() + match.length();
+    }
+    if (cursor < html.size()) {
+        result += replaceText(html.substr(cursor));
     }
     return result;
 }

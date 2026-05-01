@@ -54,7 +54,7 @@ val bottomNavItems = listOf(
 @Composable
 fun MIYUApp() {
     val themeViewModel: ThemeViewModel = hiltViewModel()
-    val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.LIGHT)
+    val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
     val readerThemeId by themeViewModel.readerThemeId.collectAsStateWithLifecycle(initialValue = DefaultReaderThemeId)
 
     MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {

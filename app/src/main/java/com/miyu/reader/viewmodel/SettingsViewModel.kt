@@ -25,7 +25,7 @@ data class SettingsUiState(
     val typography: TypographySettings = TypographySettings(),
     val readingSettings: ReadingSettings = ReadingSettings(),
     val readerThemeId: String = DefaultReaderThemeId,
-    val themeMode: ThemeMode = ThemeMode.LIGHT,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val bookCount: Int = 0,
     val dailyGoalMinutes: Int = 30,
     val storageDirectoryUri: String? = null,
@@ -275,7 +275,7 @@ class SettingsViewModel @Inject constructor(
             preferences.setTypography(TypographySettings())
             preferences.setReadingSettings(ReadingSettings())
             preferences.setReaderThemeId(DefaultReaderThemeId)
-            preferences.setThemeMode(ThemeMode.LIGHT)
+            preferences.setThemeMode(ThemeMode.SYSTEM)
             preferences.setDailyGoalMinutes(30)
         }
     }

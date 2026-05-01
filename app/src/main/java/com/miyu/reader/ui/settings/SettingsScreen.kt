@@ -154,16 +154,24 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.DarkMode,
                 title = "App Theme",
-                subtitle = if (uiState.themeMode == ThemeMode.DARK) "Dark mode" else "Light mode",
+                subtitle = when (uiState.themeMode) {
+                    ThemeMode.SYSTEM -> "Follow OS"
+                    ThemeMode.LIGHT -> "Light mode"
+                    ThemeMode.DARK -> "Dark mode"
+                },
                 onClick = {
-                    viewModel.setThemeMode(
-                        if (uiState.themeMode == ThemeMode.DARK) ThemeMode.LIGHT else ThemeMode.DARK,
-                    )
+                    val options = ThemeMode.entries
+                    val next = (options.indexOf(uiState.themeMode) + 1) % options.size
+                    viewModel.setThemeMode(options[next])
                 },
                 accentColor = colors.accent,
                 trailing = {
                     Text(
-                        uiState.themeMode.name.lowercase().replaceFirstChar { it.uppercase() },
+                        when (uiState.themeMode) {
+                            ThemeMode.SYSTEM -> "Follow OS"
+                            ThemeMode.LIGHT -> "Light"
+                            ThemeMode.DARK -> "Dark"
+                        },
                         color = colors.secondaryText,
                     )
                 },

@@ -1,5 +1,6 @@
 package com.miyu.reader.ui.library
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,12 +61,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
@@ -87,15 +90,29 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayedBooks by viewModel.displayedBooks.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
+    val context = LocalContext.current
 
     var showSortMenu by remember { mutableStateOf(false) }
     var selectedBook by remember { mutableStateOf<Book?>(null) }
     var showBookAction by remember { mutableStateOf(false) }
+    var coverTargetBookId by remember { mutableStateOf<String?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         uri?.let { viewModel.importBookFromUri(it) }
+    }
+    val coverPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        val bookId = coverTargetBookId
+        if (uri != null && bookId != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            viewModel.updateBookCover(bookId, uri)
+        }
+        coverTargetBookId = null
     }
 
     Scaffold(
@@ -125,6 +142,7 @@ fun LibraryScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .blur(if (showBookAction) 2.dp else 0.dp)
                 .background(colors.background)
                 .padding(padding)
                 .padding(horizontal = 16.dp),
@@ -179,16 +197,20 @@ fun LibraryScreen(
 
                 uiState.viewMode == ViewMode.GRID -> LazyVerticalGrid(
                     modifier = Modifier.weight(1f),
-                    columns = GridCells.Adaptive(minSize = 128.dp),
+                    columns = GridCells.Fixed(3),
                     contentPadding = PaddingValues(start = 4.dp, end = 4.dp, bottom = 104.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(displayedBooks, key = { it.id }) { book ->
                         GridBookCard(
                             book = book,
                             onPress = { onOpenBook(book.id) },
                             onLongPress = {
+                                selectedBook = book
+                                showBookAction = true
+                            },
+                            onMore = {
                                 selectedBook = book
                                 showBookAction = true
                             },
@@ -206,6 +228,10 @@ fun LibraryScreen(
                             book = book,
                             onPress = { onOpenBook(book.id) },
                             onLongPress = {
+                                selectedBook = book
+                                showBookAction = true
+                            },
+                            onMore = {
                                 selectedBook = book
                                 showBookAction = true
                             },
@@ -231,6 +257,12 @@ fun LibraryScreen(
                     selectedBook?.let { viewModel.deleteBook(it.id) }
                     showBookAction = false
                     selectedBook = null
+                },
+                onChangeCover = {
+                    coverTargetBookId = selectedBook?.id
+                    showBookAction = false
+                    selectedBook = null
+                    coverPickerLauncher.launch(arrayOf("image/*"))
                 },
             )
         }
@@ -382,6 +414,7 @@ private fun GridBookCard(
     book: Book,
     onPress: () -> Unit,
     onLongPress: () -> Unit,
+    onMore: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Box(
@@ -435,7 +468,7 @@ private fun GridBookCard(
                 color = colors.accent,
                 shape = RoundedCornerShape(50),
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.BottomEnd)
                     .padding(10.dp),
             ) {
                 Text(
@@ -447,6 +480,16 @@ private fun GridBookCard(
                 )
             }
         }
+        BookStatusDot(book = book, modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
+        IconButton(
+            onClick = onMore,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .size(32.dp),
+        ) {
+            Icon(Icons.Filled.MoreVert, contentDescription = "Book options", tint = Color.White)
+        }
     }
 }
 
@@ -456,6 +499,7 @@ private fun ListBookCard(
     book: Book,
     onPress: () -> Unit,
     onLongPress: () -> Unit,
+    onMore: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Card(
@@ -496,9 +540,30 @@ private fun ListBookCard(
                     )
                 }
             }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = colors.secondaryText)
+            BookStatusDot(book = book)
+            IconButton(onClick = onMore) {
+                Icon(Icons.Filled.MoreVert, contentDescription = "Book options", tint = colors.secondaryText)
+            }
         }
     }
+}
+
+@Composable
+private fun BookStatusDot(
+    book: Book,
+    modifier: Modifier = Modifier,
+) {
+    val color = when {
+        book.readingStatus == ReadingStatus.READING || book.progress > 0f && book.progress < 100f -> Color(0xFF22C55E)
+        book.lastReadAt == null -> Color(0xFFEF4444)
+        else -> Color(0xFF9CA3AF)
+    }
+    Surface(
+        color = color,
+        shape = CircleShape,
+        modifier = modifier.size(9.dp),
+        shadowElevation = 1.dp,
+    ) {}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -508,20 +573,39 @@ private fun BookActionSheet(
     onDismiss: () -> Unit,
     onStatusSelected: (ReadingStatus) -> Unit,
     onDelete: () -> Unit,
+    onChangeCover: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.cardBackground) {
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-            Text(
-                book.title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                color = colors.onBackground,
-            )
-            Text(book.author, style = MaterialTheme.typography.bodyMedium, color = colors.secondaryText)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BookCover(book = book, modifier = Modifier.size(82.dp, 116.dp), cornerRadius = 14)
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        book.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        color = colors.onBackground,
+                    )
+                    Text(book.author, style = MaterialTheme.typography.bodyMedium, color = colors.secondaryText)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "${book.totalChapters} chapters · ${book.progress.toInt()}%",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.secondaryText,
+                    )
+                }
+            }
             Spacer(Modifier.height(16.dp))
             HorizontalDivider()
+            ListItem(
+                headlineContent = { Text("Change Cover") },
+                supportingContent = { Text("Import an image and fit it to the book card.") },
+                leadingContent = { Icon(Icons.Outlined.Image, contentDescription = null, tint = colors.accent) },
+                modifier = Modifier.clickable(onClick = onChangeCover),
+            )
             ReadingStatus.entries.forEach { status ->
                 val icon = when (status) {
                     ReadingStatus.UNREAD -> Icons.Outlined.BookmarkBorder

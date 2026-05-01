@@ -31,7 +31,7 @@ enum class ThemeEffect { BLOSSOM, COFFEE, COMFORT, MATCHA }
 enum class PerformanceHint { STANDARD, DECORATIVE }
 
 @Keep
-enum class ThemeMode { LIGHT, DARK }
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 @Keep
 @Serializable

@@ -46,6 +46,16 @@ data class ReaderUiState(
     val highlights: List<Highlight> = emptyList(),
     val bookmarks: List<Bookmark> = emptyList(),
     val errorMessage: String? = null,
+    val selectedTermDetail: ReaderTermDetail? = null,
+)
+
+data class ReaderTermDetail(
+    val originalText: String,
+    val correctedText: String,
+    val translationText: String? = null,
+    val context: String? = null,
+    val imageUri: String? = null,
+    val groupName: String? = null,
 )
 
 @HiltViewModel
@@ -135,7 +145,7 @@ class ReaderViewModel @Inject constructor(
             try {
                 val book = _uiState.value.book
                 val replacements = if (book != null) {
-                    termRepository.getReplacementMapForBook(book.id)
+                    termRepository.getReplacementMarkupForBook(book.id)
                 } else {
                     emptyMap()
                 }
@@ -239,6 +249,29 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
+    fun updateScrollProgress(chapterScrollPercent: Float) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val book = state.book ?: return@launch
+            val safeChapterPercent = chapterScrollPercent.coerceIn(0f, 1f)
+            val overallProgress = if (state.totalChapters > 0) {
+                ((state.chapterIndex + safeChapterPercent) / state.totalChapters * 100f).coerceIn(0f, 100f)
+            } else {
+                safeChapterPercent * 100f
+            }
+            bookRepository.saveReadingPosition(
+                ReadingPosition(
+                    bookId = book.id,
+                    chapterIndex = state.chapterIndex,
+                    scrollPosition = safeChapterPercent,
+                    chapterScrollPercent = safeChapterPercent,
+                    timestamp = java.time.Instant.now().toString(),
+                )
+            )
+            bookRepository.updateProgress(book.id, state.chapterIndex, overallProgress)
+        }
+    }
+
     fun addBookmark(text: String) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -278,6 +311,7 @@ class ReaderViewModel @Inject constructor(
         translationText: String?,
         context: String?,
         groupId: String,
+        imageUri: String?,
     ) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -291,6 +325,7 @@ class ReaderViewModel @Inject constructor(
                     correctedText = correctedText.trim(),
                     translationText = translationText?.trim()?.takeIf { it.isNotBlank() },
                     context = context?.trim()?.takeIf { it.isNotBlank() },
+                    imageUri = imageUri?.trim()?.takeIf { it.isNotBlank() },
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -307,6 +342,7 @@ class ReaderViewModel @Inject constructor(
         correctedText: String,
         translationText: String?,
         context: String?,
+        imageUri: String?,
     ) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -328,6 +364,7 @@ class ReaderViewModel @Inject constructor(
                     correctedText = correctedText.trim(),
                     translationText = translationText?.trim()?.takeIf { it.isNotBlank() },
                     context = context?.trim()?.takeIf { it.isNotBlank() },
+                    imageUri = imageUri?.trim()?.takeIf { it.isNotBlank() },
                     createdAt = now,
                     updatedAt = now,
                 ),
@@ -475,5 +512,13 @@ class ReaderViewModel @Inject constructor(
 
     fun setReaderThemeId(id: String) {
         viewModelScope.launch { preferences.setReaderThemeId(id) }
+    }
+
+    fun showTermDetail(detail: ReaderTermDetail) {
+        _uiState.update { it.copy(selectedTermDetail = detail) }
+    }
+
+    fun clearTermDetail() {
+        _uiState.update { it.copy(selectedTermDetail = null) }
     }
 }

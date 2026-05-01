@@ -20,7 +20,7 @@ class UserPreferences @Inject constructor(
 ) {
     // Theme
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
-        ThemeMode.valueOf(prefs[THEME_MODE] ?: ThemeMode.LIGHT.name)
+        ThemeMode.valueOf(prefs[THEME_MODE] ?: ThemeMode.SYSTEM.name)
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {

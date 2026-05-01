@@ -60,6 +60,15 @@ class TermRepository @Inject constructor(
             .filter { it.originalText.isNotBlank() && it.correctedText.isNotBlank() }
             .associate { it.originalText to it.correctedText }
 
+    suspend fun getReplacementMarkupForBook(bookId: String): Map<String, String> =
+        getGroupsForBook(bookId)
+            .flatMap { group -> group.terms.map { term -> group to term } }
+            .filter { (_, term) -> term.originalText.isNotBlank() && term.correctedText.isNotBlank() }
+            .sortedByDescending { (_, term) -> term.originalText.length }
+            .associate { (group, term) ->
+                term.originalText to buildTermMarkup(group.name, term)
+            }
+
     suspend fun saveGroup(group: TermGroup) {
         termDao.upsertGroup(TermGroupEntity(
             id = group.id,
@@ -111,5 +120,28 @@ class TermRepository @Inject constructor(
             updatedAt = term.updatedAt,
             groupId = "",
         ))
+    }
+
+    private fun buildTermMarkup(groupName: String, term: Term): String {
+        val original = term.originalText.escapeHtml()
+        val corrected = term.correctedText.escapeHtml()
+        val translation = term.translationText.orEmpty().escapeHtml()
+        val context = term.context.orEmpty().escapeHtml()
+        val imageUri = term.imageUri.orEmpty().escapeHtml()
+        val group = groupName.escapeHtml()
+        return "<span class=\"miyu-term\" data-original=\"$original\" data-corrected=\"$corrected\" data-translation=\"$translation\" data-context=\"$context\" data-image-uri=\"$imageUri\" data-group=\"$group\">$corrected</span>"
+    }
+
+    private fun String.escapeHtml(): String = buildString {
+        this@escapeHtml.forEach { char ->
+            when (char) {
+                '&' -> append("&amp;")
+                '<' -> append("&lt;")
+                '>' -> append("&gt;")
+                '"' -> append("&quot;")
+                '\'' -> append("&#39;")
+                else -> append(char)
+            }
+        }
     }
 }

@@ -7,6 +7,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -35,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,8 +58,10 @@ import com.miyu.reader.domain.model.PageAnimation
 import com.miyu.reader.domain.model.ReaderColumnLayout
 import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
+import com.miyu.reader.viewmodel.ReaderTermDetail
 
 import android.webkit.JavascriptInterface
+import coil.compose.AsyncImage
 import com.miyu.reader.ui.reader.components.SelectionToolbar
 import com.miyu.reader.ui.reader.components.SelectionData
 import org.json.JSONObject
@@ -187,6 +193,12 @@ fun ReaderScreen(
                         settings.loadsImagesAutomatically = true
                         settings.defaultTextEncodingName = "utf-8"
                         setBackgroundColor(bgColor.toArgb())
+                        customSelectionActionModeCallback = object : ActionMode.Callback {
+                            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+                            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+                            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
+                            override fun onDestroyActionMode(mode: ActionMode?) = Unit
+                        }
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = WebViewClient()
@@ -270,6 +282,14 @@ fun ReaderScreen(
                 isLoading = uiState.dictionaryLoading,
                 readerTheme = readerTheme,
                 onDismiss = { viewModel.clearDictionary() },
+            )
+        }
+
+        uiState.selectedTermDetail?.let { detail ->
+            TermDetailBottomSheet(
+                detail = detail,
+                readerTheme = readerTheme,
+                onDismiss = { viewModel.clearTermDetail() },
             )
         }
 
@@ -496,6 +516,77 @@ fun ReaderScreen(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TermDetailBottomSheet(
+    detail: ReaderTermDetail,
+    readerTheme: ReaderThemeColors,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = readerTheme.cardBackground,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Text(
+                detail.groupName ?: "Term detail",
+                color = readerTheme.secondaryText,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                detail.correctedText,
+                color = readerTheme.text,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            )
+            Spacer(Modifier.height(16.dp))
+            detail.imageUri?.let { imageUri ->
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = detail.correctedText,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(18.dp)),
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+            TermDetailRow("Original", detail.originalText, readerTheme)
+            TermDetailRow("Replacement", detail.correctedText, readerTheme)
+            detail.translationText?.let { TermDetailRow("Translation", it, readerTheme) }
+            detail.context?.let { TermDetailRow("Context", it, readerTheme) }
+        }
+    }
+}
+
+@Composable
+private fun TermDetailRow(
+    label: String,
+    value: String,
+    readerTheme: ReaderThemeColors,
+) {
+    if (value.isBlank()) return
+    Text(
+        label.uppercase(),
+        color = readerTheme.secondaryText,
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        value,
+        color = readerTheme.text,
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Spacer(Modifier.height(14.dp))
+}
+
 @Composable
 private fun BookLoadingIndicator(
     accentColor: Color,
@@ -597,6 +688,14 @@ body {
 body :not(a) { color: $textColor !important; }
 a { color: $accentColor !important; text-decoration: none; }
 img { max-width: 100%; height: auto; }
+.miyu-term {
+  border-bottom: 2px dotted $accentColor;
+  cursor: pointer;
+  padding-bottom: 0.04em;
+}
+.miyu-term:active {
+  background: rgba(154, 119, 71, 0.16);
+}
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
 p { margin-bottom: 0.8em; }
 blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
@@ -659,6 +758,20 @@ private fun readerBridgeScript(
 <script>
 document.addEventListener('click', function(event) {
     if (event.target && event.target.closest && event.target.closest('a, button, input, textarea, select')) return;
+    var term = event.target && event.target.closest ? event.target.closest('.miyu-term') : null;
+    if (term) {
+        event.preventDefault();
+        var detail = {
+            originalText: term.getAttribute('data-original') || '',
+            correctedText: term.getAttribute('data-corrected') || term.textContent || '',
+            translationText: term.getAttribute('data-translation') || '',
+            context: term.getAttribute('data-context') || '',
+            imageUri: term.getAttribute('data-image-uri') || '',
+            groupName: term.getAttribute('data-group') || ''
+        };
+        if (window.AndroidBridge) window.AndroidBridge.onTermTapped(JSON.stringify(detail));
+        return;
+    }
     var tapZonesEnabled = $tapZones;
     var navMode = "$navMode";
     if (tapZonesEnabled) {
@@ -700,6 +813,18 @@ document.addEventListener('click', function(event) {
 	    } catch (e) {}
 	});
 	(function() {
+	    var lastProgressPost = 0;
+	    function postProgress() {
+	        var now = Date.now();
+	        if (now - lastProgressPost < 900) return;
+	        lastProgressPost = now;
+	        var doc = document.documentElement;
+	        var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
+	        var progress = Math.max(0, Math.min(1, (window.scrollY || doc.scrollTop || 0) / maxScroll));
+	        if (window.AndroidBridge) window.AndroidBridge.onScrollProgress(progress);
+	    }
+	    window.addEventListener('scroll', postProgress, { passive: true });
+	    setTimeout(postProgress, 500);
 	    if ($bionic) {
 	        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
 	            acceptNode: function(node) {
@@ -792,5 +917,29 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     @JavascriptInterface
     fun onReaderEdgeTap(delta: Int) {
         viewModel.navigateChapter(delta)
+    }
+
+    @JavascriptInterface
+    fun onScrollProgress(progress: Double) {
+        viewModel.updateScrollProgress(progress.toFloat())
+    }
+
+    @JavascriptInterface
+    fun onTermTapped(jsonStr: String) {
+        try {
+            val json = JSONObject(jsonStr)
+            viewModel.showTermDetail(
+                ReaderTermDetail(
+                    originalText = json.optString("originalText"),
+                    correctedText = json.optString("correctedText"),
+                    translationText = json.optString("translationText").takeIf { it.isNotBlank() },
+                    context = json.optString("context").takeIf { it.isNotBlank() },
+                    imageUri = json.optString("imageUri").takeIf { it.isNotBlank() },
+                    groupName = json.optString("groupName").takeIf { it.isNotBlank() },
+                )
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

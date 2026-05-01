@@ -47,7 +47,7 @@ def create_test_epub():
         zf.writestr('OEBPS/content.opf', content_opf)
         
         # ch1.html
-        ch1_html = "<html><head><title>Opening</title></head><body><p>The <b>quick</b> fox</p><img src=\"images/inline.png\"/></body></html>"
+        ch1_html = "<html><head><title>Opening</title></head><body><p>The <b>quick</b> fox</p><p>Jiu Xinnai arrived.</p><img src=\"images/inline.png\"/></body></html>"
         zf.writestr('OEBPS/ch1.html', ch1_html)
         zf.writestr('OEBPS/images/cover.png', b'fake-cover-bytes')
         zf.writestr('OEBPS/images/inline.png', b'fake-inline-image')
@@ -55,6 +55,7 @@ def create_test_epub():
 def write_cpp_test():
     cpp_code = """
 #include <iostream>
+#include <map>
 #include <string>
 #include "epub_parser.h"
 #include "epub_cover.h"
@@ -77,12 +78,18 @@ int main(int argc, char** argv) {
     std::string json = searchEpub(epubPath, cache, query);
     std::string cover = extractCover(epubPath, cache);
     std::string rendered = renderChapter(epubPath, 0, {}, cache);
+    std::map<std::string, std::string> terms = {
+        {"Jiu Xinnai", "<span class=\\\"miyu-term\\\">Red Apple</span>"},
+        {"Xinnai", "Apple"}
+    };
+    std::string termRendered = renderChapter(epubPath, 0, terms, cache);
     
     std::cout << parsed << std::endl;
     std::cout << json << std::endl;
     std::cout << "cover-bytes=" << cover.size() << std::endl;
     std::cout << "cover-prefix=" << cover.substr(0, 14) << std::endl;
     std::cout << "render-has-inline-image=" << (rendered.find("data:image/png;base64,") != std::string::npos ? "yes" : "no") << std::endl;
+    std::cout << "term-longest-replacement=" << (termRendered.find("miyu-term") != std::string::npos && termRendered.find("Red Apple") != std::string::npos && termRendered.find("Jiu Apple") == std::string::npos ? "yes" : "no") << std::endl;
     return 0;
 }
 """
@@ -173,6 +180,7 @@ def run_test():
             "cover-bytes=0" not in result.stdout
             and "cover-prefix=data:image/png" in result.stdout
             and "render-has-inline-image=yes" in result.stdout
+            and "term-longest-replacement=yes" in result.stdout
         ):
             print("SUCCESS: The parser extracted metadata, chapter contents, search offsets, and cover data.")
             print("Test PASS.")

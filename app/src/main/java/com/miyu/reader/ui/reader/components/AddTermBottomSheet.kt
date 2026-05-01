@@ -1,5 +1,8 @@
 package com.miyu.reader.ui.reader.components
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.miyu.reader.domain.model.TermGroup
@@ -52,6 +57,7 @@ fun AddTermBottomSheet(
         translationText: String?,
         context: String?,
         groupId: String,
+        imageUri: String?,
     ) -> Unit,
     onCreateGroupAndSave: (
         groupName: String,
@@ -59,16 +65,29 @@ fun AddTermBottomSheet(
         correctedText: String,
         translationText: String?,
         context: String?,
+        imageUri: String?,
     ) -> Unit,
 ) {
+    val context = LocalContext.current
     var originalText by remember(selectedText) { mutableStateOf(selectedText) }
     var correctedText by remember(selectedText) { mutableStateOf("") }
     var translationText by remember(selectedText) { mutableStateOf("") }
     var contextText by remember(selectedText) { mutableStateOf("") }
+    var imageUri by remember(selectedText) { mutableStateOf<String?>(null) }
     var selectedGroupId by remember(groups) { mutableStateOf(groups.firstOrNull()?.id) }
     var groupMenuOpen by remember { mutableStateOf(false) }
     var createNewGroup by remember(groups) { mutableStateOf(groups.isEmpty()) }
     var newGroupName by remember { mutableStateOf("") }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        imageUri = uri.toString()
+    }
 
     val canSave = originalText.isNotBlank() &&
         correctedText.isNotBlank() &&
@@ -130,6 +149,19 @@ fun AddTermBottomSheet(
                 onValueChange = { contextText = it },
                 readerTheme = readerTheme,
             )
+
+            OutlinedButton(
+                onClick = { imagePicker.launch(arrayOf("image/*")) },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Image, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (imageUri == null) "Attach image to term" else "Image attached",
+                    color = readerTheme.accent,
+                )
+            }
 
             Spacer(Modifier.height(8.dp))
 
@@ -205,9 +237,9 @@ fun AddTermBottomSheet(
                     shape = RoundedCornerShape(12.dp),
                     onClick = {
                         if (createNewGroup) {
-                            onCreateGroupAndSave(newGroupName, originalText, correctedText, translationText, contextText)
+                            onCreateGroupAndSave(newGroupName, originalText, correctedText, translationText, contextText, imageUri)
                         } else {
-                            onSaveToGroup(originalText, correctedText, translationText, contextText, selectedGroupId ?: return@Button)
+                            onSaveToGroup(originalText, correctedText, translationText, contextText, selectedGroupId ?: return@Button, imageUri)
                         }
                     },
                 ) {

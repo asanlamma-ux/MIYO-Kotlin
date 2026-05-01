@@ -39,8 +39,9 @@ fun ReaderLayoutPanelBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.78f)
-                .padding(bottom = 24.dp)
+                .fillMaxHeight(0.72f)
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
         ) {
             // Drag handle
             Box(
@@ -71,7 +72,7 @@ fun ReaderLayoutPanelBottomSheet(
                             color = readerTheme.text,
                         )
                         Text(
-                            "Similar to Koodo-style reading controls",
+                    "Reader controls",
                             color = readerTheme.secondaryText,
                             fontSize = 12.sp,
                         )
@@ -281,9 +282,11 @@ private fun ToggleRow(
             .clickable(onClick = onToggle)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f),
+        ) {
             Icon(
                 icon,
                 contentDescription = null,
@@ -291,7 +294,7 @@ private fun ToggleRow(
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(12.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     title,
                     color = readerTheme.text,
@@ -305,18 +308,16 @@ private fun ToggleRow(
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.35f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                if (active) "ON" else "OFF",
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = active,
+            onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = readerTheme.accent,
+                checkedThumbColor = readerTheme.background,
+                uncheckedTrackColor = readerTheme.secondaryText.copy(alpha = 0.22f),
+                uncheckedThumbColor = readerTheme.cardBackground,
             )
-        }
+        )
     }
 }
