@@ -47,7 +47,7 @@ def create_test_epub():
         zf.writestr('OEBPS/content.opf', content_opf)
         
         # ch1.html
-        ch1_html = "<html><head><title>Opening</title></head><body><p>The <b>quick</b> fox</p><p>Jiu Xinnai arrived.</p><img src=\"images/inline.png\"/></body></html>"
+        ch1_html = "<html><head><title>Opening</title></head><body><p>The <b>quick</b> fox</p><p>Jiu Xinnai arrived.</p><p>Xinnai Jiu returned.</p><img src=\"images/inline.png\"/></body></html>"
         zf.writestr('OEBPS/ch1.html', ch1_html)
         zf.writestr('OEBPS/images/cover.png', b'fake-cover-bytes')
         zf.writestr('OEBPS/images/inline.png', b'fake-inline-image')
@@ -79,8 +79,9 @@ int main(int argc, char** argv) {
     std::string cover = extractCover(epubPath, cache);
     std::string rendered = renderChapter(epubPath, 0, {}, cache);
     std::map<std::string, std::string> terms = {
-        {"Jiu Xinnai", "<span class=\\\"miyu-term\\\">Red Apple</span>"},
-        {"Xinnai", "Apple"}
+        {"Jiu Xinnai", "<span class=\\\"miyu-term\\\" data-original=\\\"Jiu Xinnai\\\" data-corrected=\\\"Red Apple\\\">Red Apple</span>"},
+        {"Xinnai", "<span class=\\\"miyu-term\\\" data-original=\\\"Xinnai\\\" data-corrected=\\\"Apple\\\">Apple</span>"},
+        {"Jiu", "<span class=\\\"miyu-term\\\" data-original=\\\"Jiu\\\" data-corrected=\\\"Red\\\">Red</span>"}
     };
     std::string termRendered = renderChapter(epubPath, 0, terms, cache);
     
@@ -89,7 +90,9 @@ int main(int argc, char** argv) {
     std::cout << "cover-bytes=" << cover.size() << std::endl;
     std::cout << "cover-prefix=" << cover.substr(0, 14) << std::endl;
     std::cout << "render-has-inline-image=" << (rendered.find("data:image/png;base64,") != std::string::npos ? "yes" : "no") << std::endl;
-    std::cout << "term-longest-replacement=" << (termRendered.find("miyu-term") != std::string::npos && termRendered.find("Red Apple") != std::string::npos && termRendered.find("Jiu Apple") == std::string::npos ? "yes" : "no") << std::endl;
+    bool phraseWins = termRendered.find("Red Apple</span> arrived") != std::string::npos;
+    bool reverseFallsBack = termRendered.find("Apple</span> <span class=\\\"miyu-term\\\" data-original=\\\"Jiu\\\" data-corrected=\\\"Red\\\">Red</span> returned") != std::string::npos;
+    std::cout << "term-longest-replacement=" << (phraseWins && reverseFallsBack ? "yes" : "no") << std::endl;
     return 0;
 }
 """

@@ -88,6 +88,17 @@ fun ReaderScreen(
     val jsInterface: ReaderJsInterface = remember(viewModel) {
         ReaderJsInterface(viewModel)
     }
+    val readerWebViewRef = remember { java.util.concurrent.atomic.AtomicReference<WebView?>() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            readerWebViewRef.get()?.evaluateJavascript(
+                "if (window.MIYU_POST_PROGRESS) window.MIYU_POST_PROGRESS();",
+                null,
+            )
+            readerWebViewRef.set(null)
+        }
+    }
 
     DisposableEffect(readingSettings.immersiveMode, readingSettings.keepScreenOn, context) {
         val activity = context.findActivity()
@@ -202,10 +213,16 @@ fun ReaderScreen(
                         @SuppressLint("JavascriptInterface")
                         addJavascriptInterface(jsInterface, "AndroidBridge")
                         webViewClient = WebViewClient()
-                    }
+                    }.also { readerWebViewRef.set(it) }
                 },
                 update = { webView ->
                     webView.setBackgroundColor(bgColor.toArgb())
+                    val restorePercent = uiState.chapterScrollPercent.coerceIn(0f, 1f)
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            view?.evaluateJavascript(restoreReaderScrollScript(restorePercent), null)
+                        }
+                    }
                     val baseUrl = uiState.book?.filePath
                         ?.substringBeforeLast('/', missingDelimiterValue = "")
                         ?.takeIf { it.isNotBlank() }
@@ -742,6 +759,11 @@ private fun extractBodyContent(html: String): String {
     return bodyMatch?.groupValues?.getOrNull(1) ?: html
 }
 
+private fun restoreReaderScrollScript(percent: Float): String {
+    val safePercent = percent.coerceIn(0f, 1f)
+    return "if (window.MIYU_RESTORE_SCROLL) window.MIYU_RESTORE_SCROLL($safePercent);"
+}
+
 private fun readerBridgeScript(
     tapZonesEnabled: Boolean,
     tapScrollPageRatio: Float,
@@ -789,7 +811,40 @@ document.addEventListener('click', function(event) {
     }
     if (window.AndroidBridge) window.AndroidBridge.onReaderTap();
 });
-	document.addEventListener('selectionchange', function() {
+
+function normalizeSelectionText(value) {
+    return (value || '').replace(/\s+/g, ' ').trim();
+}
+
+function originalAwareText(node) {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return '';
+    if (node.nodeType === Node.ELEMENT_NODE && node.classList && node.classList.contains('miyu-term')) {
+        var selected = node.textContent || '';
+        var corrected = node.getAttribute('data-corrected') || selected;
+        var original = node.getAttribute('data-original') || '';
+        return original && normalizeSelectionText(selected) === normalizeSelectionText(corrected)
+            ? original
+            : selected;
+    }
+    var output = '';
+    for (var i = 0; i < node.childNodes.length; i++) {
+        output += originalAwareText(node.childNodes[i]);
+    }
+    return output;
+}
+
+function originalTextForSelection(selection) {
+    try {
+        if (!selection || selection.rangeCount === 0) return '';
+        return normalizeSelectionText(originalAwareText(selection.getRangeAt(0).cloneContents()));
+    } catch (e) {
+        return '';
+    }
+}
+
+document.addEventListener('selectionchange', function() {
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
         if (window.AndroidBridge) window.AndroidBridge.onSelectionChanged("null");
@@ -802,8 +857,10 @@ document.addEventListener('click', function(event) {
     }
     try {
         var rect = sel.getRangeAt(0).getBoundingClientRect();
+        var originalText = originalTextForSelection(sel);
         var data = {
             text: text,
+            originalText: originalText,
             x: rect.left,
             y: rect.top,
             width: rect.width,
@@ -814,17 +871,42 @@ document.addEventListener('click', function(event) {
 	});
 	(function() {
 	    var lastProgressPost = 0;
-	    function postProgress() {
-	        var now = Date.now();
-	        if (now - lastProgressPost < 900) return;
-	        lastProgressPost = now;
+	    function currentProgress() {
 	        var doc = document.documentElement;
 	        var maxScroll = Math.max(1, doc.scrollHeight - window.innerHeight);
-	        var progress = Math.max(0, Math.min(1, (window.scrollY || doc.scrollTop || 0) / maxScroll));
+	        return Math.max(0, Math.min(1, (window.scrollY || doc.scrollTop || 0) / maxScroll));
+	    }
+	    function postProgress(force) {
+	        var now = Date.now();
+	        if (!force && now - lastProgressPost < 900) return;
+	        lastProgressPost = now;
+	        var progress = currentProgress();
 	        if (window.AndroidBridge) window.AndroidBridge.onScrollProgress(progress);
 	    }
-	    window.addEventListener('scroll', postProgress, { passive: true });
-	    setTimeout(postProgress, 500);
+	    window.MIYU_POST_PROGRESS = function() { postProgress(true); };
+	    window.MIYU_RESTORE_SCROLL = function(percent) {
+	        var safePercent = Math.max(0, Math.min(1, Number(percent) || 0));
+	        var attempts = 0;
+	        function applyRestore() {
+	            var doc = document.documentElement;
+	            var maxScroll = Math.max(0, doc.scrollHeight - window.innerHeight);
+	            window.scrollTo(0, Math.round(maxScroll * safePercent));
+	            attempts += 1;
+	            if (attempts < 6) {
+	                setTimeout(applyRestore, attempts * 120);
+	            } else {
+	                postProgress(true);
+	            }
+	        }
+	        requestAnimationFrame(applyRestore);
+	    };
+	    window.addEventListener('scroll', function() { postProgress(false); }, { passive: true });
+	    window.addEventListener('pagehide', function() { postProgress(true); });
+	    window.addEventListener('beforeunload', function() { postProgress(true); });
+	    document.addEventListener('visibilitychange', function() {
+	        if (document.visibilityState === 'hidden') postProgress(true);
+	    });
+	    setTimeout(function() { postProgress(false); }, 500);
 	    if ($bionic) {
 	        var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
 	            acceptNode: function(node) {
@@ -898,6 +980,7 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
             }
             val selection = SelectionData(
                 text = text,
+                originalText = json.optString("originalText").takeIf { it.isNotBlank() },
                 x = json.getDouble("x").toFloat(),
                 y = json.getDouble("y").toFloat(),
                 width = json.getDouble("width").toFloat(),

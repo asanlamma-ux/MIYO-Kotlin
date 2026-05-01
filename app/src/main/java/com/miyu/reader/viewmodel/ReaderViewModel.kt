@@ -25,6 +25,7 @@ data class ReaderUiState(
     val book: Book? = null,
     val chapterHtml: String = "",
     val chapterIndex: Int = 0,
+    val chapterScrollPercent: Float = 0f,
     val totalChapters: Int = 0,
     val showControls: Boolean = false,
     val showChapterDrawer: Boolean = false,
@@ -103,11 +104,15 @@ class ReaderViewModel @Inject constructor(
                 }
                 val position = bookRepository.getReadingPosition(bookId)
                 val chapterIndex = position?.chapterIndex ?: 0
+                val chapterScrollPercent = (
+                    position?.chapterScrollPercent ?: position?.scrollPosition ?: 0f
+                ).coerceIn(0f, 1f)
 
                 _uiState.update {
                     it.copy(
                         book = book,
                         chapterIndex = chapterIndex,
+                        chapterScrollPercent = chapterScrollPercent,
                         totalChapters = book.totalChapters,
                         activeTermGroups = termRepository.getAllGroupsOnce(),
                         errorMessage = null,
@@ -189,6 +194,7 @@ class ReaderViewModel @Inject constructor(
         if (newIndex != state.chapterIndex) {
             loadChapter(newIndex, book.filePath)
             savePosition(newIndex, 0f)
+            _uiState.update { it.copy(chapterScrollPercent = 0f) }
         }
     }
 
@@ -226,7 +232,7 @@ class ReaderViewModel @Inject constructor(
         val book = _uiState.value.book ?: return
         loadChapter(index, book.filePath)
         savePosition(index, 0f)
-        _uiState.update { it.copy(showChapterDrawer = false) }
+        _uiState.update { it.copy(showChapterDrawer = false, chapterScrollPercent = 0f) }
     }
 
     private fun savePosition(chapterIndex: Int, scrollPercent: Float) {
@@ -243,7 +249,8 @@ class ReaderViewModel @Inject constructor(
             )
             // Update overall progress
             if (book.totalChapters > 0) {
-                val progress = ((chapterIndex + 1).toFloat() / book.totalChapters * 100f).coerceIn(0f, 100f)
+                val progress = ((chapterIndex + scrollPercent.coerceIn(0f, 1f)) / book.totalChapters * 100f)
+                    .coerceIn(0f, 100f)
                 bookRepository.updateProgress(book.id, chapterIndex, progress)
             }
         }
@@ -254,6 +261,13 @@ class ReaderViewModel @Inject constructor(
             val state = _uiState.value
             val book = state.book ?: return@launch
             val safeChapterPercent = chapterScrollPercent.coerceIn(0f, 1f)
+            _uiState.update { current ->
+                if (current.chapterIndex == state.chapterIndex) {
+                    current.copy(chapterScrollPercent = safeChapterPercent)
+                } else {
+                    current
+                }
+            }
             val overallProgress = if (state.totalChapters > 0) {
                 ((state.chapterIndex + safeChapterPercent) / state.totalChapters * 100f).coerceIn(0f, 100f)
             } else {
