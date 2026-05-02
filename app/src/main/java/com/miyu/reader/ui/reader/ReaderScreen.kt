@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.security.ReaderHtmlSanitizer
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.core.theme.MiyoSpacing
+import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
 import com.miyu.reader.ui.theme.SpecialThemeBackdrop
@@ -93,7 +94,8 @@ fun ReaderScreen(
     val readerThemeId by viewModel.readerThemeId.collectAsStateWithLifecycle()
     val readingSettings by viewModel.readingSettings.collectAsStateWithLifecycle()
     val typography by viewModel.typography.collectAsStateWithLifecycle()
-    val readerTheme = ReaderColors.findById(readerThemeId)
+    val shellColors = LocalMIYUColors.current
+    val readerTheme = ReaderColors.shellThemeFor(readerThemeId, shellColors.isDark)
 
     val bgColor = readerTheme.background
     val textColor = readerTheme.text

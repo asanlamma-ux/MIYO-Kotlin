@@ -53,5 +53,6 @@ interface NovelSourcePlugin {
         startChapter: Int,
         endChapter: Int,
         concurrency: Int,
+        onProgress: ((completed: Int, total: Int) -> Unit)? = null,
     ): GeneratedOnlineNovelEpub
 }

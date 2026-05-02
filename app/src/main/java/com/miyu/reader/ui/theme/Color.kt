@@ -218,6 +218,19 @@ object ReaderColors {
         assetPack = SpecialThemeAsset.MATCHA,
     )
 
+    val MatchaPaperNight = ReaderThemeColors(
+        id = "matcha-paper-night",
+        name = "Matcha Paper",
+        background = Color(0xFF10160F),
+        text = Color(0xFFE5EBDD),
+        accent = Color(0xFFA8C77A),
+        secondaryText = Color(0xFFB4BDAA),
+        cardBackground = Color(0xFF1B2418),
+        isDark = true,
+        isSpecial = true,
+        assetPack = SpecialThemeAsset.MATCHA,
+    )
+
     val InkStone = ReaderThemeColors(
         id = "ink-stone",
         name = "Ink Stone",
@@ -280,6 +293,8 @@ object ReaderColors {
             SepiaClassic.id -> if (darkMode) NightMode else SepiaClassic
             PeachBlossom.id -> if (darkMode) PeachBlossomNight else PeachBlossom
             DarkCoffee.id -> if (darkMode) DarkCoffee else CoffeeCream
+            MatchaPaper.id -> if (darkMode) MatchaPaperNight else MatchaPaper
+            MatchaPaperNight.id -> if (darkMode) MatchaPaperNight else MatchaPaper
             else -> selected
         }
     }

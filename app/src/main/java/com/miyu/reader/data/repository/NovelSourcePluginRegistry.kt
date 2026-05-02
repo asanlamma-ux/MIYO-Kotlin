@@ -89,8 +89,9 @@ class NovelSourcePluginRegistry @Inject constructor(
         startChapter: Int,
         endChapter: Int,
         concurrency: Int,
+        onProgress: ((completed: Int, total: Int) -> Unit)? = null,
     ): GeneratedOnlineNovelEpub =
-        plugin(sourceId).downloadAsEpub(novel, startChapter, endChapter, concurrency)
+        plugin(sourceId).downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
 
     private fun plugin(sourceId: String): NovelSourcePlugin =
         builtInPlugins[sourceId] ?: error("Source plugin is not installed or cannot run yet.")
@@ -127,8 +128,9 @@ private class BuiltInNovelSourcePlugin(
         startChapter: Int,
         endChapter: Int,
         concurrency: Int,
+        onProgress: ((completed: Int, total: Int) -> Unit)?,
     ): GeneratedOnlineNovelEpub =
-        repository.downloadAsEpub(novel, startChapter, endChapter, concurrency)
+        repository.downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
 }
 
 private fun OnlineNovelProvider.toSourcePluginId(): String =

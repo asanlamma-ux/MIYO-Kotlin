@@ -120,7 +120,7 @@ class ReaderViewModel @Inject constructor(
                 val chapterIndex = if (launchChapterIndex >= 0) {
                     launchChapterIndex
                 } else {
-                    position?.chapterIndex ?: 0
+                    position?.chapterIndex ?: book.currentChapter
                 }
                 val chapterScrollPercent = (
                     if (launchChapterIndex >= 0) 0f else position?.chapterScrollPercent ?: position?.scrollPosition ?: 0f

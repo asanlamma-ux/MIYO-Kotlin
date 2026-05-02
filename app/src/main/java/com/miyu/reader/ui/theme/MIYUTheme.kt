@@ -49,7 +49,11 @@ fun MIYUTheme(
             secondary = Secondary,
             background = shellTheme.background,
             surface = shellTheme.cardBackground,
+            onBackground = shellTheme.text,
             onSurface = shellTheme.text,
+            surfaceVariant = shellTheme.cardBackground,
+            onSurfaceVariant = shellTheme.secondaryText,
+            outline = shellTheme.secondaryText.copy(alpha = 0.35f),
             error = Error,
         )
     } else {

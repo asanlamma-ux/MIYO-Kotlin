@@ -49,7 +49,7 @@ class BookRepository @Inject constructor(
         val readingStatus = when {
             progress >= 100f -> ReadingStatus.FINISHED
             progress > 0f -> ReadingStatus.READING
-            else -> book.readingStatus
+            else -> ReadingStatus.UNREAD
         }
         bookDao.upsertBook(book.copy(
             currentChapter = chapterIndex,

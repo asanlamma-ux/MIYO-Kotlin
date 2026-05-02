@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.domain.model.Book
+import com.miyu.reader.domain.model.ReadingPosition
 import com.miyu.reader.domain.model.ReadingStatus
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,6 +21,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.Instant
 import javax.inject.Inject
 
 data class BookDetailsChapter(
@@ -161,6 +163,47 @@ class BookDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             val book = _uiState.value.book ?: return@launch
             bookRepository.saveBook(book.copy(coverUri = coverUri.toString()))
+        }
+    }
+
+    fun markChaptersRead(chapterIndexes: Set<Int>) {
+        updateSelectedChapterProgress(chapterIndexes, markRead = true)
+    }
+
+    fun markChaptersUnread(chapterIndexes: Set<Int>) {
+        updateSelectedChapterProgress(chapterIndexes, markRead = false)
+    }
+
+    private fun updateSelectedChapterProgress(chapterIndexes: Set<Int>, markRead: Boolean) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val book = state.book ?: return@launch
+            val totalChapters = (book.totalChapters.takeIf { it > 0 } ?: state.chapters.size).coerceAtLeast(1)
+            val maxChapterIndex = totalChapters - 1
+            val normalized = chapterIndexes
+                .map { it.coerceIn(0, maxChapterIndex) }
+                .distinct()
+                .sorted()
+            if (normalized.isEmpty()) return@launch
+
+            val completedChapters = if (markRead) {
+                (normalized.last() + 1).coerceIn(0, totalChapters)
+            } else {
+                normalized.first().coerceIn(0, totalChapters)
+            }
+            val targetChapter = completedChapters.coerceIn(0, maxChapterIndex)
+            val progress = (completedChapters / totalChapters.toFloat() * 100f).coerceIn(0f, 100f)
+            val timestamp = Instant.now().toString()
+            bookRepository.saveReadingPosition(
+                ReadingPosition(
+                    bookId = book.id,
+                    chapterIndex = targetChapter,
+                    scrollPosition = 0f,
+                    chapterScrollPercent = 0f,
+                    timestamp = timestamp,
+                ),
+            )
+            bookRepository.updateProgress(book.id, targetChapter, progress)
         }
     }
 

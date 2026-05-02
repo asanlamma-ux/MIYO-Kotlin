@@ -80,10 +80,11 @@ fun MiyoMainOverflowMenu(
     modifier: Modifier = Modifier,
     extraItems: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
 ) {
+    val colors = LocalMIYUColors.current
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+            Icon(Icons.Filled.MoreVert, contentDescription = "More options", tint = colors.onBackground)
         }
         DropdownMenu(
             expanded = expanded,

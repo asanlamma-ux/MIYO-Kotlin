@@ -11,6 +11,8 @@ import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineNovelDetails
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
+import com.miyu.reader.notifications.OnlineDownloadNotifier
+import com.miyu.reader.util.MiyoApplicationScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +39,16 @@ data class GlobalSearchSourceResult(
     val error: String? = null,
 )
 
+data class BrowseDownloadProgress(
+    val key: String,
+    val title: String,
+    val completed: Int,
+    val total: Int,
+) {
+    val fraction: Float
+        get() = if (total <= 0) 0f else completed.coerceIn(0, total) / total.toFloat()
+}
+
 data class BrowseUiState(
     val installedSources: List<NovelSourcePluginItem> = emptyList(),
     val availableSources: List<NovelSourcePluginItem> = emptyList(),
@@ -62,6 +74,7 @@ data class BrowseUiState(
     val loading: Boolean = false,
     val detailsLoading: Boolean = false,
     val downloadingKey: String? = null,
+    val downloadProgress: BrowseDownloadProgress? = null,
     val generatedEpub: GeneratedOnlineNovelEpub? = null,
     val selectedNovelSummary: OnlineNovelSummary? = null,
     val selectedNovelDetails: OnlineNovelDetails? = null,
@@ -135,6 +148,8 @@ data class BrowseUiState(
 class BrowseViewModel @Inject constructor(
     private val sourceRegistry: NovelSourcePluginRegistry,
     private val preferences: UserPreferences,
+    private val appScope: MiyoApplicationScope,
+    private val downloadNotifier: OnlineDownloadNotifier,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         BrowseUiState(
@@ -454,32 +469,50 @@ class BrowseViewModel @Inject constructor(
             return
         }
         val downloadKey = "${details.providerId}:${details.path}"
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    downloadingKey = downloadKey,
-                    generatedEpub = null,
-                    error = null,
-                )
-            }
+        val progressTotal = chapters.take(250).size
+        _uiState.update {
+            it.copy(
+                downloadingKey = downloadKey,
+                downloadProgress = BrowseDownloadProgress(downloadKey, details.title, 0, progressTotal),
+                generatedEpub = null,
+                error = null,
+            )
+        }
+        downloadNotifier.showProgress(downloadKey, details.title, 0, progressTotal)
+        appScope.scope.launch {
             runCatching {
                 val start = chapters.first().order
                 val end = chapters.take(250).last().order
-                sourceRegistry.downloadAsEpub(sourceId, details, start, end, _uiState.value.downloadConcurrency)
+                sourceRegistry.downloadAsEpub(
+                    sourceId,
+                    details,
+                    start,
+                    end,
+                    _uiState.value.downloadConcurrency,
+                ) { completed, total ->
+                    val progress = BrowseDownloadProgress(downloadKey, details.title, completed, total)
+                    _uiState.update { it.copy(downloadProgress = progress) }
+                    downloadNotifier.showProgress(downloadKey, details.title, completed, total)
+                }
             }.onSuccess { generated ->
+                downloadNotifier.showComplete(downloadKey, details.title, generated.fileName)
                 _uiState.update {
                     it.copy(
                         downloadingKey = null,
+                        downloadProgress = null,
                         generatedEpub = generated,
                         error = null,
                     )
                 }
             }.onFailure { error ->
+                val message = error.message ?: "Novel download failed."
+                downloadNotifier.showError(downloadKey, details.title, message)
                 _uiState.update {
                     it.copy(
                         downloadingKey = null,
+                        downloadProgress = null,
                         generatedEpub = null,
-                        error = error.message ?: "Novel download failed.",
+                        error = message,
                     )
                 }
             }
@@ -497,35 +530,52 @@ class BrowseViewModel @Inject constructor(
             return
         }
         val downloadKey = "${summary.providerId}:${summary.path}"
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    downloadingKey = downloadKey,
-                    generatedEpub = null,
-                    error = null,
-                )
-            }
+        _uiState.update {
+            it.copy(
+                downloadingKey = downloadKey,
+                downloadProgress = BrowseDownloadProgress(downloadKey, summary.title, 0, 1),
+                generatedEpub = null,
+                error = null,
+            )
+        }
+        downloadNotifier.showProgress(downloadKey, summary.title, 0, 1)
+        appScope.scope.launch {
             runCatching {
                 val details = sourceRegistry.details(summary)
                 val chapters = details.chapters.sortedBy { chapter -> chapter.order }
                 if (chapters.isEmpty()) error("No chapters were found for ${details.title}.")
                 val start = chapters.first().order
                 val end = chapters.take(250).last().order
-                sourceRegistry.downloadAsEpub(sourceId, details, start, end, _uiState.value.downloadConcurrency)
+                sourceRegistry.downloadAsEpub(
+                    sourceId,
+                    details,
+                    start,
+                    end,
+                    _uiState.value.downloadConcurrency,
+                ) { completed, total ->
+                    val progress = BrowseDownloadProgress(downloadKey, details.title, completed, total)
+                    _uiState.update { it.copy(downloadProgress = progress) }
+                    downloadNotifier.showProgress(downloadKey, details.title, completed, total)
+                }
             }.onSuccess { generated ->
+                downloadNotifier.showComplete(downloadKey, generated.title, generated.fileName)
                 _uiState.update {
                     it.copy(
                         downloadingKey = null,
+                        downloadProgress = null,
                         generatedEpub = generated,
                         error = null,
                     )
                 }
             }.onFailure { error ->
+                val message = error.message ?: "Novel download failed."
+                downloadNotifier.showError(downloadKey, summary.title, message)
                 _uiState.update {
                     it.copy(
                         downloadingKey = null,
+                        downloadProgress = null,
                         generatedEpub = null,
-                        error = error.message ?: "Novel download failed.",
+                        error = message,
                     )
                 }
             }

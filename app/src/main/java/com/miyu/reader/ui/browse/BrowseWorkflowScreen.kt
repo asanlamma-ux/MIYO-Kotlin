@@ -105,6 +105,7 @@ import com.miyu.reader.ui.core.components.MiyoWorkspaceExitButton
 import com.miyu.reader.ui.core.components.MiyoWorkspaceSurface
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
+import com.miyu.reader.viewmodel.BrowseDownloadProgress
 import com.miyu.reader.viewmodel.BrowseSourceTab
 import com.miyu.reader.viewmodel.BrowseViewModel
 import com.miyu.reader.viewmodel.GlobalSearchSourceResult
@@ -494,12 +495,9 @@ fun SourceWorkflowDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
                     ) {
                         row.forEach { novel ->
-                            val key = "${novel.providerId}:${novel.path}"
                             NovelCoverTile(
                                 novel = novel,
-                                downloading = state.downloadingKey == key,
                                 onOpen = { onOpenNovel(novel) },
-                                onDownload = { viewModel.downloadNovel(source.id, novel) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -685,8 +683,6 @@ fun GlobalSourceSearchScreen(
                             onOpenSource(result.source.id)
                         },
                         onOpenNovel = onOpenNovel,
-                        onDownload = { novel -> viewModel.downloadNovel(result.source.id, novel) },
-                        downloadingKey = state.downloadingKey,
                     )
                 }
                 if (state.visibleGlobalSearchResults.isEmpty() && !state.loading) {
@@ -743,7 +739,9 @@ fun OnlineNovelDetailsScreen(
 
         val details = state.selectedNovelDetails
         val summary = state.selectedNovelSummary
-        val downloading = details?.let { state.downloadingKey == "${it.providerId}:${it.path}" } == true
+        val downloadKey = details?.let { "${it.providerId}:${it.path}" }
+        val downloading = downloadKey?.let { state.downloadingKey == it } == true
+        val downloadProgress = state.downloadProgress?.takeIf { it.key == downloadKey }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -757,6 +755,7 @@ fun OnlineNovelDetailsScreen(
                     fallbackTitle = fallbackTitle,
                     loading = state.detailsLoading,
                     downloading = downloading,
+                    downloadProgress = downloadProgress,
                     onDownload = {
                         details?.let(viewModel::downloadNovelDetails)
                     },
@@ -809,6 +808,7 @@ private fun OnlineNovelHeroCard(
     fallbackTitle: String?,
     loading: Boolean,
     downloading: Boolean,
+    downloadProgress: BrowseDownloadProgress?,
     onDownload: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
@@ -872,6 +872,21 @@ private fun OnlineNovelHeroCard(
                         details?.status?.takeIf { it.isNotBlank() && it != "Unknown" }?.let { SourcePill(it) }
                         chapterCount?.let { SourcePill("$it chapters") }
                     }
+                    if (downloadProgress != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress.fraction },
+                                color = colors.accent,
+                                trackColor = colors.secondaryText.copy(alpha = 0.18f),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Text(
+                                "${downloadProgress.completed}/${downloadProgress.total} chapters",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = colors.secondaryText,
+                            )
+                        }
+                    }
                     Button(
                         onClick = onDownload,
                         enabled = details != null && details.chapters.isNotEmpty() && !downloading,
@@ -891,7 +906,7 @@ private fun OnlineNovelHeroCard(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when {
-                                downloading -> "Exporting"
+                                downloading -> downloadProgress?.let { "Exporting ${it.completed}/${it.total}" } ?: "Exporting"
                                 details == null -> "Loading"
                                 details.chapters.isEmpty() -> "No chapters"
                                 else -> "Download EPUB"
@@ -1168,8 +1183,6 @@ private fun GlobalSearchSourceResultBlock(
     result: GlobalSearchSourceResult,
     onOpenSource: () -> Unit,
     onOpenNovel: (OnlineNovelSummary) -> Unit,
-    onDownload: (OnlineNovelSummary) -> Unit,
-    downloadingKey: String?,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1216,9 +1229,7 @@ private fun GlobalSearchSourceResultBlock(
                 items(result.novels, key = { "${result.source.id}:${it.path}" }) { novel ->
                     GlobalNovelCoverTile(
                         novel = novel,
-                        downloading = downloadingKey == "${novel.providerId}:${novel.path}",
                         onOpen = { onOpenNovel(novel) },
-                        onDownload = { onDownload(novel) },
                     )
                 }
             }
@@ -1900,9 +1911,7 @@ private fun GeneratedEpubCard(
 @Composable
 private fun GlobalNovelCoverTile(
     novel: OnlineNovelSummary,
-    downloading: Boolean,
     onOpen: () -> Unit,
-    onDownload: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Column(
@@ -1947,43 +1956,6 @@ private fun GlobalNovelCoverTile(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (downloading) {
-                Surface(
-                    color = colors.accent.copy(alpha = 0.92f),
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .size(44.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(28.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 3.dp,
-                        )
-                    }
-                }
-            } else {
-                Surface(
-                    color = colors.cardBackground.copy(alpha = 0.88f),
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .size(36.dp)
-                        .clickable(onClick = onDownload),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Outlined.CloudDownload,
-                            contentDescription = "Download EPUB",
-                            tint = colors.accent,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -1999,9 +1971,7 @@ private fun GlobalNovelCoverTile(
 @Composable
 private fun NovelCoverTile(
     novel: OnlineNovelSummary,
-    downloading: Boolean,
     onOpen: () -> Unit,
-    onDownload: () -> Unit,
     modifier: Modifier = Modifier,
     width: androidx.compose.ui.unit.Dp? = null,
 ) {
@@ -2065,107 +2035,6 @@ private fun NovelCoverTile(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        OutlinedButton(
-            onClick = onDownload,
-            enabled = !downloading,
-            shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp),
-        ) {
-            if (downloading) {
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colors.accent)
-            } else {
-                Icon(Icons.Outlined.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun NovelResultCard(
-    novel: OnlineNovelSummary,
-    downloading: Boolean,
-    onDownload: () -> Unit,
-) {
-    val colors = LocalMIYUColors.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(MiyoSpacing.medium),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = colors.accent.copy(alpha = 0.10f),
-                modifier = Modifier.size(width = 72.dp, height = 102.dp),
-            ) {
-                if (novel.coverUrl != null) {
-                    AsyncImage(
-                        model = novel.coverUrl,
-                        contentDescription = novel.title,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent)
-                    }
-                }
-            }
-            Spacer(Modifier.width(MiyoSpacing.medium))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    novel.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                    color = colors.onBackground,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    novel.author,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.secondaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    novel.summary.ifBlank { novel.status },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
-                    SourcePill(novel.providerLabel)
-                    novel.chapterCount?.let { SourcePill("$it chapters") }
-                }
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onDownload,
-                    enabled = !downloading,
-                    shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    if (downloading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = colors.accent,
-                        )
-                    } else {
-                        Icon(Icons.Outlined.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (downloading) "Exporting" else "Download EPUB", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
     }
 }
 

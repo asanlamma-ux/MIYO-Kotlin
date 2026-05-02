@@ -25,6 +25,8 @@ import org.jsoup.Connection
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
@@ -34,6 +36,7 @@ import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -50,10 +53,9 @@ class OnlineNovelRepository @Inject constructor(
         OnlineNovelProvider(
             id = OnlineNovelProviderId.WTR_LAB,
             label = "WTR-LAB",
-            description = "Protected source from the RN app. Requires the browser verification bridge.",
+            description = "WTR-LAB Next/API source with AI-translated chapter bodies.",
             baseUrl = "https://wtr-lab.com/",
             startUrl = "https://wtr-lab.com/en/novel-finder",
-            requiresBrowserVerification = true,
         ),
         OnlineNovelProvider(
             id = OnlineNovelProviderId.FANMTL,
@@ -106,10 +108,9 @@ class OnlineNovelRepository @Inject constructor(
         cursor: String? = null,
     ): OnlineNovelSearchResult = withContext(Dispatchers.IO) {
         val provider = provider(providerId)
-        if (provider.requiresBrowserVerification) {
-            error("${provider.label} requires the in-app browser verification card before search can run.")
-        }
-        if (providerId in siteProviders) {
+        if (providerId == OnlineNovelProviderId.WTR_LAB) {
+            searchWtr(provider, query, page.coerceAtLeast(1))
+        } else if (providerId in siteProviders) {
             searchSite(provider, query, page.coerceAtLeast(1), cursor)
         } else {
             searchGenericSite(provider, query, page.coerceAtLeast(1), cursor)
@@ -118,10 +119,9 @@ class OnlineNovelRepository @Inject constructor(
 
     suspend fun getDetails(summary: OnlineNovelSummary): OnlineNovelDetails = withContext(Dispatchers.IO) {
         val provider = provider(summary.providerId)
-        if (provider.requiresBrowserVerification) {
-            error("${provider.label} requires the protected browser bridge before novel details can load.")
-        }
-        if (summary.providerId in siteProviders) {
+        if (summary.providerId == OnlineNovelProviderId.WTR_LAB) {
+            fetchWtrNovelDetails(provider, summary, includeChapters = true)
+        } else if (summary.providerId in siteProviders) {
             fetchSiteNovelDetails(provider, summary, includeChapters = true)
         } else {
             fetchGenericNovelDetails(provider, summary, includeChapters = true)
@@ -133,6 +133,7 @@ class OnlineNovelRepository @Inject constructor(
         startChapter: Int,
         endChapter: Int,
         concurrency: Int,
+        onProgress: ((completed: Int, total: Int) -> Unit)? = null,
     ): GeneratedOnlineNovelEpub = withContext(Dispatchers.IO) {
         val provider = provider(novel.providerId)
         val chapters = novel.chapters.filter { it.order in startChapter..endChapter }
@@ -142,6 +143,8 @@ class OnlineNovelRepository @Inject constructor(
         }
         val boundedConcurrency = concurrency.coerceIn(MIN_DOWNLOAD_CONCURRENCY, MAX_DOWNLOAD_CONCURRENCY)
         val semaphore = Semaphore(boundedConcurrency)
+        val completedChapters = AtomicInteger(0)
+        onProgress?.invoke(0, chapters.size)
 
         val chapterResults = coroutineScope {
             chapters.map { chapter ->
@@ -151,6 +154,8 @@ class OnlineNovelRepository @Inject constructor(
                             Result.success(fetchChapterWithRetry(provider, novel, chapter))
                         } catch (error: Exception) {
                             Result.failure(error)
+                        } finally {
+                            onProgress?.invoke(completedChapters.incrementAndGet(), chapters.size)
                         }
                     }
                 }
@@ -259,6 +264,107 @@ class OnlineNovelRepository @Inject constructor(
             .distinctBy { "${it.providerId}:${it.path}" }
         val next = parseNextCursor(provider, doc, page)
         return OnlineNovelSearchResult(items = items, page = page, hasMore = next != null, nextCursor = next)
+    }
+
+    private fun searchWtr(provider: OnlineNovelProvider, query: String, page: Int): OnlineNovelSearchResult {
+        val buildId = fetchWtrBuildId(provider)
+        val params = buildString {
+            append("page=$page")
+            append("&orderBy=update&order=desc")
+            if (query.isNotBlank()) append("&text=${Uri.encode(query.trim())}")
+        }
+        val json = JSONObject(fetchText(absoluteUrl(provider, "/_next/data/$buildId/en/novel-finder.json?$params")))
+        val series = json.optJSONObject("pageProps")?.optJSONArray("series") ?: JSONArray()
+        val items = buildList {
+            for (index in 0 until series.length()) {
+                val item = series.optJSONObject(index) ?: continue
+                add(mapWtrSeriesItem(provider, item))
+            }
+        }.filter { it.matchesQuery(query) }
+            .distinctBy { "${it.providerId}:${it.path}" }
+        return OnlineNovelSearchResult(items = items, page = page, hasMore = items.size >= 20)
+    }
+
+    private fun fetchWtrNovelDetails(
+        provider: OnlineNovelProvider,
+        summary: OnlineNovelSummary,
+        includeChapters: Boolean,
+    ): OnlineNovelDetails {
+        val rawId = parseWtrRawId(summary)
+        val slug = summary.slug.ifBlank { summary.path.substringBefore('?').trim('/').substringAfterLast('/') }
+        val path = summary.path.ifBlank { "/en/novel/$rawId/$slug" }
+        val chapters = if (includeChapters) fetchWtrChapters(provider, rawId, slug, summary.chapterCount) else emptyList()
+        return OnlineNovelDetails(
+            providerId = provider.id,
+            providerLabel = provider.label,
+            rawId = rawId.toString(),
+            slug = slug,
+            path = path,
+            title = summary.title,
+            coverUrl = summary.coverUrl,
+            author = summary.author,
+            summary = summary.summary,
+            status = summary.status,
+            chapterCount = summary.chapterCount ?: chapters.size.takeIf { it > 0 },
+            rating = summary.rating,
+            genres = emptyList(),
+            tags = emptyList(),
+            chapters = chapters,
+        )
+    }
+
+    private fun mapWtrSeriesItem(provider: OnlineNovelProvider, item: JSONObject): OnlineNovelSummary {
+        val data = item.optJSONObject("data") ?: item.optJSONObject("serie")?.optJSONObject("data") ?: JSONObject()
+        val rawId = item.firstInt("raw_id", "rawId") ?: item.optJSONObject("serie")?.firstInt("raw_id", "rawId") ?: item.firstInt("id") ?: 0
+        val slug = item.optString("slug").ifBlank { item.optJSONObject("serie")?.optString("slug").orEmpty() }
+        val title = data.optString("title").ifBlank { item.optString("title") }.ifBlank { slug.replace('-', ' ') }.ifBlank { "Untitled" }
+        val image = data.optString("image").ifBlank { data.optString("cover") }.ifBlank { item.optString("image") }
+        return OnlineNovelSummary(
+            providerId = provider.id,
+            providerLabel = provider.label,
+            rawId = rawId.toString(),
+            slug = slug,
+            path = "/en/novel/$rawId/$slug",
+            title = title.cleanText(),
+            coverUrl = image.takeIf { it.isNotBlank() }?.let { absoluteUrlOrNull(provider, it) },
+            author = data.optString("author").ifBlank { item.optString("author") }.ifBlank { "Unknown Author" }.cleanText(),
+            summary = data.optString("description").ifBlank { data.optString("summary") }.cleanText(),
+            status = wtrStatusLabel(item.opt("status")),
+            chapterCount = item.firstInt("chapter_count", "raw_chapter_count", "chapterCount"),
+            rating = item.optDouble("rating", 0.0).toFloat().takeIf { it > 0f },
+        )
+    }
+
+    private fun fetchWtrChapters(
+        provider: OnlineNovelProvider,
+        rawId: Int,
+        slug: String,
+        totalChapters: Int?,
+    ): List<OnlineChapterSummary> {
+        val output = mutableListOf<OnlineChapterSummary>()
+        var start = 1
+        val batchSize = 250
+        var loops = 0
+        while (loops < 30) {
+            loops += 1
+            val end = totalChapters?.let { (start + batchSize - 1).coerceAtMost(it) } ?: start + batchSize - 1
+            val json = JSONObject(fetchText(absoluteUrl(provider, "/api/chapters/$rawId?start=$start&end=$end")))
+            val chapters = json.optJSONArray("chapters") ?: json.optJSONArray("data") ?: JSONArray()
+            if (chapters.length() == 0) break
+            for (index in 0 until chapters.length()) {
+                val chapter = chapters.optJSONObject(index) ?: continue
+                val order = chapter.firstInt("order", "chapter_no", "chapterNumber", "no", "chapter") ?: (start + index)
+                output += OnlineChapterSummary(
+                    order = order,
+                    title = chapter.optString("title").ifBlank { chapter.optString("name") }.ifBlank { "Chapter $order" }.cleanText(),
+                    path = "/en/novel/$rawId/$slug/chapter-$order",
+                    updatedAt = chapter.optString("updated_at").ifBlank { chapter.optString("updatedAt") }.takeIf { it.isNotBlank() },
+                )
+            }
+            if (chapters.length() < batchSize || (totalChapters != null && end >= totalChapters)) break
+            start += batchSize
+        }
+        return output.distinctBy { it.order }.sortedBy { it.order }
     }
 
     private fun parseSiteNovelList(provider: OnlineNovelProvider, doc: Document): List<OnlineNovelSummary> =
@@ -389,11 +495,23 @@ class OnlineNovelRepository @Inject constructor(
     private fun parseSiteChapterList(provider: OnlineNovelProvider, doc: Document): List<OnlineChapterSummary> =
         doc.select("ul.chapter-list li a[href]").mapIndexed { index, link ->
             val path = parsePath(provider, link.attr("href"))
-            val order = parseChapterOrder(path) ?: index + 1
+            val order = link.selectFirst(".chapter-no")?.text()?.parseFirstInt()
+                ?: parseChapterOrder(path)
+                ?: index + 1
+            val title = link.selectFirst(".chapter-title")?.text()
+                ?.cleanText()
+                ?.takeIf { it.isNotBlank() }
+                ?: link.attr("title").cleanText().takeIf { it.isNotBlank() }
+                ?: link.text().cleanText().ifBlank { "Chapter $order" }
+            val updatedAt = link.selectFirst("time.chapter-update, .chapter-update, time")
+                ?.text()
+                ?.cleanText()
+                ?.takeIf { it.isNotBlank() }
             OnlineChapterSummary(
                 order = order,
-                title = link.text().cleanText().ifBlank { "Chapter $order" },
+                title = title,
                 path = path,
+                updatedAt = updatedAt,
             )
         }.distinctBy { it.path }.sortedBy { it.order }
 
@@ -442,8 +560,18 @@ class OnlineNovelRepository @Inject constructor(
     ): OnlineChapterContent {
         val path = chapter.path.ifBlank { "/novel/${novel.slug}_${chapter.order}.html" }
         val doc = fetchDocument(absoluteUrl(provider, path))
-        val content = doc.selectFirst(".chapter-content") ?: error("Could not locate the chapter content.")
-        content.select("script, style, iframe, ins, [align=center]").remove()
+        val content = listOf(
+            ".chapter-content",
+            "#chapter-content",
+            ".content-wrap .chapter-content",
+            ".page-in .chapter-content",
+            ".chapter-reading-section-list",
+            ".reading-content",
+            "#article",
+            "article",
+        ).firstNotNullOfOrNull { selector -> doc.selectFirst(selector) }
+            ?: error("Could not locate the chapter content.")
+        content.select("script, style, iframe, ins, [align=center], .ads, .ad, .read-ads, .chapter-start, .chapter-end, .paging").remove()
         val title = doc.selectFirst("#chapter-article .titles h2, h2")?.text()
             ?.cleanText()
             ?.takeIf { it.isNotBlank() }
@@ -496,6 +624,46 @@ class OnlineNovelRepository @Inject constructor(
         )
     }
 
+    private fun fetchWtrChapter(
+        provider: OnlineNovelProvider,
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent {
+        val rawId = parseWtrRawId(novel)
+        val chapterNo = chapter.order
+        val title = chapter.title.ifBlank { "Chapter $chapterNo" }
+        val payload = """
+            {
+              "translate": "ai",
+              "language": "en",
+              "raw_id": $rawId,
+              "chapter_no": $chapterNo,
+              "retry": false,
+              "force_retry": false
+            }
+        """.trimIndent()
+        val json = JSONObject(
+            fetchText(
+                absoluteUrl(provider, "/api/reader/get"),
+                method = Connection.Method.POST,
+                body = payload,
+                contentType = "application/json",
+            ),
+        )
+        if (!json.optBoolean("success", false)) {
+            error(json.optString("message").ifBlank { json.optString("error") }.ifBlank { "WTR-LAB chapter request failed." })
+        }
+        val data = json.optJSONObject("data")?.optJSONObject("data")
+            ?: error("WTR-LAB returned an empty chapter payload.")
+        val html = wtrContentToHtml(data.opt("body"), data.optJSONObject("glossary_data"))
+        val resolvedTitle = json.optJSONObject("chapter")?.optString("title")?.takeIf { it.isNotBlank() } ?: title
+        return OnlineChapterContent(
+            order = chapterNo,
+            title = resolvedTitle.cleanText(),
+            html = ReaderHtmlSanitizer.sanitize(html),
+        )
+    }
+
     private suspend fun fetchChapterWithRetry(
         provider: OnlineNovelProvider,
         novel: OnlineNovelDetails,
@@ -504,10 +672,10 @@ class OnlineNovelRepository @Inject constructor(
         var lastError: Exception? = null
         repeat(PROVIDER_RETRY_ATTEMPTS) { attempt ->
             try {
-                return if (novel.providerId in siteProviders) {
-                    fetchSiteChapter(provider, novel, chapter)
-                } else {
-                    fetchGenericChapter(provider, novel, chapter)
+                return when {
+                    novel.providerId == OnlineNovelProviderId.WTR_LAB -> fetchWtrChapter(provider, novel, chapter)
+                    novel.providerId in siteProviders -> fetchSiteChapter(provider, novel, chapter)
+                    else -> fetchGenericChapter(provider, novel, chapter)
                 }
             } catch (error: Exception) {
                 lastError = error
@@ -603,6 +771,34 @@ class OnlineNovelRepository @Inject constructor(
                 connection.disconnect()
             }
         }.getOrNull()
+    }
+
+    private fun fetchText(
+        url: String,
+        method: Connection.Method = Connection.Method.GET,
+        body: String? = null,
+        contentType: String? = null,
+    ): String {
+        val safeUrl = validatePublicHttpsUrl(url)
+        val host = URI(safeUrl).host.orEmpty()
+        val cookies = routeCookies.getOrPut(host) { ConcurrentHashMap() }
+        val request = Jsoup.connect(safeUrl)
+            .method(method)
+            .timeout(PROVIDER_TIMEOUT_MS)
+            .maxBodySize(MAX_HTML_BYTES)
+            .followRedirects(true)
+            .ignoreHttpErrors(false)
+            .ignoreContentType(true)
+            .userAgent(USER_AGENT)
+            .header("Accept", "application/json,text/plain,text/html,application/xhtml+xml,*/*")
+            .cookies(cookies)
+        if (body != null) {
+            request.requestBody(body)
+            request.header("Content-Type", contentType ?: "application/json")
+        }
+        val response = request.execute()
+        cookies.putAll(response.cookies())
+        return response.body()
     }
 
     private fun fetchDocument(
@@ -745,6 +941,84 @@ class OnlineNovelRepository @Inject constructor(
             ?.cleanText()
             .orEmpty()
             .ifBlank { "Unknown" }
+
+    private fun fetchWtrBuildId(provider: OnlineNovelProvider): String {
+        val doc = fetchDocument(provider.startUrl)
+        val nextData = doc.selectFirst("#__NEXT_DATA__")?.data()?.ifBlank { doc.selectFirst("#__NEXT_DATA__")?.html().orEmpty() }
+        nextData?.takeIf { it.isNotBlank() }?.let { data ->
+            runCatching { JSONObject(data).optString("buildId") }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+        return Regex("/_next/static/([^/]+)/_buildManifest")
+            .find(doc.html())
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: error("Could not locate WTR-LAB build id.")
+    }
+
+    private fun parseWtrRawId(summary: OnlineNovelSummary): Int =
+        summary.rawId.toIntOrNull()
+            ?: Regex("/novel/(\\d+)/", RegexOption.IGNORE_CASE)
+                .find(summary.path)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+            ?: error("WTR-LAB result is missing a raw id.")
+
+    private fun parseWtrRawId(novel: OnlineNovelDetails): Int =
+        novel.rawId.toIntOrNull()
+            ?: Regex("/novel/(\\d+)/", RegexOption.IGNORE_CASE)
+                .find(novel.path)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+            ?: error("WTR-LAB novel is missing a raw id.")
+
+    private fun wtrStatusLabel(value: Any?): String = when {
+        value == null || value == JSONObject.NULL -> "Unknown"
+        value.toString() == "0" -> "Ongoing"
+        value.toString() == "1" -> "Completed"
+        value.toString() == "2" -> "Hiatus"
+        value.toString().isBlank() -> "Unknown"
+        else -> value.toString().cleanText().replaceFirstChar { it.uppercase() }
+    }
+
+    private fun wtrContentToHtml(body: Any?, glossary: JSONObject?): String = when (body) {
+        is JSONArray -> buildString {
+            for (index in 0 until body.length()) {
+                val line = applyWtrGlossary(body.optString(index), glossary).cleanText()
+                if (line.isNotBlank()) append("<p>${line.xmlEscape()}</p>")
+            }
+        }.ifBlank { "<p><em>WTR-LAB returned an empty chapter.</em></p>" }
+        is String -> {
+            val text = applyWtrGlossary(body, glossary)
+            when {
+                text.startsWith("arr:") || text.startsWith("str:") ->
+                    "<p><em>WTR-LAB returned an encrypted chapter payload. Try again after opening the source verifier.</em></p>"
+                text.contains("<") -> text
+                else -> text
+                    .split(Regex("\\n{2,}"))
+                    .joinToString("") { paragraph ->
+                        val clean = paragraph.cleanText()
+                        if (clean.isBlank()) "" else "<p>${clean.xmlEscape()}</p>"
+                    }
+                    .ifBlank { "<p><em>WTR-LAB returned an empty chapter.</em></p>" }
+            }
+        }
+        else -> "<p><em>WTR-LAB returned an unsupported chapter payload.</em></p>"
+    }
+
+    private fun applyWtrGlossary(text: String, glossary: JSONObject?): String {
+        var output = text
+        val terms = glossary?.optJSONArray("terms") ?: return output
+        for (index in 0 until terms.length()) {
+            val replacement = terms.optJSONArray(index)?.optString(0)?.takeIf { it.isNotBlank() } ?: continue
+            output = output.replace("※$index⛬", replacement)
+        }
+        return output
+    }
 
     private fun OnlineChapterSummary.isLikelyChapterLink(): Boolean {
         val cleanPath = path.substringBefore('?').substringBefore('#').lowercase(Locale.ROOT)
@@ -946,6 +1220,17 @@ $navPoints
     private fun String.parseFirstInt(): Int? =
         Regex("(\\d+)").find(this)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
+    private fun JSONObject.firstInt(vararg names: String): Int? {
+        names.forEach { name ->
+            val value = opt(name)
+            when (value) {
+                is Number -> return value.toInt()
+                is String -> value.toIntOrNull()?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun String.xmlEscape(): String =
         replace("&", "&amp;")
             .replace("<", "&lt;")
@@ -983,7 +1268,7 @@ $navPoints
     )
 
     private companion object {
-        const val USER_AGENT = "MIYO-Kotlin/1.0 (+https://miyo-reader.local)"
+        const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
         const val PROVIDER_TIMEOUT_MS = 18_000
         const val MAX_HTML_BYTES = 4 * 1024 * 1024
         const val MAX_COVER_BYTES = 6 * 1024 * 1024

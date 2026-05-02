@@ -4,8 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +28,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +44,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +52,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -67,8 +77,9 @@ import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.BookDetailsChapter
 import com.miyu.reader.viewmodel.BookDetailsViewModel
 import java.io.File
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookDetailsScreen(
     onBack: () -> Unit,
@@ -78,6 +89,7 @@ fun BookDetailsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
     val context = LocalContext.current
+    var selectedChapterIndexes by remember(state.book?.id) { mutableStateOf<Set<Int>>(emptySet()) }
 
     val coverPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -188,10 +200,38 @@ fun BookDetailsScreen(
                                 )
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (selectedChapterIndexes.isNotEmpty()) {
+                                        ChapterSelectionToolbar(
+                                            selectedCount = selectedChapterIndexes.size,
+                                            onMarkRead = {
+                                                viewModel.markChaptersRead(selectedChapterIndexes)
+                                                selectedChapterIndexes = emptySet()
+                                            },
+                                            onMarkUnread = {
+                                                viewModel.markChaptersUnread(selectedChapterIndexes)
+                                                selectedChapterIndexes = emptySet()
+                                            },
+                                            onSelectRange = {
+                                                selectedChapterIndexes = expandChapterRange(state.chapters, selectedChapterIndexes)
+                                            },
+                                            onClear = { selectedChapterIndexes = emptySet() },
+                                        )
+                                    }
                                     state.chapters.forEach { chapter ->
                                         TocRow(
                                             chapter = chapter,
-                                            onClick = { onOpenReader(book.id, chapter.index) },
+                                            selected = chapter.index in selectedChapterIndexes,
+                                            progressPercent = chapterProgressPercent(book, chapter.index),
+                                            onClick = {
+                                                if (selectedChapterIndexes.isEmpty()) {
+                                                    onOpenReader(book.id, chapter.index)
+                                                } else {
+                                                    selectedChapterIndexes = selectedChapterIndexes.toggle(chapter.index)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                selectedChapterIndexes = selectedChapterIndexes.toggle(chapter.index)
+                                            },
                                         )
                                     }
                                 }
@@ -210,6 +250,50 @@ fun BookDetailsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChapterSelectionToolbar(
+    selectedCount: Int,
+    onMarkRead: () -> Unit,
+    onMarkUnread: () -> Unit,
+    onSelectRange: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = colors.accent.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.28f)),
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = MiyoSpacing.medium, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                "$selectedCount selected",
+                color = colors.onBackground,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onMarkRead) {
+                Icon(Icons.Outlined.DoneAll, contentDescription = "Mark selected read", tint = colors.accent)
+            }
+            IconButton(onClick = onMarkUnread) {
+                Icon(Icons.Outlined.Done, contentDescription = "Mark selected unread", tint = colors.accent)
+            }
+            IconButton(onClick = onSelectRange) {
+                Icon(Icons.Outlined.SwapHoriz, contentDescription = "Select range", tint = colors.accent)
+            }
+            IconButton(onClick = onClear) {
+                Icon(Icons.Outlined.Close, contentDescription = "Clear selection", tint = colors.secondaryText)
             }
         }
     }
@@ -438,18 +522,26 @@ private fun MetadataLine(label: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TocRow(
     chapter: BookDetailsChapter,
+    selected: Boolean,
+    progressPercent: Int,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-        color = colors.background.copy(alpha = 0.56f),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            ),
+        color = if (selected) colors.accent.copy(alpha = 0.14f) else colors.background.copy(alpha = 0.56f),
+        border = if (selected) BorderStroke(1.dp, colors.accent.copy(alpha = 0.46f)) else null,
         tonalElevation = 0.dp,
     ) {
         Row(
@@ -482,12 +574,46 @@ private fun TocRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            Text(
-                (chapter.index + 1).toString(),
-                color = colors.secondaryText,
-                style = MaterialTheme.typography.labelLarge,
-            )
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(min = 48.dp)) {
+                Text(
+                    "$progressPercent%",
+                    color = if (progressPercent > 0) colors.accent else colors.secondaryText,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                )
+                Text(
+                    (chapter.index + 1).toString(),
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
+    }
+}
+
+private fun Set<Int>.toggle(value: Int): Set<Int> =
+    if (value in this) this - value else this + value
+
+private fun expandChapterRange(chapters: List<BookDetailsChapter>, selectedIndexes: Set<Int>): Set<Int> {
+    if (selectedIndexes.isEmpty()) return emptySet()
+    val start = selectedIndexes.minOrNull() ?: return selectedIndexes
+    val end = selectedIndexes.maxOrNull() ?: return selectedIndexes
+    return chapters
+        .map { it.index }
+        .filter { it in start..end }
+        .toSet()
+}
+
+private fun chapterProgressPercent(book: Book, chapterIndex: Int): Int {
+    val totalChapters = book.totalChapters.coerceAtLeast(1)
+    val safeProgress = book.progress.coerceIn(0f, 100f)
+    val currentChapter = book.currentChapter.coerceIn(0, totalChapters - 1)
+    return when {
+        safeProgress >= 100f -> 100
+        chapterIndex < currentChapter -> 100
+        chapterIndex > currentChapter -> 0
+        else -> ((safeProgress / 100f * totalChapters - chapterIndex) * 100f)
+            .roundToInt()
+            .coerceIn(0, 100)
     }
 }
 
