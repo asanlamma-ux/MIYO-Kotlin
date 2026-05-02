@@ -26,6 +26,7 @@ data class ReaderUiState(
     val chapterHtml: String = "",
     val chapterIndex: Int = 0,
     val renderedChapterIndex: Int = 0,
+    val readerSessionId: Long = 0L,
     val chapterScrollPercent: Float = 0f,
     val continuousLoadedThroughIndex: Int = 0,
     val totalChapters: Int = 0,
@@ -174,12 +175,14 @@ class ReaderViewModel @Inject constructor(
                     emptyMap()
                 }
                 val html = epubEngine.renderChapter(filePath, index, replacements)
+                val readerSessionId = System.nanoTime()
                 if (html.isBlank()) {
                     _uiState.update {
                         it.copy(
                             chapterHtml = "",
                             chapterIndex = index,
                             renderedChapterIndex = index,
+                            readerSessionId = readerSessionId,
                             continuousLoadedThroughIndex = index,
                             pendingChapterAppend = null,
                             isLoading = false,
@@ -193,6 +196,7 @@ class ReaderViewModel @Inject constructor(
                         chapterHtml = html,
                         chapterIndex = index,
                         renderedChapterIndex = index,
+                        readerSessionId = readerSessionId,
                         chapterScrollPercent = restorePercent.coerceIn(0f, 1f),
                         continuousLoadedThroughIndex = index,
                         pendingChapterAppend = null,
@@ -372,20 +376,21 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    fun updateScrollProgress(chapterScrollPercent: Float) {
-        updateChapterScrollProgress(_uiState.value.chapterIndex, chapterScrollPercent)
+    fun updateScrollProgress(sessionId: Long, chapterScrollPercent: Float) {
+        updateChapterScrollProgress(sessionId, _uiState.value.chapterIndex, chapterScrollPercent)
     }
 
-    fun updateChapterScrollProgress(chapterIndex: Int, chapterScrollPercent: Float) {
+    fun updateChapterScrollProgress(sessionId: Long, chapterIndex: Int, chapterScrollPercent: Float) {
         viewModelScope.launch {
             val state = _uiState.value
             val book = state.book ?: return@launch
+            if (sessionId != state.readerSessionId) return@launch
             val now = System.currentTimeMillis()
             val targetChapter = navigationTargetChapterIndex
             if (targetChapter != null && now < ignoreProgressUntil && chapterIndex != targetChapter) {
                 return@launch
             }
-            if (targetChapter != null && chapterIndex == targetChapter) {
+            if (targetChapter != null && chapterIndex == targetChapter && now >= ignoreProgressUntil - 800L) {
                 navigationTargetChapterIndex = null
             }
             val safeChapterIndex = chapterIndex.coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))

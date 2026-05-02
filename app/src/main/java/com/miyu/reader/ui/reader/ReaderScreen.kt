@@ -109,6 +109,10 @@ fun ReaderScreen(
     var lastAppendId by remember { mutableStateOf(-1L) }
     var sleepTimerExpired by remember { mutableStateOf(false) }
     var sleepTimerRestartKey by remember { mutableStateOf(0) }
+    val initialReaderDelayComplete by produceState(initialValue = false, key1 = bookId) {
+        delay(2_000L)
+        value = true
+    }
 
     LaunchedEffect(bookId, readingSettings.sleepTimerMinutes, sleepTimerRestartKey) {
         sleepTimerExpired = false
@@ -170,7 +174,7 @@ fun ReaderScreen(
             .background(bgColor),
     ) {
         // ── Loading state ───────────────────────────────────────────
-        if (uiState.isLoading && uiState.chapterHtml.isEmpty()) {
+        if (!initialReaderDelayComplete || (uiState.isLoading && uiState.chapterHtml.isEmpty())) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 SpecialThemeBackdrop(
                     theme = readerTheme,
@@ -234,6 +238,7 @@ fun ReaderScreen(
                 autoAdvanceChapter = readingSettings.autoAdvanceChapter,
                 navigationLocked = readingSettings.readerNavLocked,
                 selectionPopupEnabled = readingSettings.selectionPopupEnabled,
+                readerSessionId = uiState.readerSessionId,
                 showPageBorder = readingSettings.showPageBorder,
                 overwriteLinkStyle = readingSettings.overwriteLinkStyle,
                 overwriteTextStyle = readingSettings.overwriteTextStyle,
@@ -892,6 +897,7 @@ private fun buildReaderHtml(
     autoAdvanceChapter: Boolean,
     navigationLocked: Boolean,
     selectionPopupEnabled: Boolean,
+    readerSessionId: Long,
     showPageBorder: Boolean,
     overwriteLinkStyle: Boolean,
     overwriteTextStyle: Boolean,
@@ -1020,7 +1026,7 @@ $themeCss
 	<section class="miyu-chapter" data-miyu-chapter-index="$chapterIndex">
 	$bodyContent
 	</section>
-	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter, navigationLocked, selectionPopupEnabled, chapterIndex, totalChapters)}
+	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter, navigationLocked, selectionPopupEnabled, chapterIndex, totalChapters, readerSessionId)}
 	</body>
 </html>
 """.trimIndent()
@@ -1052,6 +1058,7 @@ private fun readerBridgeScript(
     selectionPopupEnabled: Boolean,
     chapterIndex: Int,
     totalChapters: Int,
+    readerSessionId: Long,
 ): String {
     val tapZones = if (tapZonesEnabled) "true" else "false"
     val bionic = if (bionicReading) "true" else "false"
@@ -1062,6 +1069,7 @@ private fun readerBridgeScript(
     val navMode = tapZoneNavMode.name
     val initialChapterIndex = chapterIndex.coerceAtLeast(0)
     val safeTotalChapters = totalChapters.coerceAtLeast(0)
+    val safeSessionId = readerSessionId
     return """
 <script>
 var __miyuTapStartX = 0;
@@ -1069,6 +1077,8 @@ var __miyuTapStartY = 0;
 var __miyuTapStartAt = 0;
 var __miyuTapMoved = false;
 window.__miyuLastTouchTapAt = 0;
+
+var __miyuRestoreCancelled = false;
 
 function hasReadableSelection() {
     var selection = window.getSelection ? window.getSelection() : null;
@@ -1119,7 +1129,7 @@ document.addEventListener('click', function(event) {
     if (handleReaderInteraction(event.clientX || 0, event.clientY || 0, event.target)) {
         event.preventDefault();
     }
-});
+}, true);
 
 function normalizeSelectionText(value) {
     return (value || '').replace(/\s+/g, ' ').trim();
@@ -1189,6 +1199,7 @@ document.addEventListener('selectionchange', function() {
 
 document.addEventListener('touchstart', function(event) {
     if (!event.touches || event.touches.length !== 1) return;
+    __miyuRestoreCancelled = true;
     __miyuTapStartX = event.touches[0].clientX;
     __miyuTapStartY = event.touches[0].clientY;
     __miyuTapStartAt = Date.now();
@@ -1203,13 +1214,23 @@ document.addEventListener('touchmove', function(event) {
 }, { passive: true });
 
 document.addEventListener('touchend', function(event) {
+    if (Date.now() - window.__miyuLastTouchTapAt < 420) return;
     var duration = Date.now() - __miyuTapStartAt;
     if (__miyuTapMoved || duration > 420 || hasReadableSelection()) return;
     var target = document.elementFromPoint(__miyuTapStartX, __miyuTapStartY) || event.target;
     if (handleReaderInteraction(__miyuTapStartX, __miyuTapStartY, target)) {
         window.__miyuLastTouchTapAt = Date.now();
     }
-}, { passive: true });
+}, { passive: true, capture: true });
+document.addEventListener('pointerup', function(event) {
+    if (Date.now() - window.__miyuLastTouchTapAt < 420) return;
+    if (event.pointerType !== 'touch' && event.pointerType !== 'mouse') return;
+    if (hasReadableSelection()) return;
+    if (Math.abs((event.clientX || 0) - __miyuTapStartX) > 10 || Math.abs((event.clientY || 0) - __miyuTapStartY) > 10) return;
+    if (handleReaderInteraction(event.clientX || 0, event.clientY || 0, event.target)) {
+        window.__miyuLastTouchTapAt = Date.now();
+    }
+}, true);
 	(function() {
 	    var lastProgressPost = 0;
 	    var loadedThroughChapterIndex = $initialChapterIndex;
@@ -1260,9 +1281,9 @@ document.addEventListener('touchend', function(event) {
 	        var progress = currentProgress();
 	        if (window.AndroidBridge) {
 	            if (window.AndroidBridge.onChapterScrollProgress) {
-	                window.AndroidBridge.onChapterScrollProgress(progress.chapterIndex, progress.progress);
+	                window.AndroidBridge.onChapterScrollProgress($safeSessionId, progress.chapterIndex, progress.progress);
 	            } else {
-	                window.AndroidBridge.onScrollProgress(progress.progress);
+	                window.AndroidBridge.onScrollProgress($safeSessionId, progress.progress);
 	            }
 	        }
 	    }
@@ -1328,14 +1349,19 @@ document.addEventListener('touchend', function(event) {
 	    window.MIYU_POST_PROGRESS = function() { postProgress(true); };
 	    window.MIYU_RESTORE_SCROLL = function(percent) {
 	        var safePercent = Math.max(0, Math.min(1, Number(percent) || 0));
+            __miyuRestoreCancelled = false;
 	        var attempts = 0;
 	        function applyRestore() {
+                if (__miyuRestoreCancelled) {
+                    postProgress(true);
+                    return;
+                }
 	            var doc = document.documentElement;
 	            var maxScroll = Math.max(0, doc.scrollHeight - window.innerHeight);
 	            window.scrollTo(0, Math.round(maxScroll * safePercent));
 	            attempts += 1;
 	            if (attempts < 6) {
-	                setTimeout(applyRestore, attempts * 120);
+	                setTimeout(applyRestore, attempts * 90);
 	            } else {
 	                postProgress(true);
 	            }
@@ -1582,13 +1608,13 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     }
 
     @JavascriptInterface
-    fun onScrollProgress(progress: Double) {
-        viewModel.updateScrollProgress(progress.toFloat())
+    fun onScrollProgress(sessionId: Long, progress: Double) {
+        viewModel.updateScrollProgress(sessionId, progress.toFloat())
     }
 
     @JavascriptInterface
-    fun onChapterScrollProgress(chapterIndex: Int, progress: Double) {
-        viewModel.updateChapterScrollProgress(chapterIndex, progress.toFloat())
+    fun onChapterScrollProgress(sessionId: Long, chapterIndex: Int, progress: Double) {
+        viewModel.updateChapterScrollProgress(sessionId, chapterIndex, progress.toFloat())
     }
 
     @JavascriptInterface
