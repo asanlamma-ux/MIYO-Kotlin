@@ -1,20 +1,25 @@
 package com.miyu.reader.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.NovelSourcePluginRegistry
+import com.miyu.reader.downloads.OnlineDownloadCoordinator
+import com.miyu.reader.downloads.OnlineDownloadService
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineChapterContent
+import com.miyu.reader.domain.model.OnlineDownloadRequest
+import com.miyu.reader.domain.model.OnlineDownloadStatus
+import com.miyu.reader.domain.model.OnlineReadingHistoryEntry
 import com.miyu.reader.domain.model.OnlineChapterSummary
 import com.miyu.reader.domain.model.OnlineNovelDetails
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
-import com.miyu.reader.notifications.OnlineDownloadNotifier
-import com.miyu.reader.util.MiyoApplicationScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -154,8 +159,8 @@ data class BrowseUiState(
 class BrowseViewModel @Inject constructor(
     private val sourceRegistry: NovelSourcePluginRegistry,
     private val preferences: UserPreferences,
-    private val appScope: MiyoApplicationScope,
-    private val downloadNotifier: OnlineDownloadNotifier,
+    private val downloadCoordinator: OnlineDownloadCoordinator,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         BrowseUiState(
@@ -194,6 +199,23 @@ class BrowseViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.downloadConcurrency.collect { concurrency ->
                 _uiState.update { it.copy(downloadConcurrency = concurrency) }
+            }
+        }
+        viewModelScope.launch {
+            downloadCoordinator.tasks.collect { tasks ->
+                val active = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.RUNNING || it.status == OnlineDownloadStatus.PAUSED }
+                val completed = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.COMPLETED }?.generatedEpub
+                val latestError = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.ERROR }?.error
+                _uiState.update {
+                    it.copy(
+                        downloadingKey = active?.key,
+                        downloadProgress = active?.let { task ->
+                            BrowseDownloadProgress(task.key, task.title, task.completed, task.total)
+                        },
+                        generatedEpub = completed ?: it.generatedEpub,
+                        error = latestError ?: it.error,
+                    )
+                }
             }
         }
     }
@@ -492,6 +514,20 @@ class BrowseViewModel @Inject constructor(
             runCatching {
                 sourceRegistry.chapterContent(sourceId, details, chapter)
             }.onSuccess { preview ->
+                viewModelScope.launch {
+                    preferences.recordOnlineReading(
+                        OnlineReadingHistoryEntry(
+                            id = "${details.providerId.name}:${details.path}",
+                            providerId = details.providerId,
+                            path = details.path,
+                            title = details.title,
+                            author = details.author,
+                            coverUrl = details.coverUrl,
+                            lastChapterTitle = preview.title,
+                            lastReadAt = java.time.Instant.now().toString(),
+                        ),
+                    )
+                }
                 _uiState.update {
                     it.copy(
                         selectedChapterPreview = preview,
@@ -538,55 +574,10 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "No chapters were found for ${details.title}.") }
             return
         }
-        val downloadKey = "${details.providerId}:${details.path}"
-        val progressTotal = chapters.take(250).size
-        _uiState.update {
-            it.copy(
-                downloadingKey = downloadKey,
-                downloadProgress = BrowseDownloadProgress(downloadKey, details.title, 0, progressTotal),
-                generatedEpub = null,
-                error = null,
-            )
-        }
-        downloadNotifier.showProgress(downloadKey, details.title, 0, progressTotal)
-        appScope.scope.launch {
-            runCatching {
-                val start = chapters.first().order
-                val end = chapters.take(250).last().order
-                sourceRegistry.downloadAsEpub(
-                    sourceId,
-                    details,
-                    start,
-                    end,
-                    _uiState.value.downloadConcurrency,
-                ) { completed, total ->
-                    val progress = BrowseDownloadProgress(downloadKey, details.title, completed, total)
-                    _uiState.update { it.copy(downloadProgress = progress) }
-                    downloadNotifier.showProgress(downloadKey, details.title, completed, total)
-                }
-            }.onSuccess { generated ->
-                downloadNotifier.showComplete(downloadKey, details.title, generated.fileName)
-                _uiState.update {
-                    it.copy(
-                        downloadingKey = null,
-                        downloadProgress = null,
-                        generatedEpub = generated,
-                        error = null,
-                    )
-                }
-            }.onFailure { error ->
-                val message = error.message ?: "Novel download failed."
-                downloadNotifier.showError(downloadKey, details.title, message)
-                _uiState.update {
-                    it.copy(
-                        downloadingKey = null,
-                        downloadProgress = null,
-                        generatedEpub = null,
-                        error = message,
-                    )
-                }
-            }
-        }
+        startDownload(
+            summary = details.toSummary(),
+            selectedChapterOrders = emptyList(),
+        )
     }
 
     fun downloadNovel(sourceId: String, summary: OnlineNovelSummary) {
@@ -599,57 +590,18 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "${source.name} cannot download until its plugin runtime is available.") }
             return
         }
-        val downloadKey = "${summary.providerId}:${summary.path}"
-        _uiState.update {
-            it.copy(
-                downloadingKey = downloadKey,
-                downloadProgress = BrowseDownloadProgress(downloadKey, summary.title, 0, 1),
-                generatedEpub = null,
-                error = null,
-            )
+        startDownload(summary = summary, selectedChapterOrders = emptyList())
+    }
+
+    fun downloadNovelSelection(details: OnlineNovelDetails, selectedChapterOrders: Set<Int>) {
+        if (selectedChapterOrders.isEmpty()) {
+            _uiState.update { it.copy(error = "Select at least one chapter to download.") }
+            return
         }
-        downloadNotifier.showProgress(downloadKey, summary.title, 0, 1)
-        appScope.scope.launch {
-            runCatching {
-                val details = sourceRegistry.details(summary)
-                val chapters = details.chapters.sortedBy { chapter -> chapter.order }
-                if (chapters.isEmpty()) error("No chapters were found for ${details.title}.")
-                val start = chapters.first().order
-                val end = chapters.take(250).last().order
-                sourceRegistry.downloadAsEpub(
-                    sourceId,
-                    details,
-                    start,
-                    end,
-                    _uiState.value.downloadConcurrency,
-                ) { completed, total ->
-                    val progress = BrowseDownloadProgress(downloadKey, details.title, completed, total)
-                    _uiState.update { it.copy(downloadProgress = progress) }
-                    downloadNotifier.showProgress(downloadKey, details.title, completed, total)
-                }
-            }.onSuccess { generated ->
-                downloadNotifier.showComplete(downloadKey, generated.title, generated.fileName)
-                _uiState.update {
-                    it.copy(
-                        downloadingKey = null,
-                        downloadProgress = null,
-                        generatedEpub = generated,
-                        error = null,
-                    )
-                }
-            }.onFailure { error ->
-                val message = error.message ?: "Novel download failed."
-                downloadNotifier.showError(downloadKey, summary.title, message)
-                _uiState.update {
-                    it.copy(
-                        downloadingKey = null,
-                        downloadProgress = null,
-                        generatedEpub = null,
-                        error = message,
-                    )
-                }
-            }
-        }
+        startDownload(
+            summary = details.toSummary(),
+            selectedChapterOrders = selectedChapterOrders.sorted(),
+        )
     }
 
     private fun cachedSummary(providerId: OnlineNovelProviderId, path: String): OnlineNovelSummary? {
@@ -692,4 +644,42 @@ class BrowseViewModel @Inject constructor(
         lowercase(Locale.ROOT)
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
+
+    private fun startDownload(summary: OnlineNovelSummary, selectedChapterOrders: List<Int>) {
+        val request = OnlineDownloadRequest(
+            key = "${summary.providerId}:${summary.path}",
+            summary = summary,
+            selectedChapterOrders = selectedChapterOrders,
+        )
+        _uiState.update {
+            it.copy(
+                downloadingKey = request.key,
+                downloadProgress = BrowseDownloadProgress(
+                    key = request.key,
+                    title = summary.title,
+                    completed = 0,
+                    total = selectedChapterOrders.size.coerceAtLeast(1),
+                ),
+                generatedEpub = null,
+                error = null,
+            )
+        }
+        OnlineDownloadService.start(context, request)
+    }
+
+    private fun OnlineNovelDetails.toSummary(): OnlineNovelSummary =
+        OnlineNovelSummary(
+            providerId = providerId,
+            providerLabel = providerLabel,
+            rawId = rawId,
+            slug = slug,
+            path = path,
+            title = title,
+            coverUrl = coverUrl,
+            author = author,
+            summary = summary,
+            status = status,
+            chapterCount = chapterCount ?: chapters.size,
+            rating = rating,
+        )
 }

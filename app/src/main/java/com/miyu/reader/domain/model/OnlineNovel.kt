@@ -1,5 +1,8 @@
 package com.miyu.reader.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class OnlineNovelProviderId {
     WTR_LAB,
     FANMTL,
@@ -10,6 +13,7 @@ enum class OnlineNovelProviderId {
     LIGHTNOVELPUB,
 }
 
+@Serializable
 data class OnlineNovelProvider(
     val id: OnlineNovelProviderId,
     val label: String,
@@ -19,6 +23,7 @@ data class OnlineNovelProvider(
     val requiresBrowserVerification: Boolean = false,
 )
 
+@Serializable
 data class OnlineNovelSummary(
     val providerId: OnlineNovelProviderId,
     val providerLabel: String,
@@ -34,6 +39,7 @@ data class OnlineNovelSummary(
     val rating: Float? = null,
 )
 
+@Serializable
 data class OnlineChapterSummary(
     val order: Int,
     val title: String,
@@ -41,6 +47,7 @@ data class OnlineChapterSummary(
     val updatedAt: String? = null,
 )
 
+@Serializable
 data class OnlineNovelDetails(
     val providerId: OnlineNovelProviderId,
     val providerLabel: String,
@@ -59,6 +66,7 @@ data class OnlineNovelDetails(
     val chapters: List<OnlineChapterSummary> = emptyList(),
 )
 
+@Serializable
 data class OnlineNovelSearchResult(
     val items: List<OnlineNovelSummary>,
     val page: Int,
@@ -66,12 +74,14 @@ data class OnlineNovelSearchResult(
     val nextCursor: String? = null,
 )
 
+@Serializable
 data class OnlineChapterContent(
     val order: Int,
     val title: String,
     val html: String,
 )
 
+@Serializable
 data class GeneratedOnlineNovelEpub(
     val filePath: String,
     val fileName: String,

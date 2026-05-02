@@ -9,6 +9,8 @@ import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -288,7 +290,37 @@ class UserPreferences @Inject constructor(
         context.dataStore.edit { it.remove(KEY_BROWSE_SEARCH_HISTORY) }
     }
 
+    val onlineReadingHistory: Flow<List<OnlineReadingHistoryEntry>> = context.dataStore.data.map { prefs ->
+        decodeOnlineReadingHistory(prefs[KEY_ONLINE_READING_HISTORY])
+    }
+
+    suspend fun recordOnlineReading(entry: OnlineReadingHistoryEntry) {
+        context.dataStore.edit { prefs ->
+            val next = (listOf(entry) + decodeOnlineReadingHistory(prefs[KEY_ONLINE_READING_HISTORY]))
+                .distinctBy { it.id }
+                .sortedByDescending { it.lastReadAt }
+                .take(MAX_ONLINE_HISTORY)
+            prefs[KEY_ONLINE_READING_HISTORY] = json.encodeToString(ListSerializer(OnlineReadingHistoryEntry.serializer()), next)
+        }
+    }
+
+    suspend fun removeOnlineReadingHistory(ids: Set<String>) {
+        context.dataStore.edit { prefs ->
+            val next = decodeOnlineReadingHistory(prefs[KEY_ONLINE_READING_HISTORY])
+                .filterNot { it.id in ids }
+            if (next.isEmpty()) {
+                prefs.remove(KEY_ONLINE_READING_HISTORY)
+            } else {
+                prefs[KEY_ONLINE_READING_HISTORY] = json.encodeToString(ListSerializer(OnlineReadingHistoryEntry.serializer()), next)
+            }
+        }
+    }
+
     companion object {
+        private val json = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_FONT_FAMILY = stringPreferencesKey("font_family")
         private val KEY_FONT_SIZE = floatPreferencesKey("font_size")
@@ -339,9 +371,11 @@ class UserPreferences @Inject constructor(
         private val KEY_LAST_USED_SOURCE_ID = stringPreferencesKey("last_used_source_id")
         private val KEY_SOURCE_REPOSITORY_URLS = stringSetPreferencesKey("source_repository_urls")
         private val KEY_BROWSE_SEARCH_HISTORY = stringPreferencesKey("browse_search_history_v1")
+        private val KEY_ONLINE_READING_HISTORY = stringPreferencesKey("online_reading_history_v1")
         private val KEY_DOWNLOAD_CONCURRENCY = intPreferencesKey("download_concurrency_v1")
         private const val HISTORY_SEPARATOR = "\u001F"
         private const val MAX_SEARCH_HISTORY = 12
+        private const val MAX_ONLINE_HISTORY = 120
         const val MIN_DOWNLOAD_CONCURRENCY = 2
         const val MAX_DOWNLOAD_CONCURRENCY = 10
         const val DEFAULT_DOWNLOAD_CONCURRENCY = 4
@@ -369,5 +403,12 @@ class UserPreferences @Inject constructor(
                 ?.split(HISTORY_SEPARATOR)
                 ?.mapNotNull { it.trim().takeIf(String::isNotBlank) }
                 .orEmpty()
+
+        private fun decodeOnlineReadingHistory(raw: String?): List<OnlineReadingHistoryEntry> =
+            raw?.takeIf { it.isNotBlank() }?.let {
+                runCatching {
+                    json.decodeFromString(ListSerializer(OnlineReadingHistoryEntry.serializer()), it)
+                }.getOrDefault(emptyList())
+            }.orEmpty()
     }
 }

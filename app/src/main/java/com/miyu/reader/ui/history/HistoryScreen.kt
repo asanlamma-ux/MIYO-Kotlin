@@ -22,13 +22,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.miyu.reader.domain.model.Book
+import coil.compose.AsyncImage
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
 import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HistoryViewModel
+import com.miyu.reader.viewmodel.ReadingHistoryItem
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -37,6 +38,7 @@ import java.time.temporal.ChronoUnit
 fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
+    onOpenOnlineNovel: (providerId: String, path: String, title: String?) -> Unit = { _, _, _ -> },
     onOpenSettings: () -> Unit = {},
     onOpenThemePicker: () -> Unit = {},
     onSaveAndExport: () -> Unit = {},
@@ -51,17 +53,17 @@ fun HistoryScreen(
             history
         } else {
             val needle = query.trim().lowercase()
-            history.filter { book ->
-                book.title.lowercase().contains(needle) ||
-                    book.author.lowercase().contains(needle)
+            history.filter { item ->
+                item.title.lowercase().contains(needle) ||
+                    item.author.lowercase().contains(needle)
             }
         }
     }
 
     // Group by time period
     val grouped = remember(visibleHistory) {
-        visibleHistory.groupBy { book ->
-            val readAt = try { Instant.parse(book.lastReadAt ?: "") } catch (_: Exception) { Instant.now() }
+        visibleHistory.groupBy { item ->
+            val readAt = try { Instant.parse(item.lastReadAt) } catch (_: Exception) { Instant.now() }
             val days = ChronoUnit.DAYS.between(readAt, Instant.now())
             when {
                 days < 1 -> "Today"
@@ -162,20 +164,30 @@ fun HistoryScreen(
                             modifier = Modifier.padding(vertical = MiyoSpacing.small),
                         )
                     }
-                    items(books, key = { it.id }) { book ->
-                        val isSelected = uiState.selectedIds.contains(book.id)
+                    items(books, key = { it.id }) { item ->
+                        val isSelected = uiState.selectedIds.contains(item.id)
                         HistoryItem(
-                            book = book,
+                            item = item,
                             isSelected = isSelected,
                             isSelecting = uiState.isSelecting,
                             colors = colors,
                             onPress = {
-                                if (uiState.isSelecting) viewModel.toggleSelection(book.id)
-                                else onOpenBook(book.id)
+                                if (uiState.isSelecting) {
+                                    viewModel.toggleSelection(item.id)
+                                } else {
+                                    when (item) {
+                                        is ReadingHistoryItem.Local -> onOpenBook(item.book.id)
+                                        is ReadingHistoryItem.Online -> onOpenOnlineNovel(
+                                            item.entry.providerId.name,
+                                            item.entry.path,
+                                            item.entry.title,
+                                        )
+                                    }
+                                }
                             },
                             onLongPress = {
-                                if (!uiState.isSelecting) viewModel.startSelecting(book.id)
-                                else viewModel.toggleSelection(book.id)
+                                if (!uiState.isSelecting) viewModel.startSelecting(item.id)
+                                else viewModel.toggleSelection(item.id)
                             },
                         )
                         Spacer(Modifier.height(MiyoSpacing.small))
@@ -189,7 +201,7 @@ fun HistoryScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryItem(
-    book: Book,
+    item: ReadingHistoryItem,
     isSelected: Boolean,
     isSelecting: Boolean,
     colors: com.miyu.reader.ui.theme.MIYUColors,
@@ -231,8 +243,12 @@ private fun HistoryItem(
                 color = colors.accent.copy(alpha = 0.12f),
                 modifier = Modifier.size(48.dp, 68.dp),
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent, modifier = Modifier.size(20.dp))
+                if (item.coverUrl != null) {
+                    AsyncImage(model = item.coverUrl, contentDescription = item.title, modifier = Modifier.fillMaxSize())
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
 
@@ -240,34 +256,51 @@ private fun HistoryItem(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    book.title,
+                    item.title,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = colors.onBackground,
                 )
-                Text(book.author, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
+                Text(
+                    when (item) {
+                        is ReadingHistoryItem.Local -> item.author
+                        is ReadingHistoryItem.Online -> item.entry.lastChapterTitle?.let { "${item.author} · $it" } ?: item.author
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
 
                 Spacer(Modifier.height(MiyoSpacing.small))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    LinearProgressIndicator(
-                        progress = { book.progress / 100f },
-                        modifier = Modifier
-                            .width(50.dp)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                        color = colors.accent,
-                        trackColor = colors.secondaryText.copy(alpha = 0.15f),
-                    )
-                    Spacer(Modifier.width(MiyoSpacing.small))
-                    Text("${book.progress.toInt()}%", style = MaterialTheme.typography.labelSmall, color = colors.secondaryText)
+                    when (item) {
+                        is ReadingHistoryItem.Local -> {
+                            LinearProgressIndicator(
+                                progress = { item.book.progress / 100f },
+                                modifier = Modifier
+                                    .width(50.dp)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = colors.accent,
+                                trackColor = colors.secondaryText.copy(alpha = 0.15f),
+                            )
+                            Spacer(Modifier.width(MiyoSpacing.small))
+                            Text("${item.book.progress.toInt()}%", style = MaterialTheme.typography.labelSmall, color = colors.secondaryText)
+                        }
+                        is ReadingHistoryItem.Online -> {
+                            Text("Online preview", style = MaterialTheme.typography.labelSmall, color = colors.secondaryText)
+                            Spacer(Modifier.width(MiyoSpacing.small))
+                        }
+                    }
 
                     Spacer(Modifier.weight(1f))
 
                     Icon(Icons.Outlined.AccessTime, contentDescription = null, tint = colors.secondaryText, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(3.dp))
                     Text(
-                        formatRelativeTime(book.lastReadAt),
+                        formatRelativeTime(item.lastReadAt),
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.secondaryText,
                     )

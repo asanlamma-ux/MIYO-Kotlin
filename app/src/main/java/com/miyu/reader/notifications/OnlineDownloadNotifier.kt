@@ -2,6 +2,7 @@ package com.miyu.reader.notifications
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.miyu.reader.MainActivity
 import com.miyu.reader.R
+import com.miyu.reader.downloads.OnlineDownloadService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,26 +25,18 @@ class OnlineDownloadNotifier @Inject constructor(
 ) {
     private val manager = NotificationManagerCompat.from(context)
 
-    fun showProgress(taskKey: String, title: String, completed: Int, total: Int) {
+    fun showProgress(taskKey: String, title: String, completed: Int, total: Int, paused: Boolean = false) {
         if (!canNotify()) return
-        val safeTotal = total.coerceAtLeast(1)
-        val safeCompleted = completed.coerceIn(0, safeTotal)
-        val text = "$title: $safeCompleted/$safeTotal chapters"
-        notify(
-            taskKey = taskKey,
-            builder = baseBuilder(MiyoNotificationChannels.DOWNLOAD_PROGRESS, "Downloading EPUB", text)
-                .setOnlyAlertOnce(true)
-                .setOngoing(safeCompleted < safeTotal)
-                .setProgress(safeTotal, safeCompleted, false),
-        )
+        notify(taskKey = taskKey, notification = buildProgressNotification(taskKey, title, completed, total, paused))
     }
 
     fun showComplete(taskKey: String, title: String, fileName: String) {
         if (!canNotify()) return
         notify(
             taskKey = taskKey,
-            builder = baseBuilder(MiyoNotificationChannels.DOWNLOAD_COMPLETE, "EPUB downloaded", "$title exported as $fileName")
-                .setOngoing(false),
+            notification = baseBuilder(MiyoNotificationChannels.DOWNLOAD_COMPLETE, "EPUB downloaded", "$title exported as $fileName")
+                .setOngoing(false)
+                .build(),
         )
     }
 
@@ -50,9 +44,40 @@ class OnlineDownloadNotifier @Inject constructor(
         if (!canNotify()) return
         notify(
             taskKey = taskKey,
-            builder = baseBuilder(MiyoNotificationChannels.DOWNLOAD_ERROR, "EPUB download failed", "$title: $message")
-                .setOngoing(false),
+            notification = baseBuilder(MiyoNotificationChannels.DOWNLOAD_ERROR, "EPUB download failed", "$title: $message")
+                .setOngoing(false)
+                .build(),
         )
+    }
+
+    fun buildProgressNotification(
+        taskKey: String,
+        title: String,
+        completed: Int,
+        total: Int,
+        paused: Boolean,
+    ): Notification {
+        val safeTotal = total.coerceAtLeast(1)
+        val safeCompleted = completed.coerceIn(0, safeTotal)
+        val percent = ((safeCompleted * 100f) / safeTotal.toFloat()).toInt()
+        val stateLabel = if (paused) "Paused EPUB download" else "Downloading EPUB"
+        val text = "$percent% · $safeCompleted/$safeTotal chapters"
+        return baseBuilder(MiyoNotificationChannels.DOWNLOAD_PROGRESS, stateLabel, "$title: $text")
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(false)
+            .setOngoing(safeCompleted < safeTotal)
+            .setProgress(safeTotal, safeCompleted, false)
+            .addAction(
+                if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
+                if (paused) "Resume" else "Pause",
+                serviceActionPendingIntent(if (paused) OnlineDownloadService.resumeIntent(context) else OnlineDownloadService.pauseIntent(context)),
+            )
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Cancel",
+                serviceActionPendingIntent(OnlineDownloadService.cancelIntent(context)),
+            )
+            .build()
     }
 
     fun clear(taskKey: String) {
@@ -62,9 +87,9 @@ class OnlineDownloadNotifier @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun notify(
         taskKey: String,
-        builder: NotificationCompat.Builder,
+        notification: Notification,
     ) {
-        manager.notify(notificationId(taskKey), builder.build())
+        manager.notify(notificationId(taskKey), notification)
     }
 
     private fun baseBuilder(channelId: String, title: String, text: String): NotificationCompat.Builder =
@@ -93,8 +118,16 @@ class OnlineDownloadNotifier @Inject constructor(
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    private fun notificationId(taskKey: String): Int {
+    fun notificationId(taskKey: String): Int {
         val hash = taskKey.hashCode()
         return if (hash == Int.MIN_VALUE) 1 else abs(hash).coerceAtLeast(1)
     }
+
+    private fun serviceActionPendingIntent(intent: Intent): PendingIntent =
+        PendingIntent.getService(
+            context,
+            intent.action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 }

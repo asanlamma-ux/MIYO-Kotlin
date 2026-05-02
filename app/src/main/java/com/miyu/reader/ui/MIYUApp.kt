@@ -305,6 +305,11 @@ fun MIYUApp() {
                     composable(Screen.History.route) {
                         HistoryScreen(
                             onOpenBook = openBookDetails,
+                            onOpenOnlineNovel = { providerId, path, title ->
+                                navController.navigate(
+                                    "browse/novel?providerId=$providerId&path=${Uri.encode(path)}&title=${Uri.encode(title ?: "")}",
+                                )
+                            },
                             onOpenSettings = openSettings,
                             onOpenThemePicker = { showThemePicker = true },
                             onSaveAndExport = openBackupDialog,

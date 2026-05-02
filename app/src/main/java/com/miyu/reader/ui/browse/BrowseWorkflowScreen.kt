@@ -5,9 +5,11 @@ import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -696,7 +699,7 @@ fun GlobalSourceSearchScreen(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun OnlineNovelDetailsScreen(
     providerId: String,
@@ -711,6 +714,7 @@ fun OnlineNovelDetailsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
     var showChapterSheet by remember(providerId, path) { mutableStateOf(false) }
+    var selectedChapterOrders by remember(providerId, path) { mutableStateOf<Set<Int>>(emptySet()) }
 
     LaunchedEffect(provider, path, fallbackTitle) {
         if (provider != null) {
@@ -811,11 +815,23 @@ fun OnlineNovelDetailsScreen(
     if (showChapterSheet && details != null) {
         OnlineNovelChapterSheet(
             chapters = details.chapters,
+            selectedChapterOrders = selectedChapterOrders,
             onDismiss = { showChapterSheet = false },
             onOpenChapter = { chapter ->
-                showChapterSheet = false
-                viewModel.loadChapterPreview(details, chapter)
+                if (selectedChapterOrders.isEmpty()) {
+                    showChapterSheet = false
+                    viewModel.loadChapterPreview(details, chapter)
+                } else {
+                    selectedChapterOrders = selectedChapterOrders.toggle(chapter.order)
+                }
             },
+            onToggleSelection = { order -> selectedChapterOrders = selectedChapterOrders.toggle(order) },
+            onDownloadSelection = {
+                viewModel.downloadNovelSelection(details, selectedChapterOrders)
+                selectedChapterOrders = emptySet()
+            },
+            onSelectRange = { selectedChapterOrders = expandChapterOrderRange(details.chapters, selectedChapterOrders) },
+            onClearSelection = { selectedChapterOrders = emptySet() },
         )
     }
 
@@ -1004,11 +1020,16 @@ private fun OnlineNovelTagCard(novel: OnlineNovelDetails) {
 @Composable
 private fun OnlineNovelChapterSheet(
     chapters: List<OnlineChapterSummary>,
+    selectedChapterOrders: Set<Int>,
     onDismiss: () -> Unit,
     onOpenChapter: (OnlineChapterSummary) -> Unit,
+    onToggleSelection: (Int) -> Unit,
+    onDownloadSelection: () -> Unit,
+    onSelectRange: () -> Unit,
+    onClearSelection: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    val visibleChapters = chapters.sortedBy { it.order }.take(120)
+    val visibleChapters = chapters.sortedBy { it.order }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.background,
@@ -1025,14 +1046,48 @@ private fun OnlineNovelChapterSheet(
                 color = colors.onBackground,
             )
             Text(
-                "Tap a chapter to preview it before exporting.",
+                if (selectedChapterOrders.isEmpty()) {
+                    "Tap a chapter to read it online. Long-press to select chapters for download."
+                } else {
+                    "Selected chapters will export as one EPUB."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.secondaryText,
             )
+            if (selectedChapterOrders.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = colors.accent.copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.28f)),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = MiyoSpacing.medium, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "${selectedChapterOrders.size} selected",
+                            color = colors.onBackground,
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = onDownloadSelection) {
+                            Icon(Icons.Outlined.CloudDownload, contentDescription = "Download selected", tint = colors.accent)
+                        }
+                        IconButton(onClick = onSelectRange) {
+                            Icon(Icons.Outlined.SwapHoriz, contentDescription = "Select range", tint = colors.accent)
+                        }
+                        IconButton(onClick = onClearSelection) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear selection", tint = colors.secondaryText)
+                        }
+                    }
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(560.dp),
+                    .heightIn(max = 560.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 16.dp),
             ) {
@@ -1046,16 +1101,12 @@ private fun OnlineNovelChapterSheet(
                     }
                 } else {
                     items(visibleChapters, key = { "${it.order}:${it.path}" }) { chapter ->
-                        OnlineChapterRow(chapter = chapter, onClick = { onOpenChapter(chapter) })
-                    }
-                    if (visibleChapters.size < chapters.size) {
-                        item {
-                            Text(
-                                "Showing first ${visibleChapters.size} chapters.",
-                                color = colors.secondaryText,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+                        OnlineChapterRow(
+                            chapter = chapter,
+                            selected = chapter.order in selectedChapterOrders,
+                            onClick = { onOpenChapter(chapter) },
+                            onLongClick = { onToggleSelection(chapter.order) },
+                        )
                     }
                 }
             }
@@ -1066,14 +1117,17 @@ private fun OnlineNovelChapterSheet(
 @Composable
 private fun OnlineChapterRow(
     chapter: OnlineChapterSummary,
+    selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        color = colors.background.copy(alpha = 0.56f),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        color = if (selected) colors.accent.copy(alpha = 0.14f) else colors.background.copy(alpha = 0.56f),
+        border = if (selected) BorderStroke(1.dp, colors.accent.copy(alpha = 0.46f)) else null,
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
@@ -1112,6 +1166,22 @@ private fun OnlineChapterRow(
             )
         }
     }
+}
+
+private fun Set<Int>.toggle(value: Int): Set<Int> =
+    toMutableSet().apply {
+        if (!add(value)) remove(value)
+    }
+
+private fun expandChapterOrderRange(
+    chapters: List<OnlineChapterSummary>,
+    selectedOrders: Set<Int>,
+): Set<Int> {
+    if (selectedOrders.size < 2) return selectedOrders
+    val sortedSelection = selectedOrders.sorted()
+    val min = sortedSelection.first()
+    val max = sortedSelection.last()
+    return chapters.map { it.order }.filter { it in min..max }.toSet()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
