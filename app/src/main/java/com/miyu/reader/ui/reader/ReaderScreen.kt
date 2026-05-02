@@ -1462,30 +1462,37 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 private class ReaderWebView(context: Context) : WebView(context) {
     var volumeNavigationEnabled: Boolean = false
     var suppressSystemSelectionToolbar: Boolean = true
-        set(value) {
-            field = value
-            setCustomSelectionActionModeCallback(if (value) hiddenSelectionActionModeCallback else null)
-        }
     var onVolumeNavigation: ((Int) -> Unit)? = null
 
-    private val hiddenSelectionActionModeCallback = object : ActionMode.Callback {
-        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            menu?.clear()
-            return true
+    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
+        super.startActionMode(callback.withHiddenMenuWhenNeeded())
+
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? =
+        super.startActionMode(callback.withHiddenMenuWhenNeeded(), type)
+
+    private fun ActionMode.Callback?.withHiddenMenuWhenNeeded(): ActionMode.Callback? {
+        if (!suppressSystemSelectionToolbar) return this
+        val delegate = this
+        return object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                val created = delegate?.onCreateActionMode(mode, menu) ?: true
+                menu?.clear()
+                return created
+            }
+
+            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                val prepared = delegate?.onPrepareActionMode(mode, menu) ?: false
+                menu?.clear()
+                return prepared
+            }
+
+            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean =
+                delegate?.onActionItemClicked(mode, item) ?: false
+
+            override fun onDestroyActionMode(mode: ActionMode?) {
+                delegate?.onDestroyActionMode(mode)
+            }
         }
-
-        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
-            menu?.clear()
-            return false
-        }
-
-        override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
-
-        override fun onDestroyActionMode(mode: ActionMode?) = Unit
-    }
-
-    init {
-        setCustomSelectionActionModeCallback(hiddenSelectionActionModeCallback)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
