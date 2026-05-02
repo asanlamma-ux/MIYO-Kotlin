@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -19,12 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,6 +40,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.ui.core.theme.MiyoSettingsPaddings
@@ -66,30 +69,29 @@ fun MiyoSettingsSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    Column(modifier = modifier.padding(top = MiyoSpacing.small)) {
+    Column(modifier = modifier.padding(top = MiyoSpacing.extraSmall)) {
         Text(
-            title.uppercase(),
-            style = MaterialTheme.typography.labelSmall.copy(
+            title,
+            style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
             ),
             modifier = Modifier.padding(
                 horizontal = MiyoSettingsPaddings.horizontal,
-                vertical = MiyoSettingsPaddings.vertical,
+                vertical = MiyoSpacing.extraSmall,
             ),
-            color = colors.secondaryText,
+            color = colors.onBackground,
         )
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize()
-            .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
-        shape = RoundedCornerShape(MiyoSpacing.extraLarge),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground.copy(alpha = 0.92f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (colors.isDark) 0.dp else 2.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(),
         ) {
-            Column { content() }
+            content()
         }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = MiyoSettingsPaddings.horizontal + 34.dp),
+            color = colors.secondaryText.copy(alpha = 0.12f),
+        )
     }
 }
 
@@ -113,19 +115,32 @@ fun MiyoSettingsItem(
                 vertical = MiyoSettingsPaddings.vertical,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (trailing != null) {
-            trailing()
+            Box(
+                modifier = Modifier.widthIn(max = 132.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                trailing()
+            }
         }
         if (onClick != null && showNavigationArrow) {
             Icon(
@@ -157,16 +172,24 @@ fun MiyoSettingsSwitch(
                 vertical = MiyoSettingsPaddings.vertical,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Switch(
             checked = checked,
@@ -209,7 +232,14 @@ fun <T> MiyoExpandableChoiceSetting(
             accentColor = accentColor,
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(currentValue, color = colors.secondaryText, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        currentValue,
+                        color = colors.secondaryText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End,
+                    )
                     Spacer(Modifier.width(MiyoSpacing.small))
                     Icon(
                         Icons.AutoMirrored.Outlined.ArrowForwardIos,

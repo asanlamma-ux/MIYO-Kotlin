@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,6 +56,7 @@ private data class SettingsDialogState(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit = {},
     onOpenThemePicker: () -> Unit = {},
     onOpenAdvancedSettings: () -> Unit = {},
     onOpenReaderSettings: () -> Unit = {},
@@ -82,15 +84,35 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(colors.background.copy(alpha = 0.94f))
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 164.dp),
+            .padding(bottom = 32.dp),
     ) {
-        MiyoScreenHeader(
-            title = "Settings",
-            eyebrow = "Normal configuration",
-            subtitle = "Koodo-style categories for common controls. Deeper maintenance and reader behavior live in their own workspaces.",
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Settings",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+                    color = colors.onBackground,
+                )
+                Text(
+                    text = "Appearance, reader, library, downloads, backup, and about.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                )
+            }
+            IconButton(onClick = { dialogState = SettingsDialogState("Search", "Settings search is planned for the next routing pass.") }) {
+                Icon(Icons.Outlined.Search, contentDescription = "Search settings")
+            }
+        }
 
-        SettingsSection(title = "Quick Setup") {
+        SettingsSection(title = "Appearance") {
             ExpandableChoiceSetting(
                 expanded = expandedSettingKey == "theme_mode",
                 onExpandedChange = { expandedSettingKey = if (it) "theme_mode" else null },
@@ -142,7 +164,7 @@ fun SettingsScreen(
             )
         }
 
-        SettingsSection(title = "Configuration") {
+        SettingsSection(title = "Reader") {
             SettingsRow(
                 icon = Icons.Outlined.MenuBook,
                 title = "Reader Settings",
@@ -150,6 +172,9 @@ fun SettingsScreen(
                 onClick = onOpenReaderSettings,
                 accentColor = colors.accent,
             )
+        }
+
+        SettingsSection(title = "Library & Storage") {
             SettingsRow(
                 icon = Icons.Outlined.Folder,
                 title = "Library & Storage",
@@ -163,6 +188,9 @@ fun SettingsScreen(
                     )
                 },
             )
+        }
+
+        SettingsSection(title = "Downloads & Sources") {
             SettingsRow(
                 icon = Icons.Outlined.CloudDownload,
                 title = "Downloads & Sources",
@@ -176,6 +204,9 @@ fun SettingsScreen(
                     )
                 },
             )
+        }
+
+        SettingsSection(title = "Data & Backup") {
             SettingsRow(
                 icon = Icons.Outlined.MenuBook,
                 title = "Dictionary Library",
@@ -190,9 +221,6 @@ fun SettingsScreen(
                 onClick = onOpenAdvancedSettings,
                 accentColor = colors.accent,
             )
-        }
-
-        SettingsSection(title = "Account & Sync") {
             SettingsRow(
                 icon = Icons.Outlined.Login,
                 title = "Sign In / Sign Up",

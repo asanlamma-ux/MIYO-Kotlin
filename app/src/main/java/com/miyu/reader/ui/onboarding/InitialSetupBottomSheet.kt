@@ -113,7 +113,10 @@ fun InitialSetupBottomSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onSkip,
+        onDismissRequest = {
+            // Do not mark onboarding complete from incidental sheet dismissal.
+            // The explicit Skip/Finish buttons are the only state-changing exits.
+        },
         containerColor = colors.background,
         dragHandle = {
             Box(

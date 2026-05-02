@@ -24,7 +24,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
-import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
+import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HistoryViewModel
@@ -36,14 +37,30 @@ import java.time.temporal.ChronoUnit
 fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenThemePicker: () -> Unit = {},
+    onSaveAndExport: () -> Unit = {},
+    onAbout: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val history by viewModel.readingHistory.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
+    var query by remember { mutableStateOf("") }
+    val visibleHistory = remember(history, query) {
+        if (query.isBlank()) {
+            history
+        } else {
+            val needle = query.trim().lowercase()
+            history.filter { book ->
+                book.title.lowercase().contains(needle) ||
+                    book.author.lowercase().contains(needle)
+            }
+        }
+    }
 
     // Group by time period
-    val grouped = remember(history) {
-        history.groupBy { book ->
+    val grouped = remember(visibleHistory) {
+        visibleHistory.groupBy { book ->
             val readAt = try { Instant.parse(book.lastReadAt ?: "") } catch (_: Exception) { Instant.now() }
             val days = ChronoUnit.DAYS.between(readAt, Instant.now())
             when {
@@ -57,16 +74,26 @@ fun HistoryScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        MiyoScreenHeader(
-            title = "History",
-            subtitle = "${history.size} ${if (history.size == 1) "book" else "books"} read",
-        ) {
-            if (uiState.isSelecting) {
-                IconButton(onClick = viewModel::cancelSelection) {
-                    Icon(Icons.Default.Close, contentDescription = "Cancel")
+        MiyoTopSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            placeholder = "Search history...",
+            actions = {
+                if (uiState.isSelecting) {
+                    IconButton(onClick = viewModel::cancelSelection) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel")
+                    }
+                } else {
+                    MiyoMainOverflowMenu(
+                        onOpenSettings = onOpenSettings,
+                        onOpenThemePicker = onOpenThemePicker,
+                        onExportData = onSaveAndExport,
+                        onImportData = onSaveAndExport,
+                        onAbout = onAbout,
+                    )
                 }
-            }
-        }
+            },
+        )
 
         // ── Selection bar ───────────────────────────────────────────
         AnimatedVisibility(visible = uiState.isSelecting) {
@@ -104,11 +131,15 @@ fun HistoryScreen(
         }
 
         // ── Content ─────────────────────────────────────────────────
-        if (history.isEmpty()) {
+        if (visibleHistory.isEmpty()) {
             MiyoEmptyScreen(
                 icon = Icons.Outlined.AccessTime,
-                title = "No Reading History",
-                message = "Start reading a book and it will appear here.",
+                title = if (query.isBlank()) "No Reading History" else "No matches",
+                message = if (query.isBlank()) {
+                    "Start reading a book and it will appear here."
+                } else {
+                    "Try another title or author."
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(MiyoSpacing.extraLarge),

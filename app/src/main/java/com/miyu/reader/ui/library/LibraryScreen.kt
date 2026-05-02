@@ -96,7 +96,9 @@ import com.miyu.reader.domain.model.ReadingStatus
 import com.miyu.reader.domain.model.SortOption
 import com.miyu.reader.domain.model.ViewMode
 import com.miyu.reader.ui.components.BookCover
+import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
+import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.ImportFeedbackType
 import com.miyu.reader.viewmodel.LibraryCategory
@@ -110,6 +112,10 @@ fun LibraryScreen(
     onOpenBook: (String) -> Unit = {},
     onOpenBookDetails: (String) -> Unit = {},
     onOpenBrowse: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenThemePicker: () -> Unit = {},
+    onSaveAndExport: () -> Unit = {},
+    onAbout: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val displayedBooks by viewModel.displayedBooks.collectAsStateWithLifecycle()
@@ -130,6 +136,7 @@ fun LibraryScreen(
     var showCreateCategory by remember { mutableStateOf(false) }
     var showManageCategory by remember { mutableStateOf(false) }
     var showAssignCategory by remember { mutableStateOf(false) }
+    var incognitoMode by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -153,11 +160,13 @@ fun LibraryScreen(
 
             AnimatedVisibility(visible = uiState.selectedBookIds.isEmpty()) {
                 LibraryToolbar(
-                    category = selectedCategory,
+                    query = uiState.searchQuery,
+                    onQueryChange = viewModel::setSearchQuery,
                     viewMode = uiState.viewMode,
                     filter = uiState.filterOption,
                     sort = uiState.sortOption,
                     showSortMenu = showSortMenu,
+                    incognitoMode = incognitoMode,
                     onShowSortMenu = { showSortMenu = true },
                     onDismissSortMenu = { showSortMenu = false },
                     onSortSelected = {
@@ -173,13 +182,13 @@ fun LibraryScreen(
                     onManageCategory = {
                         if (selectedCategory.isMutable) showManageCategory = true else showCreateCategory = true
                     },
+                    onToggleIncognito = { incognitoMode = !incognitoMode },
+                    onOpenSettings = onOpenSettings,
+                    onOpenThemePicker = onOpenThemePicker,
+                    onSaveAndExport = onSaveAndExport,
+                    onAbout = onAbout,
                 )
             }
-
-            LibrarySearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = viewModel::setSearchQuery,
-            )
 
             LibraryCategoryTabs(
                 categories = categories,
@@ -326,11 +335,13 @@ fun LibraryScreen(
 
 @Composable
 private fun LibraryToolbar(
-    category: LibraryCategory,
+    query: String,
+    onQueryChange: (String) -> Unit,
     viewMode: ViewMode,
     filter: FilterOption,
     sort: SortOption,
     showSortMenu: Boolean,
+    incognitoMode: Boolean,
     onShowSortMenu: () -> Unit,
     onDismissSortMenu: () -> Unit,
     onSortSelected: (SortOption) -> Unit,
@@ -338,34 +349,78 @@ private fun LibraryToolbar(
     onOpenBrowse: () -> Unit,
     onToggleView: () -> Unit,
     onManageCategory: () -> Unit,
+    onToggleIncognito: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenThemePicker: () -> Unit,
+    onSaveAndExport: () -> Unit,
+    onAbout: () -> Unit,
 ) {
-    val colors = LocalMIYUColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 20.dp, top = 22.dp, end = 20.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Library",
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Black),
-                color = colors.onBackground,
-                maxLines = 1,
-            )
-            Spacer(Modifier.width(10.dp))
-            CountPill(count = category.count)
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    MiyoTopSearchBar(
+        query = query,
+        onQueryChange = onQueryChange,
+        placeholder = "Search library...",
+        actions = {
             Box {
-                HeaderActionButton(
-                    icon = Icons.Outlined.Tune,
-                    contentDescription = "Sort and filters",
-                    onClick = onShowSortMenu,
+                MiyoMainOverflowMenu(
+                    onOpenSettings = onOpenSettings,
+                    onOpenThemePicker = onOpenThemePicker,
+                    onExportData = onSaveAndExport,
+                    onImportData = onSaveAndExport,
+                    onAbout = onAbout,
+                    extraItems = { dismiss ->
+                        DropdownMenuItem(
+                            text = { Text("Sort and filter") },
+                            onClick = {
+                                dismiss()
+                                onShowSortMenu()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Browse sources") },
+                            onClick = {
+                                dismiss()
+                                onOpenBrowse()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Explore, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (viewMode == ViewMode.GRID) "List view" else "Grid view") },
+                            onClick = {
+                                dismiss()
+                                onToggleView()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    if (viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
+                                    contentDescription = null,
+                                )
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Favorite categories") },
+                            onClick = {
+                                dismiss()
+                                onManageCategory()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Category, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Incognito mode", modifier = Modifier.weight(1f))
+                                    Checkbox(checked = incognitoMode, onCheckedChange = null)
+                                }
+                            },
+                            onClick = {
+                                onToggleIncognito()
+                                dismiss()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.FilterList, contentDescription = null) },
+                        )
+                        HorizontalDivider()
+                    },
                 )
                 DropdownMenu(
                     expanded = showSortMenu,
@@ -396,23 +451,8 @@ private fun LibraryToolbar(
                     }
                 }
             }
-            HeaderActionButton(
-                icon = Icons.Outlined.Explore,
-                contentDescription = "Browse sources",
-                onClick = onOpenBrowse,
-            )
-            HeaderActionButton(
-                icon = if (viewMode == ViewMode.GRID) Icons.Outlined.ViewList else Icons.Outlined.GridView,
-                contentDescription = "Toggle library view",
-                onClick = onToggleView,
-            )
-            HeaderActionButton(
-                icon = if (category.isMutable) Icons.Outlined.Category else Icons.Outlined.Add,
-                contentDescription = if (category.isMutable) "Manage category" else "Create category",
-                onClick = onManageCategory,
-            )
-        }
-    }
+        },
+    )
 }
 
 @Composable
@@ -809,14 +849,14 @@ private fun HeaderActionButton(
 ) {
     val colors = LocalMIYUColors.current
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         color = colors.cardBackground,
         tonalElevation = 1.dp,
         shadowElevation = 1.dp,
-        modifier = Modifier.size(48.dp),
+        modifier = Modifier.size(44.dp),
     ) {
         IconButton(onClick = onClick) {
-            Icon(icon, contentDescription = contentDescription, tint = colors.onBackground)
+            Icon(icon, contentDescription = contentDescription, tint = colors.onBackground, modifier = Modifier.size(22.dp))
         }
     }
 }

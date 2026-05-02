@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,8 +21,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.ui.components.BookCover
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
-import com.miyu.reader.ui.core.components.MiyoIconActionButton
-import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
+import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HomeViewModel
@@ -33,35 +32,64 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
     onOpenThemePicker: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onSaveAndExport: () -> Unit = {},
+    onAbout: () -> Unit = {},
 ) {
     val books: List<Book> by viewModel.recentBooks.collectAsStateWithLifecycle(initialValue = emptyList())
     val colors = LocalMIYUColors.current
+    var query by remember { mutableStateOf("") }
+    val visibleBooks = remember(books, query) {
+        if (query.isBlank()) {
+            books
+        } else {
+            val needle = query.trim().lowercase()
+            books.filter { book ->
+                book.title.lowercase().contains(needle) ||
+                    book.author.lowercase().contains(needle)
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 96.dp),
+        contentPadding = PaddingValues(bottom = 72.dp),
     ) {
         item {
-            MiyoScreenHeader(
-                title = "Miyo",
-                eyebrow = "Good Morning",
-                subtitle = if (books.isEmpty()) {
-                    "Import a book to start reading"
-                } else {
-                    "${books.size} book${if (books.size != 1) "s" else ""} in your library"
+            MiyoTopSearchBar(
+                query = query,
+                onQueryChange = { query = it },
+                placeholder = "Search library...",
+                actions = {
+                    MiyoMainOverflowMenu(
+                        onOpenSettings = onOpenSettings,
+                        onOpenThemePicker = onOpenThemePicker,
+                        onExportData = onSaveAndExport,
+                        onImportData = onSaveAndExport,
+                        onAbout = onAbout,
+                    )
                 },
-            ) {
-                MiyoIconActionButton(
-                    icon = Icons.Outlined.Palette,
-                    contentDescription = "Themes",
-                    onClick = onOpenThemePicker,
+            )
+        }
+
+        if (query.isBlank()) {
+            item {
+                Text(
+                    text = if (books.isEmpty()) {
+                        "Import a book to start reading"
+                    } else {
+                        "${books.size} book${if (books.size != 1) "s" else ""} in your library"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.large),
                 )
             }
         }
 
         // ── Continue reading carousel ───────────────────────────────
-        val readingBooks = books.filter { it.progress > 0f && it.progress < 100f }
-        if (readingBooks.isNotEmpty()) {
+        val readingBooks = visibleBooks.filter { it.progress > 0f && it.progress < 100f }
+        if (query.isBlank() && readingBooks.isNotEmpty()) {
             item {
                 Text(
                     "Continue Reading",
@@ -84,12 +112,16 @@ fun HomeScreen(
         }
 
         // ── Empty state ─────────────────────────────────────────────
-        if (books.isEmpty()) {
+        if (visibleBooks.isEmpty()) {
             item {
                 MiyoEmptyScreen(
                     icon = Icons.Default.MenuBook,
-                    title = "No Books Yet",
-                    message = "Go to the Library tab to import your first EPUB.",
+                    title = if (query.isBlank()) "No Books Yet" else "No matches",
+                    message = if (query.isBlank()) {
+                        "Go to the Library tab to import your first EPUB."
+                    } else {
+                        "Try another title or author."
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 60.dp),
@@ -98,16 +130,16 @@ fun HomeScreen(
         }
 
         // ── Recent books list ───────────────────────────────────────
-        if (books.isNotEmpty()) {
+        if (visibleBooks.isNotEmpty()) {
             item {
                 Text(
-                    "All Books",
+                    if (query.isBlank()) "All Books" else "Search results",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
                     color = colors.onBackground,
                 )
             }
-            items(books) { book ->
+            items(visibleBooks) { book ->
                 BookCard(book = book, onClick = { onOpenBook(book.id) }, colors = colors)
             }
         }

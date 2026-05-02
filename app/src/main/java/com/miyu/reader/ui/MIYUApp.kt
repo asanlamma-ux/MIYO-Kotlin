@@ -27,6 +27,7 @@ import androidx.navigation.navArgument
 import com.miyu.reader.R
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.permissions.MiyoPermissions
+import com.miyu.reader.storage.MiyoBackupManager
 import com.miyu.reader.ui.browse.BrowseWorkflowScreen
 import com.miyu.reader.ui.browse.DownloadsWorkflowScreen
 import com.miyu.reader.ui.browse.GlobalSourceSearchScreen
@@ -49,6 +50,8 @@ import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.core.components.material.MiyoNavigationBar
 import com.miyu.reader.ui.core.components.material.MiyoNavigationBarItem
 import com.miyu.reader.ui.core.components.material.MiyoScaffold
+import com.miyu.reader.ui.core.components.MiyoAboutDialog
+import com.miyu.reader.ui.core.components.MiyoBackupChoiceDialog
 import com.miyu.reader.ui.permissions.MiyoStoragePermissionDialog
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
@@ -57,6 +60,7 @@ import com.miyu.reader.ui.theme.SpecialThemeBackdrop
 import com.miyu.reader.viewmodel.AppPermissionViewModel
 import com.miyu.reader.viewmodel.LibraryViewModel
 import com.miyu.reader.viewmodel.ThemeViewModel
+import kotlinx.coroutines.launch
 
 sealed class Screen(
     val route: String,
@@ -82,7 +86,7 @@ sealed class Screen(
 }
 
 val bottomNavItems = listOf(
-    Screen.Home, Screen.Library, Screen.Browse, Screen.History, Screen.Settings
+    Screen.Home, Screen.Library, Screen.Browse, Screen.History
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,12 +102,34 @@ fun MIYUApp() {
     MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {
         val context = LocalContext.current
         val lifecycleOwner = LocalLifecycleOwner.current
+        val scope = rememberCoroutineScope()
         val navController = rememberNavController()
         val colors = LocalMIYUColors.current
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
         var showThemePicker by remember { mutableStateOf(false) }
+        var showBackupDialog by remember { mutableStateOf(false) }
+        var showAboutDialog by remember { mutableStateOf(false) }
+        var backupMessage by remember { mutableStateOf<String?>(null) }
         var dismissStorageDialogThisSession by remember { mutableStateOf(false) }
+        val exportBackupLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
+        ) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                backupMessage = runCatching { MiyoBackupManager.exportToUri(context, uri) }
+                    .getOrElse { it.message ?: "Backup export failed." }
+            }
+        }
+        val importBackupLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            uri ?: return@rememberLauncherForActivityResult
+            scope.launch {
+                backupMessage = runCatching { MiyoBackupManager.importFromUri(context, uri) }
+                    .getOrElse { it.message ?: "Backup import failed." }
+            }
+        }
         val requestRuntimePermissions = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestMultiplePermissions(),
         ) {
@@ -154,6 +180,7 @@ fun MIYUApp() {
                 Screen.SourceDetails.route,
                 Screen.SourceVerifier.route,
                 Screen.BookDetails.route,
+                Screen.Settings.route,
                 Screen.AdvancedSettings.route,
                 Screen.ReaderSettings.route,
                 Screen.Terms.route,
@@ -169,6 +196,17 @@ fun MIYUApp() {
             }
             navController.navigate(route)
         }
+        val openBookDetails: (String) -> Unit = { bookId ->
+            navController.navigate("library/book/$bookId")
+        }
+        val openSettings = {
+            navController.navigate(Screen.Settings.route) {
+                launchSingleTop = true
+            }
+        }
+        val openBackupDialog = { showBackupDialog = true }
+        val startExportBackup = { exportBackupLauncher.launch("miyo_backup.miyo") }
+        val startImportBackup = { importBackupLauncher.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) }
 
         Box(
             modifier = Modifier
@@ -205,7 +243,7 @@ fun MIYUApp() {
                                             painter = painterResource(screen.iconRes),
                                             contentDescription = screen.title,
                                             tint = tint,
-                                            modifier = Modifier.size(24.dp),
+                                            modifier = Modifier.size(22.dp),
                                         )
                                     }
                                 }
@@ -221,23 +259,24 @@ fun MIYUApp() {
                 ) {
                     composable(Screen.Home.route) {
                         HomeScreen(
-                            onOpenBook = { bookId ->
-                                openReader(bookId, null)
-                            },
+                            onOpenBook = openBookDetails,
                             onOpenThemePicker = { showThemePicker = true },
+                            onOpenSettings = openSettings,
+                            onSaveAndExport = openBackupDialog,
+                            onAbout = { showAboutDialog = true },
                         )
                     }
                     composable(Screen.Library.route) {
                         LibraryScreen(
-                            onOpenBook = { bookId ->
-                                openReader(bookId, null)
-                            },
-                            onOpenBookDetails = { bookId ->
-                                navController.navigate("library/book/$bookId")
-                            },
+                            onOpenBook = openBookDetails,
+                            onOpenBookDetails = openBookDetails,
                             onOpenBrowse = {
                                 navController.navigate(Screen.Browse.route)
                             },
+                            onOpenSettings = openSettings,
+                            onOpenThemePicker = { showThemePicker = true },
+                            onSaveAndExport = openBackupDialog,
+                            onAbout = { showAboutDialog = true },
                         )
                     }
                     composable(Screen.Browse.route) {
@@ -248,15 +287,24 @@ fun MIYUApp() {
                             onOpenMigration = { navController.navigate(Screen.SourceMigration.route) },
                             onOpenDownloads = { navController.navigate(Screen.DownloadQueue.route) },
                             onOpenUpdates = { navController.navigate(Screen.SourceUpdates.route) },
+                            onOpenSettings = openSettings,
+                            onOpenThemePicker = { showThemePicker = true },
+                            onSaveAndExport = openBackupDialog,
+                            onAbout = { showAboutDialog = true },
                         )
                     }
                     composable(Screen.History.route) {
-                        HistoryScreen(onOpenBook = { bookId ->
-                            openReader(bookId, null)
-                        })
+                        HistoryScreen(
+                            onOpenBook = openBookDetails,
+                            onOpenSettings = openSettings,
+                            onOpenThemePicker = { showThemePicker = true },
+                            onSaveAndExport = openBackupDialog,
+                            onAbout = { showAboutDialog = true },
+                        )
                     }
                     composable(Screen.Settings.route) {
                         SettingsScreen(
+                            onBack = { navController.popBackStack() },
                             onOpenThemePicker = { showThemePicker = true },
                             onOpenAdvancedSettings = { navController.navigate(Screen.AdvancedSettings.route) },
                             onOpenReaderSettings = { navController.navigate(Screen.ReaderSettings.route) },
@@ -364,6 +412,31 @@ fun MIYUApp() {
                 selectedThemeId = readerThemeId,
                 onThemeSelected = themeViewModel::setReaderThemeId,
                 onDismiss = { showThemePicker = false },
+            )
+        }
+
+        if (showBackupDialog) {
+            MiyoBackupChoiceDialog(
+                onDismiss = { showBackupDialog = false },
+                onExportData = startExportBackup,
+                onImportData = startImportBackup,
+            )
+        }
+
+        if (showAboutDialog) {
+            MiyoAboutDialog(onDismiss = { showAboutDialog = false })
+        }
+
+        backupMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = { backupMessage = null },
+                title = { Text("MIYO Backup") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = { backupMessage = null }) {
+                        Text("Close")
+                    }
+                },
             )
         }
 

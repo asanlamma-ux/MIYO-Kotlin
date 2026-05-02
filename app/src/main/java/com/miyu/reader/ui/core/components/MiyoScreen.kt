@@ -52,7 +52,7 @@ fun MiyoScreenHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top,
     ) {
@@ -67,7 +67,7 @@ fun MiyoScreenHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
                     color = colors.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -81,9 +81,10 @@ fun MiyoScreenHeader(
                     ) {
                         Text(
                             text = it.toString(),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = MiyoSpacing.small),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             color = colors.secondaryText,
                             fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.labelLarge,
                         )
                     }
                 }
@@ -92,8 +93,10 @@ fun MiyoScreenHeader(
                 Spacer(Modifier.height(MiyoSpacing.extraSmall))
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colors.secondaryText,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -138,21 +141,21 @@ fun MiyoEmptyScreen(
             Surface(
                 shape = CircleShape,
                 color = colors.accent.copy(alpha = 0.13f),
-                modifier = Modifier.size(96.dp),
+                modifier = Modifier.size(72.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = colors.accent,
-                        modifier = Modifier.size(42.dp),
+                        modifier = Modifier.size(32.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(MiyoSpacing.large))
+            Spacer(Modifier.height(MiyoSpacing.medium))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
                 color = colors.onBackground,
                 textAlign = TextAlign.Center,
             )

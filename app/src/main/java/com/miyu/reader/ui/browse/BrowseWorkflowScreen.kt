@@ -45,7 +45,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -75,6 +77,8 @@ import com.miyu.reader.domain.model.OnlineNovelSummary
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoIconActionButton
 import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
+import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.core.components.MiyoWorkspaceExitButton
 import com.miyu.reader.ui.core.components.MiyoWorkspaceSurface
 import com.miyu.reader.ui.core.theme.MiyoSpacing
@@ -90,6 +94,10 @@ fun BrowseWorkflowScreen(
     onOpenMigration: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenUpdates: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onOpenThemePicker: () -> Unit = {},
+    onSaveAndExport: () -> Unit = {},
+    onAbout: () -> Unit = {},
     viewModel: BrowseViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -117,49 +125,69 @@ fun BrowseWorkflowScreen(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        MiyoScreenHeader(
-            title = "Browse",
-            subtitle = "Installed source plugins, available repositories, global search, and novel downloads.",
-            count = state.installedSources.count { it.installState == NovelSourceInstallState.INSTALLED },
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
-                MiyoIconActionButton(
-                    icon = Icons.Outlined.Search,
-                    contentDescription = "Global source search",
-                    onClick = onOpenGlobalSearch,
+        MiyoTopSearchBar(
+            query = state.sourceQuery,
+            onQueryChange = viewModel::setSourceQuery,
+            placeholder = "Search sources...",
+            actions = {
+                MiyoMainOverflowMenu(
+                    onOpenSettings = onOpenSettings,
+                    onOpenThemePicker = onOpenThemePicker,
+                    onExportData = onSaveAndExport,
+                    onImportData = onSaveAndExport,
+                    onAbout = onAbout,
+                    extraItems = { dismiss ->
+                        DropdownMenuItem(
+                            text = { Text("Global search") },
+                            onClick = {
+                                dismiss()
+                                onOpenGlobalSearch()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Downloads") },
+                            onClick = {
+                                dismiss()
+                                onOpenDownloads()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Manage sources") },
+                            onClick = {
+                                dismiss()
+                                onOpenRepositories()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Migrate sources") },
+                            onClick = {
+                                dismiss()
+                                onOpenMigration()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Source updates") },
+                            onClick = {
+                                dismiss()
+                                onOpenUpdates()
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Update, contentDescription = null) },
+                        )
+                        HorizontalDivider()
+                    },
                 )
-                MiyoIconActionButton(
-                    icon = Icons.Outlined.SwapHoriz,
-                    contentDescription = "Migrate source",
-                    onClick = onOpenMigration,
-                )
-                MiyoIconActionButton(
-                    icon = Icons.Outlined.Settings,
-                    contentDescription = "Source repositories",
-                    onClick = onOpenRepositories,
-                )
-            }
-        }
+            },
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 112.dp),
+            contentPadding = PaddingValues(bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
         ) {
-            item {
-                OutlinedTextField(
-                    value = state.sourceQuery,
-                    onValueChange = viewModel::setSourceQuery,
-                    placeholder = { Text("Search sources...") },
-                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = MiyoSpacing.large),
-                    singleLine = true,
-                    shape = RoundedCornerShape(18.dp),
-                )
-            }
-
             item {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = MiyoSpacing.large),

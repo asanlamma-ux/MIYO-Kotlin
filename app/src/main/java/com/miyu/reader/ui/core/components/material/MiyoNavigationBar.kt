@@ -48,7 +48,7 @@ fun MiyoNavigationBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(80.dp)
+                .height(56.dp)
                 .selectableGroup(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -87,18 +87,18 @@ fun RowScope.MiyoNavigationBarItem(
                 role = Role.Tab,
                 onClick = onClick,
             )
-            .padding(vertical = MiyoSpacing.extraSmall),
+            .padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
-                .padding(bottom = MiyoSpacing.small)
-                .size(width = 20.dp, height = 3.dp)
+                .padding(bottom = 3.dp)
+                .size(width = 18.dp, height = 3.dp)
                 .clip(RoundedCornerShape(50))
                 .background(indicatorColor),
         )
         icon(iconColor)
-        Spacer(Modifier.height(MiyoSpacing.extraSmall))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
