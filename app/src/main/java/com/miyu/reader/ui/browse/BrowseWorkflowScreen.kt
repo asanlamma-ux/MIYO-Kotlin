@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,21 +24,30 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Button
@@ -49,11 +59,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +75,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -76,15 +91,15 @@ import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineNovelSummary
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoIconActionButton
-import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.core.components.MiyoMainOverflowMenu
-import com.miyu.reader.ui.core.components.MiyoTopSearchBar
 import com.miyu.reader.ui.core.components.MiyoWorkspaceExitButton
 import com.miyu.reader.ui.core.components.MiyoWorkspaceSurface
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.BrowseSourceTab
 import com.miyu.reader.viewmodel.BrowseViewModel
+import com.miyu.reader.viewmodel.GlobalSearchSourceResult
+import com.miyu.reader.viewmodel.GlobalSourceFilter
 
 @Composable
 fun BrowseWorkflowScreen(
@@ -125,10 +140,8 @@ fun BrowseWorkflowScreen(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        MiyoTopSearchBar(
-            query = state.sourceQuery,
-            onQueryChange = viewModel::setSourceQuery,
-            placeholder = "Search sources...",
+        BrowseSearchLauncher(
+            onClick = onOpenGlobalSearch,
             actions = {
                 MiyoMainOverflowMenu(
                     onOpenSettings = onOpenSettings,
@@ -342,6 +355,48 @@ private fun SourceSectionHeader(title: String) {
 }
 
 @Composable
+private fun BrowseSearchLauncher(
+    onClick: () -> Unit,
+    actions: @Composable () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+    ) {
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(56.dp)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(28.dp),
+            color = colors.cardBackground,
+            border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.28f)),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = MiyoSpacing.large),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+            ) {
+                Icon(Icons.Outlined.TravelExplore, contentDescription = null, tint = colors.secondaryText)
+                Text(
+                    "Search novels, sources...",
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        actions()
+    }
+}
+
+@Composable
 fun SourceWorkflowDetailScreen(
     sourceId: String,
     onBack: () -> Unit,
@@ -421,13 +476,26 @@ fun SourceWorkflowDetailScreen(
                         )
                     }
                 }
-                items(state.results, key = { "${it.providerId}:${it.path}" }) { novel ->
-                    val key = "${novel.providerId}:${novel.path}"
-                    NovelResultCard(
-                        novel = novel,
-                        downloading = state.downloadingKey == key,
-                        onDownload = { viewModel.downloadNovel(source.id, novel) },
-                    )
+                items(state.results.chunked(3), key = { row -> row.joinToString { "${it.providerId}:${it.path}" } }) { row ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MiyoSpacing.small),
+                        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
+                    ) {
+                        row.forEach { novel ->
+                            val key = "${novel.providerId}:${novel.path}"
+                            NovelCoverTile(
+                                novel = novel,
+                                downloading = state.downloadingKey == key,
+                                onDownload = { viewModel.downloadNovel(source.id, novel) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        repeat(3 - row.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
                 if (state.results.isEmpty() && state.searchedSourceId == source.id && !state.loading && state.error == null) {
                     item {
@@ -478,76 +546,332 @@ fun GlobalSourceSearchScreen(
     viewModel: BrowseViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = LocalMIYUColors.current
     val protectedSources = state.installedSources.filter { it.requiresVerification }
-    val runnableSources = state.installedSources.filter { !it.requiresVerification }
+    val progress = if (state.globalSearchTotal > 0) {
+        state.globalSearchProgress / state.globalSearchTotal.toFloat()
+    } else {
+        0f
+    }
 
-    MiyoWorkspaceSurface {
-        MiyoWorkspaceExitButton(label = "Exit global search", onClick = onBack)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.background),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.small, vertical = MiyoSpacing.small),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = colors.onBackground)
+                }
+                OutlinedTextField(
+                    value = state.globalSearchQuery,
+                    onValueChange = viewModel::setGlobalSearchQuery,
+                    placeholder = { Text("Search...") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = { viewModel.searchAllSources() },
+                    ),
+                    trailingIcon = {
+                        if (state.globalSearchQuery.isNotBlank()) {
+                            IconButton(onClick = { viewModel.setGlobalSearchQuery("") }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.small),
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+            ) {
+                FilterChip(
+                    selected = state.globalSourceFilter == GlobalSourceFilter.PINNED,
+                    onClick = { viewModel.setGlobalSourceFilter(GlobalSourceFilter.PINNED) },
+                    leadingIcon = { Icon(Icons.Outlined.PushPin, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = { Text("Pinned") },
+                )
+                FilterChip(
+                    selected = state.globalSourceFilter == GlobalSourceFilter.ALL,
+                    onClick = { viewModel.setGlobalSourceFilter(GlobalSourceFilter.ALL) },
+                    leadingIcon = { Icon(Icons.Outlined.DoneAll, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = { Text("All") },
+                )
+                FilterChip(
+                    selected = state.globalOnlyHasResults,
+                    onClick = viewModel::toggleGlobalOnlyHasResults,
+                    leadingIcon = { Icon(Icons.Outlined.FilterList, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = { Text("Has results") },
+                )
+            }
+            if (progress > 0f && progress < 1f) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colors.accent,
+                )
+            }
+            HorizontalDivider()
+        }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 44.dp),
-            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
         ) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = LocalMIYUColors.current.cardBackground),
-                    shape = RoundedCornerShape(28.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                ) {
-                    Column(modifier = Modifier.padding(MiyoSpacing.large)) {
-                        SourceIconHeader(icon = Icons.Outlined.Search)
-                        Spacer(Modifier.height(MiyoSpacing.large))
-                        Text(
-                            "Global Search",
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
-                            color = LocalMIYUColors.current.onBackground,
-                        )
-                        Text(
-                            "Search installed LNReader-style sources. Protected sources show a verifier card in results instead of silently failing.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = LocalMIYUColors.current.secondaryText,
-                        )
-                    }
-                }
-            }
-
-            protectedSources.forEach { source ->
-                item(key = "verify:${source.id}") {
-                    SourceVerificationPromptCard(
-                        source = source,
-                        onOpenSource = { onOpenSource(source.id) },
-                        onOpenVerifier = { onOpenVerifier(source.id) },
-                    )
-                }
-            }
-
-            if (state.recommendedSources.isNotEmpty()) {
+            if (state.globalSearchQuery.isBlank() && state.globalSearchResults.isEmpty()) {
                 item {
-                    SourceRecommendationStrip(
-                        title = "Recommended before search",
+                    SearchSpaceLanding(
+                        recommendedQueries = state.recommendedQueries,
+                        history = state.browseSearchHistory,
                         sources = state.recommendedSources,
+                        onQuerySelected = { query ->
+                            viewModel.setGlobalSearchQuery(query)
+                            viewModel.searchAllSources(query)
+                        },
+                        onRemoveHistory = viewModel::removeBrowseSearchQuery,
+                        onClearHistory = viewModel::clearBrowseSearchHistory,
                         onOpenSource = { source ->
                             viewModel.recordSourceOpened(source.id)
                             onOpenSource(source.id)
                         },
                     )
                 }
+                if (protectedSources.isNotEmpty()) {
+                    item { SourceSectionHeader("Needs verification") }
+                    items(protectedSources, key = { "verify:${it.id}" }) { source ->
+                        SourceVerificationPromptCard(
+                            source = source,
+                            onOpenSource = { onOpenSource(source.id) },
+                            onOpenVerifier = { onOpenVerifier(source.id) },
+                        )
+                    }
+                }
+            } else {
+                items(state.visibleGlobalSearchResults, key = { "global:${it.source.id}" }) { result ->
+                    GlobalSearchSourceResultBlock(
+                        result = result,
+                        onOpenSource = {
+                            viewModel.recordSourceOpened(result.source.id)
+                            onOpenSource(result.source.id)
+                        },
+                        onDownload = { novel -> viewModel.downloadNovel(result.source.id, novel) },
+                        downloadingKey = state.downloadingKey,
+                    )
+                }
+                if (state.visibleGlobalSearchResults.isEmpty() && !state.loading) {
+                    item {
+                        MiyoEmptyScreen(
+                            icon = Icons.Outlined.Search,
+                            title = "No results found",
+                            message = "Try all sources, a shorter title, or another provider.",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 64.dp),
+                        )
+                    }
+                }
             }
+        }
+    }
+}
 
-            item { SourceSectionHeader("Searchable sources") }
-            items(runnableSources, key = { "searchable:${it.id}" }) { source ->
-                SourcePluginCard(
-                    source = source,
-                    pinned = source.id in state.pinnedSourceIds,
-                    lastUsed = source.id == state.lastUsedSourceId,
-                    onTogglePin = { viewModel.togglePinSource(source.id) },
-                    onOpen = {
-                        viewModel.recordSourceOpened(source.id)
-                        onOpenSource(source.id)
-                    },
+@Composable
+private fun SearchSpaceLanding(
+    recommendedQueries: List<String>,
+    history: List<String>,
+    sources: List<NovelSourcePluginItem>,
+    onQuerySelected: (String) -> Unit,
+    onRemoveHistory: (String) -> Unit,
+    onClearHistory: () -> Unit,
+    onOpenSource: (NovelSourcePluginItem) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = MiyoSpacing.large),
+        verticalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+    ) {
+        SourceSectionHeader("Recommendations")
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = MiyoSpacing.large),
+            horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+        ) {
+            items(recommendedQueries, key = { "query:$it" }) { query ->
+                FilterChip(
+                    selected = false,
+                    onClick = { onQuerySelected(query) },
+                    label = { Text(query, fontWeight = FontWeight.SemiBold) },
+                    shape = RoundedCornerShape(12.dp),
                 )
             }
         }
+
+        if (sources.isNotEmpty()) {
+            SourceRecommendationStrip(
+                title = "Recommended sources",
+                sources = sources,
+                onOpenSource = onOpenSource,
+            )
+        }
+
+        if (history.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.large),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "Search history",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+                    color = LocalMIYUColors.current.secondaryText,
+                )
+                TextButton(onClick = onClearHistory) {
+                    Text("Clear")
+                }
+            }
+            history.forEach { query ->
+                SearchHistoryRow(
+                    query = query,
+                    onClick = { onQuerySelected(query) },
+                    onRemove = { onRemoveHistory(query) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHistoryRow(
+    query: String,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = MiyoSpacing.large, end = MiyoSpacing.small, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.History, contentDescription = null, tint = colors.secondaryText)
+        Spacer(Modifier.width(MiyoSpacing.large))
+        Text(
+            query,
+            modifier = Modifier.weight(1f),
+            color = colors.onBackground,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        IconButton(onClick = onRemove) {
+            Icon(Icons.Outlined.Close, contentDescription = "Remove", tint = colors.secondaryText)
+        }
+    }
+}
+
+@Composable
+private fun GlobalSearchSourceResultBlock(
+    result: GlobalSearchSourceResult,
+    onOpenSource: () -> Unit,
+    onDownload: (OnlineNovelSummary) -> Unit,
+    downloadingKey: String?,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenSource)
+                .padding(start = MiyoSpacing.large, end = MiyoSpacing.extraSmall, top = 10.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(
+                    result.source.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LocalMIYUColors.current.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    result.source.language,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalMIYUColors.current.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onOpenSource) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+            }
+        }
+
+        when {
+            result.loading -> GlobalSearchLoadingResultItem()
+            result.error != null -> GlobalSearchErrorResultItem(result.error)
+            result.novels.isEmpty() -> Text(
+                text = "No results found",
+                modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+                color = LocalMIYUColors.current.secondaryText,
+            )
+            else -> LazyRow(
+                contentPadding = PaddingValues(horizontal = MiyoSpacing.small, vertical = MiyoSpacing.small),
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
+            ) {
+                items(result.novels, key = { "${result.source.id}:${it.path}" }) { novel ->
+                    NovelCoverTile(
+                        novel = novel,
+                        width = 96.dp,
+                        downloading = downloadingKey == "${novel.providerId}:${novel.path}",
+                        onDownload = { onDownload(novel) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlobalSearchLoadingResultItem() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MiyoSpacing.large),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+    }
+}
+
+@Composable
+private fun GlobalSearchErrorResultItem(message: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+        Spacer(Modifier.width(MiyoSpacing.small))
+        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1006,71 +1330,42 @@ private fun SourcePluginCard(
 ) {
     val colors = LocalMIYUColors.current
     val installed = source.installState == NovelSourceInstallState.INSTALLED
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = MiyoSpacing.large),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
-        shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = if (source.kind == NovelSourceKind.BUILT_IN) BorderStroke(1.dp, colors.accent.copy(alpha = 0.28f)) else null,
+            .clickable(onClick = onOpen)
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.padding(MiyoSpacing.medium)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SourceIcon(source = source)
-                Spacer(Modifier.width(MiyoSpacing.medium))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = source.name,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                        color = colors.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = source.site,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.secondaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                MiyoIconActionButton(
-                    icon = if (pinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (pinned) "Unpin source" else "Pin source",
-                    onClick = onTogglePin,
-                    modifier = Modifier.size(46.dp),
-                )
-            }
-            Spacer(Modifier.height(MiyoSpacing.medium))
+        SourceIcon(source = source)
+        Spacer(Modifier.width(MiyoSpacing.medium))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = source.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.secondaryText,
-                maxLines = 3,
+                text = source.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.onBackground,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(MiyoSpacing.medium))
-            Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
-                SourcePill(if (installed) "Installed" else "Available")
-                SourcePill(source.language)
-                SourcePill(source.version)
-                if (pinned) SourcePill("Pinned")
-                if (lastUsed) SourcePill("Last used")
-                if (source.requiresVerification) SourcePill("Verifier")
+            Text(
+                text = source.language,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (installed) {
+            TextButton(onClick = onOpen) {
+                Text("Latest", color = colors.accent, fontWeight = FontWeight.Bold)
             }
-            Spacer(Modifier.height(MiyoSpacing.medium))
-            Button(
-                onClick = onOpen,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
-                shape = RoundedCornerShape(14.dp),
-                contentPadding = PaddingValues(horizontal = MiyoSpacing.medium, vertical = 10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (installed) "Open source" else "View plugin slot", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(6.dp))
-                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
-            }
+        }
+        IconButton(onClick = onTogglePin) {
+            Icon(
+                if (pinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                contentDescription = if (pinned) "Unpin source" else "Pin source",
+                tint = if (pinned || lastUsed) colors.accent else colors.secondaryText,
+            )
         }
     }
 }
@@ -1220,6 +1515,91 @@ private fun GeneratedEpubCard(
                 Icon(Icons.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Import into library", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NovelCoverTile(
+    novel: OnlineNovelSummary,
+    downloading: Boolean,
+    onDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: androidx.compose.ui.unit.Dp? = null,
+) {
+    val colors = LocalMIYUColors.current
+    Column(
+        modifier = modifier
+            .then(if (width != null) Modifier.width(width) else Modifier)
+            .padding(4.dp),
+    ) {
+        Box {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = colors.accent.copy(alpha = 0.10f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(3f / 4f),
+            ) {
+                if (novel.coverUrl != null) {
+                    AsyncImage(
+                        model = novel.coverUrl,
+                        contentDescription = novel.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent)
+                    }
+                }
+            }
+            Surface(
+                color = colors.accent,
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier
+                    .padding(6.dp)
+                    .align(Alignment.TopStart),
+            ) {
+                Text(
+                    novel.providerLabel,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Text(
+            novel.title,
+            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = colors.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            novel.author,
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.secondaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        OutlinedButton(
+            onClick = onDownload,
+            enabled = !downloading,
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+        ) {
+            if (downloading) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colors.accent)
+            } else {
+                Icon(Icons.Outlined.CloudDownload, contentDescription = null, modifier = Modifier.size(14.dp))
             }
         }
     }

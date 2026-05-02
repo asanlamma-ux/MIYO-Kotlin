@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,9 +32,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedFilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -71,7 +74,9 @@ import com.miyu.reader.ui.theme.SpecialThemePreviewArt
 @Composable
 fun InitialSetupBottomSheet(
     initialReaderThemeId: String,
-    onSkip: () -> Unit,
+    onGrantInstallApps: () -> Unit,
+    onGrantNotifications: () -> Unit,
+    onGrantBattery: () -> Unit,
     onPreviewThemeMode: (ThemeMode) -> Unit,
     onPreviewReaderTheme: (String) -> Unit,
     onSave: (
@@ -83,7 +88,7 @@ fun InitialSetupBottomSheet(
     ) -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    var setupStep by remember { mutableStateOf(SetupStep.LIBRARY) }
+    var setupStep by remember { mutableStateOf(SetupStep.APPEARANCE) }
     var selectedThemeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
     var selectedReaderThemeId by remember {
         mutableStateOf(initialReaderThemeId.takeIf { it.isNotBlank() } ?: DefaultReaderThemeId)
@@ -112,40 +117,24 @@ fun InitialSetupBottomSheet(
         )
     }
 
-    ModalBottomSheet(
-        onDismissRequest = {
-            // Do not mark onboarding complete from incidental sheet dismissal.
-            // The explicit Skip/Finish buttons are the only state-changing exits.
-        },
-        containerColor = colors.background,
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 10.dp, bottom = 8.dp)
-                    .size(width = 44.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(colors.secondaryText.copy(alpha = 0.36f)),
-            )
-        },
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = colors.background,
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 28.dp),
+                .padding(horizontal = 16.dp)
+                .padding(top = 56.dp, bottom = 24.dp),
         ) {
             WizardHeader(step = setupStep)
-            Spacer(Modifier.height(18.dp))
-            SetupStepIndicator(current = setupStep)
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(28.dp))
 
             Crossfade(targetState = setupStep, label = "initial-setup-step") { step ->
                 when (step) {
-                    SetupStep.LIBRARY -> LibrarySetupStep(
-                        dailyGoalMinutes = dailyGoalMinutes,
-                        onDailyGoalChange = { dailyGoalMinutes = it },
-                    )
                     SetupStep.APPEARANCE -> AppearanceSetupStep(
                         selectedThemeMode = selectedThemeMode,
                         selectedReaderThemeId = selectedReaderThemeId,
@@ -157,6 +146,11 @@ fun InitialSetupBottomSheet(
                             selectedReaderThemeId = themeId
                             onPreviewReaderTheme(themeId)
                         },
+                    )
+                    SetupStep.PERMISSIONS -> PermissionSetupStep(
+                        onGrantInstallApps = onGrantInstallApps,
+                        onGrantNotifications = onGrantNotifications,
+                        onGrantBattery = onGrantBattery,
                     )
                     SetupStep.READER -> ReaderSetupStep(
                         selectedMode = selectedMode,
@@ -181,18 +175,14 @@ fun InitialSetupBottomSheet(
 
             Spacer(Modifier.height(26.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        if (setupStep == SetupStep.LIBRARY) {
-                            onSkip()
-                        } else {
-                            setupStep = setupStep.previous()
-                        }
-                    },
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                ) {
-                    Text(if (setupStep == SetupStep.LIBRARY) "Skip" else "Back")
+                if (setupStep != SetupStep.APPEARANCE) {
+                    OutlinedButton(
+                        onClick = { setupStep = setupStep.previous() },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                    ) {
+                        Text("Back")
+                    }
                 }
                 Button(
                     onClick = {
@@ -202,11 +192,11 @@ fun InitialSetupBottomSheet(
                             setupStep = setupStep.next()
                         }
                     },
-                    modifier = Modifier.weight(1.35f).height(52.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1.35f).height(56.dp),
+                    shape = RoundedCornerShape(28.dp),
                 ) {
                     Text(
-                        if (setupStep == SetupStep.READER) "Finish Setup" else "Continue",
+                        if (setupStep == SetupStep.READER) "Finish" else "Next",
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -221,60 +211,53 @@ private enum class SetupStep(
     val subtitle: String,
     @DrawableRes val iconRes: Int,
 ) {
-    LIBRARY(
-        index = 0,
-        title = "Welcome to Miyo",
-        subtitle = "A local-first reader with Koodo-style setup: library, palette, then reading controls.",
-        iconRes = R.drawable.ic_setup_library_vault,
-    ),
     APPEARANCE(
-        index = 1,
-        title = "Choose the look",
-        subtitle = "Reader palettes also tune the app shell, so the preview changes immediately.",
+        index = 0,
+        title = "Welcome!",
+        subtitle = "Let's set some things up first. You can always change these in the settings later too.",
         iconRes = R.drawable.ic_setup_palette_cards,
+    ),
+    PERMISSIONS(
+        index = 1,
+        title = "Welcome!",
+        subtitle = "Grant optional permissions now, or continue and configure them later from settings.",
+        iconRes = R.drawable.ic_setup_private_device,
     ),
     READER(
         index = 2,
-        title = "Tune reading",
-        subtitle = "Set sane defaults for scroll mode, gestures, margins, and typography.",
+        title = "Reading",
+        subtitle = "Tune a few defaults before your first book.",
         iconRes = R.drawable.ic_setup_reader_tuning,
     );
 
     fun next(): SetupStep = entries.getOrElse(index + 1) { READER }
 
-    fun previous(): SetupStep = entries.getOrElse(index - 1) { LIBRARY }
+    fun previous(): SetupStep = entries.getOrElse(index - 1) { APPEARANCE }
 }
 
 @Composable
 private fun WizardHeader(step: SetupStep) {
     val colors = LocalMIYUColors.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(
-            color = colors.accent.copy(alpha = 0.14f),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.size(62.dp),
-        ) {
-            Icon(
-                painter = painterResource(step.iconRes),
-                contentDescription = null,
-                tint = colors.accent,
-                modifier = Modifier.padding(14.dp),
-            )
-        }
-        Spacer(Modifier.width(14.dp))
-        Column {
-            Text(
-                step.title,
-                color = colors.onBackground,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
-            )
-            Text(
-                step.subtitle,
-                color = colors.secondaryText,
-                style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 21.sp,
-            )
-        }
+    Column {
+        Icon(
+            painter = painterResource(step.iconRes),
+            contentDescription = null,
+            tint = colors.accent,
+            modifier = Modifier.size(72.dp),
+        )
+        Spacer(Modifier.height(22.dp))
+        Text(
+            step.title,
+            color = colors.onBackground,
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Normal),
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            step.subtitle,
+            color = colors.secondaryText,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            lineHeight = 26.sp,
+        )
     }
 }
 
@@ -334,6 +317,93 @@ private fun LibrarySetupStep(
                     label = { Text("$minutes min") },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PermissionSetupStep(
+    onGrantInstallApps: () -> Unit,
+    onGrantNotifications: () -> Unit,
+    onGrantBattery: () -> Unit,
+) {
+    var crashLogs by remember { mutableStateOf(true) }
+    var analytics by remember { mutableStateOf(true) }
+    Surface(
+        color = LocalMIYUColors.current.cardBackground,
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            PermissionGrantRow(
+                title = "Install apps permission",
+                subtitle = "To install source extensions.",
+                onGrant = onGrantInstallApps,
+            )
+            PermissionGrantRow(
+                title = "Notification permission",
+                subtitle = "Get notified for library updates and more.",
+                onGrant = onGrantNotifications,
+            )
+            PermissionGrantRow(
+                title = "Background battery usage",
+                subtitle = "Avoid interruptions to long-running library updates, downloads, and backup restores.",
+                onGrant = onGrantBattery,
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                color = LocalMIYUColors.current.secondaryText.copy(alpha = 0.45f),
+            )
+            SetupSwitchRow(
+                title = "Send crash logs",
+                subtitle = "Send anonymized crash logs to the developers.",
+                checked = crashLogs,
+                onCheckedChange = { crashLogs = it },
+            )
+            SetupSwitchRow(
+                title = "Allow analytics",
+                subtitle = "Send anonymized usage data to improve app features.",
+                checked = analytics,
+                onCheckedChange = { analytics = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionGrantRow(
+    title: String,
+    subtitle: String,
+    onGrant: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                color = colors.onBackground,
+                style = MaterialTheme.typography.titleLarge,
+                lineHeight = 28.sp,
+            )
+            Text(
+                subtitle,
+                color = colors.secondaryText,
+                style = MaterialTheme.typography.titleMedium,
+                lineHeight = 24.sp,
+            )
+        }
+        OutlinedButton(
+            onClick = onGrant,
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier.padding(start = 16.dp),
+        ) {
+            Text("Grant", fontWeight = FontWeight.Bold)
         }
     }
 }

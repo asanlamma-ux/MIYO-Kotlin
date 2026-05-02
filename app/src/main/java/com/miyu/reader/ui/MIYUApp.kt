@@ -443,7 +443,16 @@ fun MIYUApp() {
         if (shouldShowInitialSetup) {
             InitialSetupBottomSheet(
                 initialReaderThemeId = readerThemeId,
-                onSkip = themeViewModel::skipInitialSetup,
+                onGrantInstallApps = { MiyoPermissions.openAppSettings(context) },
+                onGrantNotifications = {
+                    val runtimePermissions = MiyoPermissions.runtimePermissionsToRequest(context)
+                    if (runtimePermissions.isNotEmpty()) {
+                        requestRuntimePermissions.launch(runtimePermissions)
+                    } else {
+                        MiyoPermissions.openAppSettings(context)
+                    }
+                },
+                onGrantBattery = { MiyoPermissions.openBatteryOptimizationSettings(context) },
                 onPreviewThemeMode = themeViewModel::setThemeMode,
                 onPreviewReaderTheme = themeViewModel::setReaderThemeId,
                 onSave = themeViewModel::saveInitialSetup,

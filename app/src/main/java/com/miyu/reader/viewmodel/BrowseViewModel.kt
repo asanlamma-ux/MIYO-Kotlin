@@ -22,6 +22,18 @@ enum class BrowseSourceTab(val label: String) {
     AVAILABLE("Available"),
 }
 
+enum class GlobalSourceFilter(val label: String) {
+    PINNED("Pinned"),
+    ALL("All"),
+}
+
+data class GlobalSearchSourceResult(
+    val source: NovelSourcePluginItem,
+    val novels: List<OnlineNovelSummary> = emptyList(),
+    val loading: Boolean = false,
+    val error: String? = null,
+)
+
 data class BrowseUiState(
     val installedSources: List<NovelSourcePluginItem> = emptyList(),
     val availableSources: List<NovelSourcePluginItem> = emptyList(),
@@ -32,9 +44,16 @@ data class BrowseUiState(
     val languageFilter: Set<String> = emptySet(),
     val lastUsedSourceId: String? = null,
     val repositoryUrls: Set<String> = emptySet(),
+    val browseSearchHistory: List<String> = emptyList(),
     val downloadConcurrency: Int = UserPreferences.DEFAULT_DOWNLOAD_CONCURRENCY,
     val results: List<OnlineNovelSummary> = emptyList(),
     val searchedSourceId: String? = null,
+    val globalSearchQuery: String = "",
+    val globalSourceFilter: GlobalSourceFilter = GlobalSourceFilter.PINNED,
+    val globalOnlyHasResults: Boolean = false,
+    val globalSearchResults: List<GlobalSearchSourceResult> = emptyList(),
+    val globalSearchProgress: Int = 0,
+    val globalSearchTotal: Int = 0,
     val page: Int = 1,
     val hasMore: Boolean = false,
     val loading: Boolean = false,
@@ -84,6 +103,16 @@ data class BrowseUiState(
             )
             .take(4)
 
+    val recommendedQueries: List<String>
+        get() = listOf("Fantasy", "Action", "Adventure", "Drama", "Romance", "Isekai", "Cultivation", "Regression")
+
+    val visibleGlobalSearchResults: List<GlobalSearchSourceResult>
+        get() = if (globalOnlyHasResults) {
+            globalSearchResults.filter { it.novels.isNotEmpty() || it.loading || it.error != null }
+        } else {
+            globalSearchResults
+        }
+
     private fun recommendationScore(source: NovelSourcePluginItem): Int {
         var score = 0
         if (source.id == lastUsedSourceId) score += 80
@@ -131,6 +160,11 @@ class BrowseViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            preferences.browseSearchHistory.collect { history ->
+                _uiState.update { it.copy(browseSearchHistory = history) }
+            }
+        }
+        viewModelScope.launch {
             preferences.downloadConcurrency.collect { concurrency ->
                 _uiState.update { it.copy(downloadConcurrency = concurrency) }
             }
@@ -147,6 +181,30 @@ class BrowseViewModel @Inject constructor(
 
     fun setNovelQuery(query: String) {
         _uiState.update { it.copy(novelQuery = query) }
+    }
+
+    fun setGlobalSearchQuery(query: String) {
+        _uiState.update { it.copy(globalSearchQuery = query) }
+    }
+
+    fun setGlobalSourceFilter(filter: GlobalSourceFilter) {
+        _uiState.update { it.copy(globalSourceFilter = filter) }
+        val query = _uiState.value.globalSearchQuery
+        if (query.isNotBlank() && !_uiState.value.loading) {
+            searchAllSources(query)
+        }
+    }
+
+    fun toggleGlobalOnlyHasResults() {
+        _uiState.update { it.copy(globalOnlyHasResults = !it.globalOnlyHasResults) }
+    }
+
+    fun removeBrowseSearchQuery(query: String) {
+        viewModelScope.launch { preferences.removeBrowseSearchQuery(query) }
+    }
+
+    fun clearBrowseSearchHistory() {
+        viewModelScope.launch { preferences.clearBrowseSearchHistory() }
     }
 
     fun source(sourceId: String): NovelSourcePluginItem? =
@@ -224,6 +282,7 @@ class BrowseViewModel @Inject constructor(
         val state = _uiState.value
         val nextPage = if (loadMore && state.searchedSourceId == sourceId) state.page + 1 else 1
         viewModelScope.launch {
+            if (!loadMore) preferences.recordBrowseSearchQuery(state.novelQuery)
             _uiState.update {
                 it.copy(
                     loading = true,
@@ -259,6 +318,65 @@ class BrowseViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun searchAllSources(query: String = _uiState.value.globalSearchQuery) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return
+        val state = _uiState.value
+        val installed = state.installedSources.filter {
+            it.installState == NovelSourceInstallState.INSTALLED && !it.requiresVerification
+        }
+        val filtered = when (state.globalSourceFilter) {
+            GlobalSourceFilter.PINNED -> installed.filter { it.id in state.pinnedSourceIds }.takeIf { it.isNotEmpty() } ?: installed
+            GlobalSourceFilter.ALL -> installed
+        }
+
+        viewModelScope.launch {
+            preferences.recordBrowseSearchQuery(cleanQuery)
+            _uiState.update {
+                it.copy(
+                    globalSearchQuery = cleanQuery,
+                    loading = true,
+                    error = null,
+                    globalSearchProgress = 0,
+                    globalSearchTotal = filtered.size,
+                    globalSearchResults = filtered.map { source -> GlobalSearchSourceResult(source = source, loading = true) },
+                )
+            }
+            filtered.forEachIndexed { index, source ->
+                runCatching {
+                    sourceRegistry.search(source.id, cleanQuery, page = 1).items
+                }.onSuccess { novels ->
+                    _uiState.update { current ->
+                        current.copy(
+                            globalSearchProgress = index + 1,
+                            globalSearchResults = current.globalSearchResults.map {
+                                if (it.source.id == source.id) {
+                                    it.copy(novels = novels.take(10), loading = false, error = null)
+                                } else {
+                                    it
+                                }
+                            },
+                        )
+                    }
+                }.onFailure { error ->
+                    _uiState.update { current ->
+                        current.copy(
+                            globalSearchProgress = index + 1,
+                            globalSearchResults = current.globalSearchResults.map {
+                                if (it.source.id == source.id) {
+                                    it.copy(loading = false, error = error.message ?: "Search failed.")
+                                } else {
+                                    it
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            _uiState.update { it.copy(loading = false) }
         }
     }
 

@@ -245,6 +245,37 @@ class UserPreferences @Inject constructor(
         }
     }
 
+    val browseSearchHistory: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        decodeSearchHistory(prefs[KEY_BROWSE_SEARCH_HISTORY])
+    }
+
+    suspend fun recordBrowseSearchQuery(query: String) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val next = (listOf(cleanQuery) + decodeSearchHistory(prefs[KEY_BROWSE_SEARCH_HISTORY]))
+                .distinctBy { it.lowercase() }
+                .take(MAX_SEARCH_HISTORY)
+            prefs[KEY_BROWSE_SEARCH_HISTORY] = next.joinToString(HISTORY_SEPARATOR)
+        }
+    }
+
+    suspend fun removeBrowseSearchQuery(query: String) {
+        context.dataStore.edit { prefs ->
+            val next = decodeSearchHistory(prefs[KEY_BROWSE_SEARCH_HISTORY])
+                .filterNot { it.equals(query.trim(), ignoreCase = true) }
+            if (next.isEmpty()) {
+                prefs.remove(KEY_BROWSE_SEARCH_HISTORY)
+            } else {
+                prefs[KEY_BROWSE_SEARCH_HISTORY] = next.joinToString(HISTORY_SEPARATOR)
+            }
+        }
+    }
+
+    suspend fun clearBrowseSearchHistory() {
+        context.dataStore.edit { it.remove(KEY_BROWSE_SEARCH_HISTORY) }
+    }
+
     companion object {
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_FONT_FAMILY = stringPreferencesKey("font_family")
@@ -294,7 +325,10 @@ class UserPreferences @Inject constructor(
         private val KEY_SOURCE_LANGUAGE_FILTER = stringSetPreferencesKey("source_language_filter")
         private val KEY_LAST_USED_SOURCE_ID = stringPreferencesKey("last_used_source_id")
         private val KEY_SOURCE_REPOSITORY_URLS = stringSetPreferencesKey("source_repository_urls")
+        private val KEY_BROWSE_SEARCH_HISTORY = stringPreferencesKey("browse_search_history_v1")
         private val KEY_DOWNLOAD_CONCURRENCY = intPreferencesKey("download_concurrency_v1")
+        private const val HISTORY_SEPARATOR = "\u001F"
+        private const val MAX_SEARCH_HISTORY = 12
         const val MIN_DOWNLOAD_CONCURRENCY = 2
         const val MAX_DOWNLOAD_CONCURRENCY = 10
         const val DEFAULT_DOWNLOAD_CONCURRENCY = 4
@@ -316,5 +350,11 @@ class UserPreferences @Inject constructor(
 
         private fun isFreshInstallPreferences(prefs: Preferences): Boolean =
             prefs.asMap().keys.none { key -> key in SETUP_EXISTING_KEYS }
+
+        private fun decodeSearchHistory(raw: String?): List<String> =
+            raw
+                ?.split(HISTORY_SEPARATOR)
+                ?.mapNotNull { it.trim().takeIf(String::isNotBlank) }
+                .orEmpty()
     }
 }
