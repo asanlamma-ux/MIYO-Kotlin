@@ -225,11 +225,13 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Login,
                 title = "Sign In / Sign Up",
-                subtitle = "Supabase-backed sync is available when project keys are supplied at build time.",
+                subtitle = "Cloud sync can be enabled when a production authentication service is configured for this build.",
                 onClick = {
+                    // Keep runtime messaging product-neutral. Build-system key
+                    // names belong in developer docs, not end-user dialogs.
                     dialogState = SettingsDialogState(
-                        title = "Supabase Configuration",
-                        message = "Set MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY as Gradle properties or environment variables before building.",
+                        title = "Authentication unavailable",
+                        message = "This build does not include an active cloud authentication configuration yet.",
                     )
                 },
                 accentColor = colors.accent,

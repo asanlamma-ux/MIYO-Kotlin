@@ -5,7 +5,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Shared spacing scale matching Mihon's presentation-core constants.
+ * Shared spacing tokens for shell screens, lists, and tool surfaces.
  */
 @Immutable
 object MiyoSpacing {

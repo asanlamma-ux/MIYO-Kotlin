@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 /**
- * App-level scaffold wrapper inspired by Mihon's presentation-core scaffold.
+ * App-level scaffold wrapper for shared shell behavior.
  *
  * Feature screens should not decide shell colors or safe drawing behavior. The
  * app shell owns those concerns so special reader palettes can theme every tab.

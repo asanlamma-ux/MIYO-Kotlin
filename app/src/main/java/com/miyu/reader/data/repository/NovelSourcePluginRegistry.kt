@@ -17,6 +17,8 @@ import javax.inject.Singleton
 class NovelSourcePluginRegistry @Inject constructor(
     private val onlineNovelRepository: OnlineNovelRepository,
 ) {
+    // Built-in providers execute locally. Repository-backed entries below are
+    // metadata slots only until external plugin install/runtime is enabled.
     private val builtInPlugins: Map<String, NovelSourcePlugin> =
         onlineNovelRepository.providers
             .associate { provider ->
@@ -30,7 +32,6 @@ class NovelSourcePluginRegistry @Inject constructor(
             site = "archiveofourown.org",
             language = "Fanfiction",
             version = "repository",
-            repositoryUrl = "https://github.com/lnreader/lnreader-plugins",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
             description = "External-source slot for fanfiction plugin manifests.",
@@ -41,7 +42,6 @@ class NovelSourcePluginRegistry @Inject constructor(
             site = "royalroad.com",
             language = "EN",
             version = "repository",
-            repositoryUrl = "https://github.com/lnreader/lnreader-plugins",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
             description = "External-source slot for web serial plugin manifests.",
@@ -52,7 +52,6 @@ class NovelSourcePluginRegistry @Inject constructor(
             site = "scribblehub.com",
             language = "EN",
             version = "repository",
-            repositoryUrl = "https://github.com/lnreader/lnreader-plugins",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
             description = "External-source slot for light novel plugin manifests.",

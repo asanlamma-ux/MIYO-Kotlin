@@ -193,7 +193,7 @@ fun MiyoAboutDialog(onDismiss: () -> Unit) {
         title = { Text("MIYO Reader") },
         text = {
             Text(
-                "A local-first novel, light novel, MTL, and fanfiction reader with Mihon-style library and LNReader-style source workflows.",
+                "A local-first reader for novels, web fiction, fanfiction, EPUB libraries, and translated serials.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         },

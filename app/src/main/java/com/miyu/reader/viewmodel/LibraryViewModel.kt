@@ -94,8 +94,8 @@ class LibraryViewModel @Inject constructor(
     val displayedBooks: StateFlow<List<Book>> = _uiState.map { state ->
         var list = state.books
 
-        // Category tabs follow Mihon's library-first flow. Status filters stay
-        // independent so a user can view "Reading" inside any custom category.
+        // Category filtering and reading-status filtering stay independent so a
+        // user can inspect a status slice inside any custom category.
         list = when (state.selectedCategoryId) {
             LibraryCategoryIds.ALL -> list
             else -> state.selectedCategoryId.customCategoryName()?.let { name ->

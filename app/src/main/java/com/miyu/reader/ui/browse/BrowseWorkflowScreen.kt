@@ -273,7 +273,7 @@ fun BrowseWorkflowScreen(
 
             item {
                 Text(
-                    text = "Sources use LNReader-style plugin descriptors: id, site, language, version, manifest URL, parser methods, and per-source settings.",
+                    text = "Sources expose structured metadata: id, site, language, version, manifest URL, parser capabilities, and source-specific settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondaryText,
                     modifier = Modifier.padding(horizontal = MiyoSpacing.large),
@@ -1419,7 +1419,7 @@ fun ProviderRepositoriesScreen(
                             color = colors.onBackground,
                         )
                         Text(
-                            "LNReader stores source repositories as HTTPS manifest URLs. Miyo keeps the same boundary: built-in parsers ship locally, external source code belongs to repository plugins.",
+                            "Source repositories are stored as HTTPS manifest URLs. Built-in parsers ship locally, while external source code stays isolated behind repository plugins.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = colors.secondaryText,
                         )
@@ -1572,7 +1572,7 @@ fun SourceUpdatesWorkflowScreen(
     WorkflowWorkspaceScreen(
         exitLabel = "Exit updates",
         title = "Updates",
-        subtitle = "A novel-reader equivalent of Tachiyomi/Mihon updates for followed source plugins.",
+        subtitle = "Track fresh chapters from followed source plugins in one place.",
         icon = Icons.Outlined.Update,
         onBack = onBack,
         steps = listOf(
