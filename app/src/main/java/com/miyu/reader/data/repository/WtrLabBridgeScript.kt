@@ -522,7 +522,7 @@ object WtrLabBridgeScript {
   async function fetchWtrChaptersBatch(payload) {
     var chapters = ensureArray(payload && payload.chapters);
     if (!chapters.length) throw new Error('No WTR-LAB chapters were selected.');
-    var concurrency = Math.max(1, Math.min(Number(payload && payload.maxConcurrency) || 4, 6));
+    var concurrency = Math.max(2, Math.min(Number(payload && payload.maxConcurrency) || 4, 10));
     var cursor = 0;
     var results = new Array(chapters.length);
     var failures = [];
@@ -552,6 +552,7 @@ object WtrLabBridgeScript {
     for (var i = 0; i < Math.min(concurrency, chapters.length); i += 1) workers.push(worker());
     await Promise.all(workers);
     var downloaded = results.filter(Boolean).sort(function (a, b) { return a.order - b.order; });
+    if (failures.length) throw new Error('Download failed before EPUB export. ' + failures.slice(0, 4).join('; '));
     if (!downloaded.length) throw new Error(failures[0] || 'No chapters could be downloaded.');
     return {
       chapters: downloaded,

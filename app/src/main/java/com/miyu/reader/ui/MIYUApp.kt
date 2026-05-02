@@ -1,18 +1,21 @@
 package com.miyu.reader.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -23,11 +26,18 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.miyu.reader.R
 import com.miyu.reader.domain.model.ThemeMode
+import com.miyu.reader.permissions.MiyoPermissions
+import com.miyu.reader.ui.browse.BrowseWorkflowScreen
+import com.miyu.reader.ui.browse.DownloadsWorkflowScreen
+import com.miyu.reader.ui.browse.GlobalSourceSearchScreen
+import com.miyu.reader.ui.browse.MigrationWorkflowScreen
+import com.miyu.reader.ui.browse.ProviderRepositoriesScreen
+import com.miyu.reader.ui.browse.SourceVerifierScreen
+import com.miyu.reader.ui.browse.SourceUpdatesWorkflowScreen
+import com.miyu.reader.ui.browse.SourceWorkflowDetailScreen
 import com.miyu.reader.ui.home.HomeScreen
 import com.miyu.reader.ui.library.BookDetailsScreen
 import com.miyu.reader.ui.library.LibraryScreen
-import com.miyu.reader.ui.library.OnlineNovelBrowserWorkspace
-import com.miyu.reader.ui.library.OpdsCatalogWorkspace
 import com.miyu.reader.ui.terms.TermsScreen
 import com.miyu.reader.ui.history.HistoryScreen
 import com.miyu.reader.ui.onboarding.InitialSetupBottomSheet
@@ -39,10 +49,12 @@ import com.miyu.reader.ui.components.ThemePickerBottomSheet
 import com.miyu.reader.ui.core.components.material.MiyoNavigationBar
 import com.miyu.reader.ui.core.components.material.MiyoNavigationBarItem
 import com.miyu.reader.ui.core.components.material.MiyoScaffold
+import com.miyu.reader.ui.permissions.MiyoStoragePermissionDialog
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.MIYUTheme
 import com.miyu.reader.ui.theme.SpecialThemeBackdrop
+import com.miyu.reader.viewmodel.AppPermissionViewModel
 import com.miyu.reader.viewmodel.LibraryViewModel
 import com.miyu.reader.viewmodel.ThemeViewModel
 
@@ -50,46 +62,101 @@ sealed class Screen(
     val route: String,
     val title: String,
     @DrawableRes val iconRes: Int? = null,
-    val icon: ImageVector? = null,
 ) {
     data object Home : Screen("home", "Home", iconRes = R.drawable.ic_nav_home)
     data object Library : Screen("library", "Library", iconRes = R.drawable.ic_nav_library)
-    data object Terms : Screen("terms", "Terms", icon = Icons.Outlined.Translate)
+    data object Browse : Screen("browse", "Browse", iconRes = R.drawable.ic_nav_browse)
     data object History : Screen("history", "History", iconRes = R.drawable.ic_nav_history)
     data object Settings : Screen("settings", "Settings", iconRes = R.drawable.ic_nav_settings)
-    data object OnlineBrowser : Screen("library/online", "Online Browser")
-    data object OpdsCatalogs : Screen("library/opds", "OPDS Catalogs")
+    data object BrowseSearch : Screen("browse/search", "Global Search")
+    data object SourceRepositories : Screen("browse/repositories", "Source Repositories")
+    data object SourceMigration : Screen("browse/migration", "Source Migration")
+    data object SourceUpdates : Screen("browse/updates", "Source Updates")
+    data object DownloadQueue : Screen("browse/downloads", "Downloads")
+    data object SourceDetails : Screen("browse/source/{sourceId}", "Source Details")
+    data object SourceVerifier : Screen("browse/source/{sourceId}/verify", "Source Verifier")
     data object BookDetails : Screen("library/book/{bookId}", "Book Details")
     data object AdvancedSettings : Screen("settings/advanced", "Advanced Settings")
     data object ReaderSettings : Screen("settings/reader", "Reader Settings")
+    data object Terms : Screen("settings/terms", "Terms")
 }
 
 val bottomNavItems = listOf(
-    Screen.Home, Screen.Library, Screen.Terms, Screen.History, Screen.Settings
+    Screen.Home, Screen.Library, Screen.Browse, Screen.History, Screen.Settings
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MIYUApp() {
     val themeViewModel: ThemeViewModel = hiltViewModel()
+    val permissionViewModel: AppPermissionViewModel = hiltViewModel()
     val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
     val readerThemeId by themeViewModel.readerThemeId.collectAsStateWithLifecycle(initialValue = DefaultReaderThemeId)
     val shouldShowInitialSetup by themeViewModel.shouldShowInitialSetup.collectAsStateWithLifecycle(initialValue = false)
+    val permissionState by permissionViewModel.uiState.collectAsStateWithLifecycle()
 
     MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {
+        val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
         val navController = rememberNavController()
         val colors = LocalMIYUColors.current
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
         var showThemePicker by remember { mutableStateOf(false) }
+        var dismissStorageDialogThisSession by remember { mutableStateOf(false) }
+        val requestRuntimePermissions = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions(),
+        ) {
+            permissionViewModel.refresh()
+            MiyoPermissions.openStoragePermissionSettings(context)
+        }
+        val configureStoragePermissions = {
+            val runtimePermissions = MiyoPermissions.runtimePermissionsToRequest(context)
+            if (runtimePermissions.isNotEmpty()) {
+                requestRuntimePermissions.launch(runtimePermissions)
+            } else {
+                MiyoPermissions.openStoragePermissionSettings(context)
+            }
+        }
+
+        DisposableEffect(lifecycleOwner.lifecycle) {
+            val observer = object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) {
+                    permissionViewModel.refresh()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
+        LaunchedEffect(
+            shouldShowInitialSetup,
+            permissionState.storageAutoRedirectComplete,
+            permissionState.snapshot.missingCriticalStorage,
+        ) {
+            if (
+                !shouldShowInitialSetup &&
+                permissionState.snapshot.missingCriticalStorage &&
+                !permissionState.storageAutoRedirectComplete
+            ) {
+                permissionViewModel.markStorageAutoRedirectComplete()
+                configureStoragePermissions()
+            }
+        }
 
         val fullScreenRoutes = remember {
             setOf(
-                Screen.OnlineBrowser.route,
-                Screen.OpdsCatalogs.route,
+                Screen.BrowseSearch.route,
+                Screen.SourceRepositories.route,
+                Screen.SourceMigration.route,
+                Screen.SourceUpdates.route,
+                Screen.DownloadQueue.route,
+                Screen.SourceDetails.route,
+                Screen.SourceVerifier.route,
                 Screen.BookDetails.route,
                 Screen.AdvancedSettings.route,
                 Screen.ReaderSettings.route,
+                Screen.Terms.route,
             )
         }
         val currentRoute = currentDestination?.route
@@ -140,13 +207,6 @@ fun MIYUApp() {
                                             tint = tint,
                                             modifier = Modifier.size(24.dp),
                                         )
-                                    } else {
-                                        Icon(
-                                            imageVector = screen.icon ?: Icons.Outlined.Translate,
-                                            contentDescription = screen.title,
-                                            tint = tint,
-                                            modifier = Modifier.size(24.dp),
-                                        )
                                     }
                                 }
                             }
@@ -175,15 +235,21 @@ fun MIYUApp() {
                             onOpenBookDetails = { bookId ->
                                 navController.navigate("library/book/$bookId")
                             },
-                            onOpenOnline = {
-                                navController.navigate(Screen.OnlineBrowser.route)
-                            },
-                            onOpenOpds = {
-                                navController.navigate(Screen.OpdsCatalogs.route)
+                            onOpenBrowse = {
+                                navController.navigate(Screen.Browse.route)
                             },
                         )
                     }
-                    composable(Screen.Terms.route) { TermsScreen() }
+                    composable(Screen.Browse.route) {
+                        BrowseWorkflowScreen(
+                            onOpenSource = { sourceId -> navController.navigate("browse/source/$sourceId") },
+                            onOpenGlobalSearch = { navController.navigate(Screen.BrowseSearch.route) },
+                            onOpenRepositories = { navController.navigate(Screen.SourceRepositories.route) },
+                            onOpenMigration = { navController.navigate(Screen.SourceMigration.route) },
+                            onOpenDownloads = { navController.navigate(Screen.DownloadQueue.route) },
+                            onOpenUpdates = { navController.navigate(Screen.SourceUpdates.route) },
+                        )
+                    }
                     composable(Screen.History.route) {
                         HistoryScreen(onOpenBook = { bookId ->
                             openReader(bookId, null)
@@ -193,16 +259,73 @@ fun MIYUApp() {
                         SettingsScreen(
                             onOpenThemePicker = { showThemePicker = true },
                             onOpenAdvancedSettings = { navController.navigate(Screen.AdvancedSettings.route) },
+                            onOpenReaderSettings = { navController.navigate(Screen.ReaderSettings.route) },
                         )
                     }
                     composable(Screen.AdvancedSettings.route) {
                         AdvancedSettingsScreen(
                             onBack = { navController.popBackStack() },
                             onOpenReaderSettings = { navController.navigate(Screen.ReaderSettings.route) },
+                            onOpenTerms = { navController.navigate(Screen.Terms.route) },
                         )
                     }
                     composable(Screen.ReaderSettings.route) {
                         ReaderSettingsScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(Screen.BrowseSearch.route) {
+                        GlobalSourceSearchScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenSource = { sourceId -> navController.navigate("browse/source/$sourceId") },
+                            onOpenVerifier = { sourceId -> navController.navigate("browse/source/$sourceId/verify") },
+                        )
+                    }
+                    composable(Screen.SourceRepositories.route) {
+                        ProviderRepositoriesScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(Screen.SourceMigration.route) {
+                        MigrationWorkflowScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(Screen.SourceUpdates.route) {
+                        SourceUpdatesWorkflowScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(Screen.DownloadQueue.route) {
+                        DownloadsWorkflowScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(
+                        route = Screen.SourceDetails.route,
+                        arguments = listOf(navArgument("sourceId") { type = NavType.StringType }),
+                    ) { backStackEntry ->
+                        val sourceId = backStackEntry.arguments?.getString("sourceId").orEmpty()
+                        val libraryEntry = remember(backStackEntry) {
+                            runCatching { navController.getBackStackEntry(Screen.Library.route) }.getOrNull()
+                        }
+                        val libraryViewModel: LibraryViewModel = if (libraryEntry != null) {
+                            hiltViewModel(libraryEntry)
+                        } else {
+                            hiltViewModel()
+                        }
+                        SourceWorkflowDetailScreen(
+                            sourceId = sourceId,
+                            onBack = { navController.popBackStack() },
+                            onOpenDownloads = { navController.navigate(Screen.DownloadQueue.route) },
+                            onOpenVerifier = { navController.navigate("browse/source/$sourceId/verify") },
+                            onImportGeneratedEpub = { generated ->
+                                libraryViewModel.importGeneratedOnlineNovelEpub(
+                                    filePath = generated.filePath,
+                                    fileName = generated.fileName,
+                                    suggestedTitle = generated.title,
+                                )
+                            },
+                        )
+                    }
+                    composable(
+                        route = Screen.SourceVerifier.route,
+                        arguments = listOf(navArgument("sourceId") { type = NavType.StringType }),
+                    ) { backStackEntry ->
+                        SourceVerifierScreen(
+                            sourceId = backStackEntry.arguments?.getString("sourceId").orEmpty(),
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable(
                         route = Screen.BookDetails.route,
@@ -229,33 +352,8 @@ fun MIYUApp() {
                             onBack = { navController.popBackStack() },
                         )
                     }
-                    composable(Screen.OnlineBrowser.route) { backStackEntry ->
-                        val libraryEntry = remember(backStackEntry) {
-                            navController.getBackStackEntry(Screen.Library.route)
-                        }
-                        val libraryViewModel: LibraryViewModel = hiltViewModel(libraryEntry)
-                        OnlineNovelBrowserWorkspace(
-                            onDismiss = { navController.popBackStack() },
-                            onImportGeneratedEpub = { generated ->
-                                libraryViewModel.importGeneratedOnlineNovelEpub(
-                                    filePath = generated.filePath,
-                                    fileName = generated.fileName,
-                                    suggestedTitle = generated.title,
-                                )
-                            },
-                        )
-                    }
-                    composable(Screen.OpdsCatalogs.route) { backStackEntry ->
-                        val libraryEntry = remember(backStackEntry) {
-                            navController.getBackStackEntry(Screen.Library.route)
-                        }
-                        val libraryViewModel: LibraryViewModel = hiltViewModel(libraryEntry)
-                        OpdsCatalogWorkspace(
-                            onDismiss = { navController.popBackStack() },
-                            onImportEntry = { entry, href ->
-                                libraryViewModel.importBookFromRemoteEpub(href, entry.title)
-                            },
-                        )
+                    composable(Screen.Terms.route) {
+                        TermsScreen(onBack = { navController.popBackStack() })
                     }
                 }
             }
@@ -276,6 +374,22 @@ fun MIYUApp() {
                 onPreviewThemeMode = themeViewModel::setThemeMode,
                 onPreviewReaderTheme = themeViewModel::setReaderThemeId,
                 onSave = themeViewModel::saveInitialSetup,
+            )
+        }
+
+        if (
+            !shouldShowInitialSetup &&
+            permissionState.storageAutoRedirectComplete &&
+            permissionState.snapshot.missingCriticalStorage &&
+            !dismissStorageDialogThisSession
+        ) {
+            MiyoStoragePermissionDialog(
+                snapshot = permissionState.snapshot,
+                onConfigure = {
+                    dismissStorageDialogThisSession = true
+                    configureStoragePermissions()
+                },
+                onDismiss = { dismissStorageDialogThisSession = true },
             )
         }
     }

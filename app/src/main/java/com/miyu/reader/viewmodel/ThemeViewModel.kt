@@ -35,12 +35,14 @@ class ThemeViewModel @Inject constructor(
         readerThemeId: String,
         readingSettings: ReadingSettings,
         typography: TypographySettings,
+        dailyGoalMinutes: Int,
     ) {
         viewModelScope.launch {
             preferences.setThemeMode(themeMode)
             preferences.setReaderThemeId(readerThemeId)
             preferences.setReadingSettings(readingSettings)
             preferences.setTypography(typography)
+            preferences.setDailyGoalMinutes(dailyGoalMinutes)
             preferences.setInitialSetupComplete(true)
         }
     }

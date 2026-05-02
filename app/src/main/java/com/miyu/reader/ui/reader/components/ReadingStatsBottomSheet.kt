@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.domain.model.Book
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 import java.time.Instant
 import java.time.ZoneId
@@ -67,7 +68,7 @@ fun ReadingStatsBottomSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -94,10 +95,10 @@ fun ReadingStatsBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = MiyoSpacing.large)
             ) {
                 // Progress Bar
-                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = MiyoSpacing.large)) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -113,7 +114,7 @@ fun ReadingStatsBottomSheet(
                                 .background(readerTheme.accent)
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(MiyoSpacing.small))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Start", color = readerTheme.secondaryText, fontSize = 12.sp)
                         Text("${progress.toInt()}%", color = readerTheme.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -122,7 +123,7 @@ fun ReadingStatsBottomSheet(
                 }
 
                 // Stats Grid
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.TrendingUp,
@@ -142,8 +143,8 @@ fun ReadingStatsBottomSheet(
                         readerTheme = readerTheme
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(Modifier.height(MiyoSpacing.small))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.FormatPaint,
@@ -163,7 +164,7 @@ fun ReadingStatsBottomSheet(
                         readerTheme = readerTheme
                     )
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MiyoSpacing.large))
 
                 // Info Footer
                 Row(
@@ -172,9 +173,9 @@ fun ReadingStatsBottomSheet(
                         .border(
                             width = 1.dp,
                             color = readerTheme.secondaryText.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(16.dp)
                         )
-                        .padding(16.dp),
+                        .padding(MiyoSpacing.medium),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     InfoItem("Status", book.readingStatus?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Reading", readerTheme)
@@ -200,10 +201,10 @@ private fun StatCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(readerTheme.secondaryText.copy(alpha = 0.05f))
-            .border(1.dp, readerTheme.secondaryText.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-            .padding(14.dp)
+            .border(1.dp, readerTheme.secondaryText.copy(alpha = 0.1f), RoundedCornerShape(18.dp))
+            .padding(MiyoSpacing.medium)
     ) {
         Box(
             modifier = Modifier
@@ -214,10 +215,10 @@ private fun StatCard(
         ) {
             Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(18.dp))
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MiyoSpacing.small))
         Text(value, color = readerTheme.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         Text(label, color = readerTheme.secondaryText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(MiyoSpacing.extraSmall))
         Text(subValue, color = readerTheme.secondaryText, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 2)
     }
 }
@@ -226,7 +227,7 @@ private fun StatCard(
 private fun InfoItem(label: String, value: String, readerTheme: ReaderThemeColors) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = readerTheme.secondaryText, fontSize = 12.sp)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(MiyoSpacing.extraSmall))
         Text(value, color = readerTheme.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }

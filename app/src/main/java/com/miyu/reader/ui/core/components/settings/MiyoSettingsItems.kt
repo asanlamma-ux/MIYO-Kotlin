@@ -1,12 +1,14 @@
 package com.miyu.reader.ui.core.components.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -24,13 +26,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -39,6 +41,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.miyu.reader.ui.core.theme.MiyoSettingsPaddings
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 
 @Composable
@@ -51,7 +55,7 @@ fun MiyoSectionLabel(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
         color = colors.secondaryText,
-        modifier = modifier.padding(top = 4.dp, bottom = 8.dp),
+        modifier = modifier.padding(top = MiyoSpacing.extraSmall, bottom = MiyoSpacing.small),
     )
 }
 
@@ -62,22 +66,26 @@ fun MiyoSettingsSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    Column(modifier = modifier.padding(top = 8.dp)) {
+    Column(modifier = modifier.padding(top = MiyoSpacing.small)) {
         Text(
             title.uppercase(),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
             ),
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.padding(
+                horizontal = MiyoSettingsPaddings.horizontal,
+                vertical = MiyoSettingsPaddings.vertical,
+            ),
             color = colors.secondaryText,
         )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = colors.cardBackground.copy(alpha = 0.92f)),
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+        shape = RoundedCornerShape(MiyoSpacing.extraLarge),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground.copy(alpha = 0.92f)),
             elevation = CardDefaults.cardElevation(defaultElevation = if (colors.isDark) 0.dp else 2.dp),
         ) {
             Column { content() }
@@ -93,34 +101,41 @@ fun MiyoSettingsItem(
     onClick: (() -> Unit)? = null,
     accentColor: Color = LocalMIYUColors.current.accent,
     trailing: @Composable (() -> Unit)? = null,
+    showNavigationArrow: Boolean = true,
 ) {
     val colors = LocalMIYUColors.current
-    ListItem(
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(
+                horizontal = MiyoSettingsPaddings.horizontal,
+                vertical = MiyoSettingsPaddings.vertical,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+    ) {
+        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
             )
-        },
-        supportingContent = {
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
-        },
-        leadingContent = {
-            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
-        },
-        trailingContent = trailing ?: {
-            if (onClick != null) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.ArrowForwardIos,
-                    contentDescription = null,
-                    tint = colors.secondaryText,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        },
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-    )
+        }
+        if (trailing != null) {
+            trailing()
+        }
+        if (onClick != null && showNavigationArrow) {
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                contentDescription = null,
+                tint = colors.secondaryText,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -133,28 +148,32 @@ fun MiyoSettingsSwitch(
     accentColor: Color = LocalMIYUColors.current.accent,
 ) {
     val colors = LocalMIYUColors.current
-    ListItem(
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(
+                horizontal = MiyoSettingsPaddings.horizontal,
+                vertical = MiyoSettingsPaddings.vertical,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+    ) {
+        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.onBackground,
             )
-        },
-        supportingContent = {
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
-        },
-        leadingContent = {
-            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(24.dp))
-        },
-        trailingContent = {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(checkedTrackColor = accentColor),
-            )
-        },
-    )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = accentColor),
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -173,6 +192,10 @@ fun <T> MiyoExpandableChoiceSetting(
     onChoiceSelected: (T) -> Unit,
 ) {
     val colors = LocalMIYUColors.current
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        label = "settings_choice_arrow",
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -187,17 +210,18 @@ fun <T> MiyoExpandableChoiceSetting(
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(currentValue, color = colors.secondaryText, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(MiyoSpacing.small))
                     Icon(
                         Icons.AutoMirrored.Outlined.ArrowForwardIos,
                         contentDescription = null,
                         tint = colors.secondaryText,
                         modifier = Modifier
                             .size(14.dp)
-                            .rotate(if (expanded) 90f else 0f),
+                            .rotate(arrowRotation),
                     )
                 }
             },
+            showNavigationArrow = false,
         )
         AnimatedVisibility(
             visible = expanded,
@@ -207,16 +231,20 @@ fun <T> MiyoExpandableChoiceSetting(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 58.dp, end = 18.dp, bottom = 16.dp),
-                shape = RoundedCornerShape(18.dp),
+                    .padding(
+                        start = 56.dp,
+                        end = MiyoSettingsPaddings.horizontal,
+                        bottom = MiyoSpacing.medium,
+                    ),
+                shape = RoundedCornerShape(MiyoSpacing.large),
                 color = colors.background.copy(alpha = if (colors.isDark) 0.38f else 0.58f),
             ) {
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        .padding(MiyoSpacing.medium),
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                    verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
                 ) {
                     choices.forEach { choice ->
                         FilterChip(

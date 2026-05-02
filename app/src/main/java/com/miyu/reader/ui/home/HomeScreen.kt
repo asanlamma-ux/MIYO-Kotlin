@@ -24,6 +24,7 @@ import com.miyu.reader.ui.components.BookCover
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoIconActionButton
 import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HomeViewModel
 
@@ -38,7 +39,7 @@ fun HomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 96.dp),
     ) {
         item {
             MiyoScreenHeader(
@@ -65,20 +66,20 @@ fun HomeScreen(
                 Text(
                     "Continue Reading",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
                     color = colors.onBackground,
                 )
             }
             item {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = MiyoSpacing.large),
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
                 ) {
                     items(readingBooks) { book ->
                         ContinueReadingCard(book = book, onClick = { onOpenBook(book.id) }, colors = colors)
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(MiyoSpacing.medium))
             }
         }
 
@@ -102,7 +103,7 @@ fun HomeScreen(
                 Text(
                     "All Books",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
                     color = colors.onBackground,
                 )
             }
@@ -123,13 +124,13 @@ private fun ContinueReadingCard(
         modifier = Modifier
             .width(200.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(MiyoSpacing.medium)) {
             BookCover(book = book, modifier = Modifier.fillMaxWidth().height(96.dp))
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MiyoSpacing.small))
             Text(
                 book.title,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
@@ -137,7 +138,7 @@ private fun ContinueReadingCard(
                 overflow = TextOverflow.Ellipsis,
                 color = colors.onBackground,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(MiyoSpacing.extraSmall))
             Text(
                 book.author,
                 style = MaterialTheme.typography.bodySmall,
@@ -145,7 +146,7 @@ private fun ContinueReadingCard(
                 overflow = TextOverflow.Ellipsis,
                 color = colors.secondaryText,
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MiyoSpacing.small))
             LinearProgressIndicator(
                 progress = { book.progress / 100f },
                 modifier = Modifier
@@ -155,7 +156,7 @@ private fun ContinueReadingCard(
                 color = colors.accent,
                 trackColor = colors.secondaryText.copy(alpha = 0.15f),
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(MiyoSpacing.extraSmall))
             Text(
                 "${book.progress.toInt()}%",
                 style = MaterialTheme.typography.labelSmall,
@@ -174,18 +175,18 @@ private fun BookCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.extraSmall)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(MiyoSpacing.medium),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BookCover(book = book, modifier = Modifier.size(48.dp, 64.dp))
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(MiyoSpacing.medium))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     book.title,
@@ -194,14 +195,14 @@ private fun BookCard(
                     overflow = TextOverflow.Ellipsis,
                     color = colors.onBackground,
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
                 Text(
                     book.author,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondaryText,
                 )
                 if (book.progress > 0f) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(MiyoSpacing.small))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LinearProgressIndicator(
                             progress = { book.progress / 100f },
@@ -212,7 +213,7 @@ private fun BookCard(
                             color = colors.accent,
                             trackColor = colors.secondaryText.copy(alpha = 0.15f),
                         )
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(MiyoSpacing.small))
                         Text(
                             "${book.progress.toInt()}%",
                             style = MaterialTheme.typography.labelSmall,

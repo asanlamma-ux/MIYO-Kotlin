@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.domain.model.Bookmark
 import com.miyu.reader.domain.model.Highlight
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -124,13 +125,13 @@ private fun HighlightsList(
         return
     }
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = MiyoSpacing.extraLarge)) {
         items(highlights, key = { it.id }) { highlight ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onClick(highlight) }
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium)
             ) {
                 Row(verticalAlignment = Alignment.Top) {
                     Box(
@@ -140,7 +141,7 @@ private fun HighlightsList(
                             .clip(CircleShape)
                             .background(Color(android.graphics.Color.parseColor(highlight.color)))
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MiyoSpacing.medium))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             highlight.text,
@@ -150,13 +151,13 @@ private fun HighlightsList(
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                         )
                         if (!highlight.note.isNullOrBlank()) {
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(MiyoSpacing.small))
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(readerTheme.secondaryText.copy(alpha = 0.08f))
-                                    .padding(10.dp)
+                                    .padding(12.dp)
                             ) {
                                 Icon(
                                     Icons.Outlined.Note,
@@ -164,7 +165,7 @@ private fun HighlightsList(
                                     tint = readerTheme.secondaryText,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(MiyoSpacing.small))
                                 Text(
                                     highlight.note,
                                     color = readerTheme.secondaryText,
@@ -172,7 +173,7 @@ private fun HighlightsList(
                                 )
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MiyoSpacing.small))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -193,7 +194,7 @@ private fun HighlightsList(
                     }
                 }
             }
-            Divider(color = readerTheme.secondaryText.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = 20.dp))
+            Divider(color = readerTheme.secondaryText.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = MiyoSpacing.large))
         }
     }
 }
@@ -210,13 +211,13 @@ private fun BookmarksList(
         return
     }
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = MiyoSpacing.extraLarge)) {
         items(bookmarks, key = { it.id }) { bookmark ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onClick(bookmark) }
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium)
             ) {
                 Row(verticalAlignment = Alignment.Top) {
                     Icon(
@@ -225,7 +226,7 @@ private fun BookmarksList(
                         tint = readerTheme.accent,
                         modifier = Modifier.padding(top = 2.dp).size(18.dp)
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(MiyoSpacing.medium))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             if (bookmark.text.isNotBlank()) bookmark.text else "Bookmark at Chapter ${bookmark.chapterIndex + 1}",
@@ -235,7 +236,7 @@ private fun BookmarksList(
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MiyoSpacing.small))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,7 +257,7 @@ private fun BookmarksList(
                     }
                 }
             }
-            Divider(color = readerTheme.secondaryText.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = 20.dp))
+            Divider(color = readerTheme.secondaryText.copy(alpha = 0.1f), modifier = Modifier.padding(horizontal = MiyoSpacing.large))
         }
     }
 }
@@ -278,7 +279,7 @@ private fun EmptyState(
                 tint = readerTheme.secondaryText.copy(alpha = 0.3f),
                 modifier = Modifier.size(48.dp)
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MiyoSpacing.medium))
             Text(
                 message,
                 color = readerTheme.secondaryText,

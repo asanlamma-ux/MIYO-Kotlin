@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.miyu.reader.domain.model.TermGroup
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,9 +105,9 @@ fun AddTermBottomSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
+                .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium)) {
                 Icon(Icons.Outlined.Bookmarks, contentDescription = null, tint = readerTheme.accent)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -122,7 +123,7 @@ fun AddTermBottomSheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(MiyoSpacing.large))
 
             TermField(
                 label = "Original text",
@@ -217,12 +218,12 @@ fun AddTermBottomSheet(
                 }
                 TextButton(onClick = { createNewGroup = true }) {
                     Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(MiyoSpacing.small))
                     Text("Create new group", color = readerTheme.accent)
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MiyoSpacing.medium))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -231,7 +232,7 @@ fun AddTermBottomSheet(
                 TextButton(onClick = onDismiss) {
                     Text("Cancel", color = readerTheme.secondaryText)
                 }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(MiyoSpacing.small))
                 Button(
                     enabled = canSave,
                     colors = ButtonDefaults.buttonColors(containerColor = readerTheme.accent),
@@ -276,6 +277,6 @@ private fun TermField(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
+            .padding(bottom = MiyoSpacing.medium),
     )
 }

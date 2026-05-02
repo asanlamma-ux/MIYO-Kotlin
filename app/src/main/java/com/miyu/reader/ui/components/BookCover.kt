@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.miyu.reader.domain.model.Book
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 
 private val fallbackCoverColors = listOf(
     Color(0xFFE9E6DA),
@@ -74,7 +75,7 @@ fun BookCover(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(MiyoSpacing.medium),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(

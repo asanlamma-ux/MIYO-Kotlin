@@ -1,5 +1,7 @@
 package com.miyu.reader.ui.onboarding
 
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -22,7 +24,6 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.SettingsSuggest
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedFilterChip
@@ -39,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,9 +49,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.miyu.reader.R
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
 import com.miyu.reader.domain.model.ReaderFlowMode
@@ -75,9 +79,11 @@ fun InitialSetupBottomSheet(
         readerThemeId: String,
         readingSettings: ReadingSettings,
         typography: TypographySettings,
+        dailyGoalMinutes: Int,
     ) -> Unit,
 ) {
     val colors = LocalMIYUColors.current
+    var setupStep by remember { mutableStateOf(SetupStep.LIBRARY) }
     var selectedThemeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
     var selectedReaderThemeId by remember {
         mutableStateOf(initialReaderThemeId.takeIf { it.isNotBlank() } ?: DefaultReaderThemeId)
@@ -85,9 +91,26 @@ fun InitialSetupBottomSheet(
     var selectedMode by remember { mutableStateOf(ReadingModePreset.CONTINUOUS) }
     var marginPreset by remember { mutableStateOf(MarginPreset.MEDIUM) }
     var fontSize by remember { mutableFloatStateOf(18f) }
+    var dailyGoalMinutes by remember { mutableIntStateOf(30) }
     var tapZonesEnabled by remember { mutableStateOf(true) }
     var continuousChapters by remember { mutableStateOf(true) }
     var bionicReading by remember { mutableStateOf(false) }
+
+    fun saveSetup() {
+        val readingSettings = selectedMode.settings.copy(
+            tapZonesEnabled = tapZonesEnabled,
+            autoAdvanceChapter = continuousChapters,
+            bionicReading = bionicReading,
+            marginPreset = marginPreset,
+        )
+        onSave(
+            selectedThemeMode,
+            selectedReaderThemeId,
+            readingSettings,
+            TypographySettings(fontSize = fontSize),
+            dailyGoalMinutes,
+        )
+    }
 
     ModalBottomSheet(
         onDismissRequest = onSkip,
@@ -109,170 +132,335 @@ fun InitialSetupBottomSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 28.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = colors.accent.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.size(58.dp),
-                ) {
-                    Icon(
-                        Icons.Outlined.SettingsSuggest,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.padding(15.dp),
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text(
-                        "Set Up Miyo",
-                        color = colors.onBackground,
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
-                    )
-                    Text(
-                        "Pick your defaults now, or skip and change them later in Settings.",
-                        color = colors.secondaryText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        lineHeight = 21.sp,
-                    )
-                }
-            }
-
+            WizardHeader(step = setupStep)
+            Spacer(Modifier.height(18.dp))
+            SetupStepIndicator(current = setupStep)
             Spacer(Modifier.height(22.dp))
-            SetupSectionHeader("App theme", Icons.Outlined.Palette)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { mode ->
-                    ElevatedFilterChip(
-                        selected = selectedThemeMode == mode,
-                        onClick = {
+
+            Crossfade(targetState = setupStep, label = "initial-setup-step") { step ->
+                when (step) {
+                    SetupStep.LIBRARY -> LibrarySetupStep(
+                        dailyGoalMinutes = dailyGoalMinutes,
+                        onDailyGoalChange = { dailyGoalMinutes = it },
+                    )
+                    SetupStep.APPEARANCE -> AppearanceSetupStep(
+                        selectedThemeMode = selectedThemeMode,
+                        selectedReaderThemeId = selectedReaderThemeId,
+                        onThemeModeSelected = { mode ->
                             selectedThemeMode = mode
                             onPreviewThemeMode(mode)
                         },
-                        label = {
-                            Text(
-                                when (mode) {
-                                    ThemeMode.SYSTEM -> "Follow OS"
-                                    ThemeMode.LIGHT -> "Light"
-                                    ThemeMode.DARK -> "Dark"
-                                },
-                            )
-                        },
-                        leadingIcon = if (selectedThemeMode == mode) {
-                            { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                        } else {
-                            null
+                        onReaderThemeSelected = { themeId ->
+                            selectedReaderThemeId = themeId
+                            onPreviewReaderTheme(themeId)
                         },
                     )
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            SetupSectionHeader("Reader palette", Icons.Outlined.AutoStories)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                ReaderColors.allThemes.forEach { theme ->
-                    ReaderThemeChoice(
-                        theme = theme,
-                        selected = selectedReaderThemeId == theme.id,
-                        onClick = {
-                            selectedReaderThemeId = theme.id
-                            onPreviewReaderTheme(theme.id)
-                        },
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            SetupSectionHeader("Reading mode", Icons.Outlined.WbSunny)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ReadingModePreset.entries.forEach { preset ->
-                    ModeChoice(
-                        preset = preset,
-                        selected = selectedMode == preset,
-                        onClick = {
+                    SetupStep.READER -> ReaderSetupStep(
+                        selectedMode = selectedMode,
+                        marginPreset = marginPreset,
+                        fontSize = fontSize,
+                        tapZonesEnabled = tapZonesEnabled,
+                        continuousChapters = continuousChapters,
+                        bionicReading = bionicReading,
+                        onModeSelected = { preset ->
                             selectedMode = preset
                             continuousChapters = preset != ReadingModePreset.PAGED
                             tapZonesEnabled = preset != ReadingModePreset.MINIMAL
                         },
+                        onMarginPresetSelected = { marginPreset = it },
+                        onFontSizeChange = { fontSize = it.coerceIn(14f, 24f) },
+                        onTapZonesChange = { tapZonesEnabled = it },
+                        onContinuousChaptersChange = { continuousChapters = it },
+                        onBionicReadingChange = { bionicReading = it },
                     )
                 }
             }
 
-            Spacer(Modifier.height(22.dp))
-            SetupSectionHeader("Layout", Icons.Outlined.FormatSize)
-            Text(
-                "Font size ${fontSize.toInt()}px",
-                color = colors.secondaryText,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Slider(
-                value = fontSize,
-                onValueChange = { fontSize = it.coerceIn(14f, 24f) },
-                valueRange = 14f..24f,
-                steps = 9,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MarginPreset.entries.forEach { preset ->
-                    FilterChip(
-                        selected = marginPreset == preset,
-                        onClick = { marginPreset = preset },
-                        label = { Text(preset.name.lowercase().replaceFirstChar { it.uppercase() }) },
+            Spacer(Modifier.height(26.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (setupStep == SetupStep.LIBRARY) {
+                            onSkip()
+                        } else {
+                            setupStep = setupStep.previous()
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(if (setupStep == SetupStep.LIBRARY) "Skip" else "Back")
+                }
+                Button(
+                    onClick = {
+                        if (setupStep == SetupStep.READER) {
+                            saveSetup()
+                        } else {
+                            setupStep = setupStep.next()
+                        }
+                    },
+                    modifier = Modifier.weight(1.35f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        if (setupStep == SetupStep.READER) "Finish Setup" else "Continue",
+                        fontWeight = FontWeight.Bold,
                     )
                 }
-            }
-
-            Spacer(Modifier.height(18.dp))
-            SetupSwitchRow(
-                title = "Tap zones",
-                subtitle = "Use screen edges for reader navigation.",
-                checked = tapZonesEnabled,
-                onCheckedChange = { tapZonesEnabled = it },
-            )
-            SetupSwitchRow(
-                title = "Continuous chapters",
-                subtitle = "Load the next chapter below the current chapter.",
-                checked = continuousChapters,
-                onCheckedChange = { continuousChapters = it },
-            )
-            SetupSwitchRow(
-                title = "Bionic reading",
-                subtitle = "Emphasize word beginnings for faster scanning.",
-                checked = bionicReading,
-                onCheckedChange = { bionicReading = it },
-            )
-
-            Spacer(Modifier.height(24.dp))
-            Button(
-                onClick = {
-                    val readingSettings = selectedMode.settings.copy(
-                        tapZonesEnabled = tapZonesEnabled,
-                        autoAdvanceChapter = continuousChapters,
-                        bionicReading = bionicReading,
-                        marginPreset = marginPreset,
-                    )
-                    onSave(
-                        selectedThemeMode,
-                        selectedReaderThemeId,
-                        readingSettings,
-                        TypographySettings(fontSize = fontSize),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text("Use These Settings", fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = onSkip,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Text("Skip, Use Defaults")
             }
         }
+    }
+}
+
+private enum class SetupStep(
+    val index: Int,
+    val title: String,
+    val subtitle: String,
+    @DrawableRes val iconRes: Int,
+) {
+    LIBRARY(
+        index = 0,
+        title = "Welcome to Miyo",
+        subtitle = "A local-first reader with Koodo-style setup: library, palette, then reading controls.",
+        iconRes = R.drawable.ic_setup_library_vault,
+    ),
+    APPEARANCE(
+        index = 1,
+        title = "Choose the look",
+        subtitle = "Reader palettes also tune the app shell, so the preview changes immediately.",
+        iconRes = R.drawable.ic_setup_palette_cards,
+    ),
+    READER(
+        index = 2,
+        title = "Tune reading",
+        subtitle = "Set sane defaults for scroll mode, gestures, margins, and typography.",
+        iconRes = R.drawable.ic_setup_reader_tuning,
+    );
+
+    fun next(): SetupStep = entries.getOrElse(index + 1) { READER }
+
+    fun previous(): SetupStep = entries.getOrElse(index - 1) { LIBRARY }
+}
+
+@Composable
+private fun WizardHeader(step: SetupStep) {
+    val colors = LocalMIYUColors.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            color = colors.accent.copy(alpha = 0.14f),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.size(62.dp),
+        ) {
+            Icon(
+                painter = painterResource(step.iconRes),
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.padding(14.dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text(
+                step.title,
+                color = colors.onBackground,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+            )
+            Text(
+                step.subtitle,
+                color = colors.secondaryText,
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 21.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SetupStepIndicator(current: SetupStep) {
+    val colors = LocalMIYUColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SetupStep.entries.forEach { step ->
+            val active = step.index <= current.index
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (active) colors.accent else colors.secondaryText.copy(alpha = 0.18f),
+                    ),
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun LibrarySetupStep(
+    dailyGoalMinutes: Int,
+    onDailyGoalChange: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SetupFeatureCard(
+            iconRes = R.drawable.ic_setup_library_vault,
+            title = "Local library first",
+            subtitle = "EPUB files are imported into your device library; online catalogs stay optional.",
+        )
+        SetupFeatureCard(
+            iconRes = R.drawable.ic_setup_private_device,
+            title = "Private by default",
+            subtitle = "Books, terms, bookmarks, and reading progress stay on-device unless you opt into sync later.",
+        )
+        SetupFeatureCard(
+            iconRes = R.drawable.ic_setup_reader_tuning,
+            title = "Reader-ready defaults",
+            subtitle = "Continuous scroll, tap zones, and chapter append can be tuned before your first book.",
+        )
+        SetupSectionHeader("Daily reading goal", Icons.Outlined.WbSunny)
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(15, 30, 45, 60).forEach { minutes ->
+                FilterChip(
+                    selected = dailyGoalMinutes == minutes,
+                    onClick = { onDailyGoalChange(minutes) },
+                    label = { Text("$minutes min") },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AppearanceSetupStep(
+    selectedThemeMode: ThemeMode,
+    selectedReaderThemeId: String,
+    onThemeModeSelected: (ThemeMode) -> Unit,
+    onReaderThemeSelected: (String) -> Unit,
+) {
+    Column {
+        SetupSectionHeader("App theme", Icons.Outlined.Palette)
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ThemeMode.entries.forEach { mode ->
+                ElevatedFilterChip(
+                    selected = selectedThemeMode == mode,
+                    onClick = { onThemeModeSelected(mode) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                ThemeMode.SYSTEM -> "Follow OS"
+                                ThemeMode.LIGHT -> "Light"
+                                ThemeMode.DARK -> "Dark"
+                            },
+                        )
+                    },
+                    leadingIcon = if (selectedThemeMode == mode) {
+                        { Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(22.dp))
+        SetupSectionHeader("Reader palette", Icons.Outlined.AutoStories)
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ReaderColors.allThemes.forEach { theme ->
+                ReaderThemeChoice(
+                    theme = theme,
+                    selected = selectedReaderThemeId == theme.id,
+                    onClick = { onReaderThemeSelected(theme.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ReaderSetupStep(
+    selectedMode: ReadingModePreset,
+    marginPreset: MarginPreset,
+    fontSize: Float,
+    tapZonesEnabled: Boolean,
+    continuousChapters: Boolean,
+    bionicReading: Boolean,
+    onModeSelected: (ReadingModePreset) -> Unit,
+    onMarginPresetSelected: (MarginPreset) -> Unit,
+    onFontSizeChange: (Float) -> Unit,
+    onTapZonesChange: (Boolean) -> Unit,
+    onContinuousChaptersChange: (Boolean) -> Unit,
+    onBionicReadingChange: (Boolean) -> Unit,
+) {
+    Column {
+        SetupSectionHeader("Reading mode", Icons.Outlined.WbSunny)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            ReadingModePreset.entries.forEach { preset ->
+                ModeChoice(
+                    preset = preset,
+                    selected = selectedMode == preset,
+                    onClick = { onModeSelected(preset) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(22.dp))
+        SetupSectionHeader("Layout", Icons.Outlined.FormatSize)
+        Text(
+            "Font size ${fontSize.toInt()}px",
+            color = LocalMIYUColors.current.secondaryText,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Slider(
+            value = fontSize,
+            onValueChange = onFontSizeChange,
+            valueRange = 14f..24f,
+            steps = 9,
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MarginPreset.entries.forEach { preset ->
+                FilterChip(
+                    selected = marginPreset == preset,
+                    onClick = { onMarginPresetSelected(preset) },
+                    label = { Text(preset.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        SetupSwitchRow(
+            title = "Tap zones",
+            subtitle = "Use screen edges for reader movement.",
+            checked = tapZonesEnabled,
+            onCheckedChange = onTapZonesChange,
+        )
+        SetupSwitchRow(
+            title = "Continuous chapters",
+            subtitle = "Append the next chapter below the current one.",
+            checked = continuousChapters,
+            onCheckedChange = onContinuousChaptersChange,
+        )
+        SetupSwitchRow(
+            title = "Bionic reading",
+            subtitle = "Emphasize word beginnings for faster scanning.",
+            checked = bionicReading,
+            onCheckedChange = onBionicReadingChange,
+        )
     }
 }
 
@@ -312,6 +500,54 @@ private enum class ReadingModePreset(
             autoAdvanceChapter = true,
         ),
     ),
+}
+
+@Composable
+private fun SetupFeatureCard(
+    @DrawableRes iconRes: Int,
+    title: String,
+    subtitle: String,
+) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        color = colors.cardBackground,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                color = colors.accent.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.padding(11.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    color = colors.onBackground,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    subtitle,
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 20.sp,
+                )
+            }
+        }
+    }
 }
 
 @Composable

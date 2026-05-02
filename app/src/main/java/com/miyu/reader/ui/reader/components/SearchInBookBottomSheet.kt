@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 import kotlinx.coroutines.delay
 
@@ -93,7 +94,7 @@ fun SearchInBookBottomSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -108,7 +109,12 @@ fun SearchInBookBottomSheet(
             }
 
             // Scope Toggle
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+            ) {
                 Chip("This chapter", !searchFullBook, readerTheme) { searchFullBook = false }
                 Chip("Entire book", searchFullBook, readerTheme) { searchFullBook = true }
             }
@@ -117,7 +123,9 @@ fun SearchInBookBottomSheet(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
                 placeholder = { Text("Search for words, phrases…", color = readerTheme.secondaryText.copy(alpha = 0.8f)) },
                 leadingIcon = { Icon(Icons.Outlined.Search, null, tint = readerTheme.secondaryText) },
                 trailingIcon = {
@@ -146,21 +154,26 @@ fun SearchInBookBottomSheet(
                     if (isSearching) "Searching…" else if (results.isEmpty()) "No results found" else "${results.size} result${if (results.size != 1) "s" else ""}",
                     color = readerTheme.secondaryText,
                     fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small)
                 )
             }
 
             // Results List
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+                verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small)
             ) {
                 if (query.length >= 2 && !isSearching && results.isEmpty()) {
                     item {
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Text("No matches for \"$query\"", color = readerTheme.secondaryText, fontSize = 15.sp)
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(MiyoSpacing.extraSmall))
                             Text("Try different keywords", color = readerTheme.secondaryText, fontSize = 12.sp)
                         }
                     }
@@ -182,7 +195,7 @@ fun SearchInBookBottomSheet(
                                 onGoToChapter(result.chapterIndex)
                                 onDismiss()
                             }
-                            .padding(14.dp)
+                            .padding(MiyoSpacing.medium)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(result.chapterTitle, color = readerTheme.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -197,7 +210,7 @@ fun SearchInBookBottomSheet(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(MiyoSpacing.small))
                         
                         Text(
                             buildAnnotatedString {
@@ -224,15 +237,15 @@ fun SearchInBookBottomSheet(
 private fun Chip(label: String, active: Boolean, readerTheme: ReaderThemeColors, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(if (active) readerTheme.accent.copy(alpha = 0.22f) else readerTheme.background)
             .border(
                 width = 1.5.dp,
                 color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small)
     ) {
         Text(
             label,

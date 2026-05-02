@@ -21,12 +21,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.TermGroup
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.components.MiyoWorkspaceExitButton
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.TermsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TermsScreen(
+    onBack: (() -> Unit)? = null,
     viewModel: TermsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -43,6 +45,14 @@ fun TermsScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
+        onBack?.let { back ->
+            Box(modifier = Modifier.padding(start = 24.dp, top = 24.dp)) {
+                MiyoWorkspaceExitButton(
+                    label = "Exit term groups",
+                    onClick = back,
+                )
+            }
+        }
         MiyoScreenHeader(
             title = "Terms",
             subtitle = "Manage translation corrections for your novels",
@@ -63,7 +73,7 @@ fun TermsScreen(
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 24.dp)
                 .padding(top = 8.dp),
             shape = RoundedCornerShape(12.dp),
             singleLine = true,
@@ -76,7 +86,7 @@ fun TermsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 24.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
             ) {
@@ -145,7 +155,7 @@ fun TermsScreen(
                     onClick = { viewModel.setSelectedGroupId(group.id) },
                     onDelete = { groupToDelete = group },
                     accentColor = colors.accent,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
 
@@ -157,7 +167,7 @@ fun TermsScreen(
                 color = colors.secondaryText,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 24.dp),
             )
         }
     }
@@ -190,7 +200,7 @@ fun TermsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
             ) {
                 Text(
                     group.name,

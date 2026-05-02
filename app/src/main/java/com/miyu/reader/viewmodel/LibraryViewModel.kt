@@ -6,9 +6,11 @@ import android.provider.OpenableColumns
 import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
+import com.miyu.reader.storage.MiyoStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -32,8 +34,19 @@ data class ImportFeedback(
     val bookId: String? = null,
 )
 
+data class LibraryCategory(
+    val id: String,
+    val name: String,
+    val count: Int,
+    val isSystem: Boolean = false,
+    val isMutable: Boolean = false,
+)
+
 data class LibraryUiState(
     val books: List<Book> = emptyList(),
+    val categories: List<LibraryCategory> = emptyList(),
+    val selectedCategoryId: String = LibraryCategoryIds.ALL,
+    val selectedBookIds: Set<String> = emptySet(),
     val searchQuery: String = "",
     val viewMode: ViewMode = ViewMode.GRID,
     val sortOption: SortOption = SortOption.RECENT,
@@ -45,6 +58,7 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val bookRepository: BookRepository,
+    private val userPreferences: UserPreferences,
     private val epubEngine: EpubEngineBridge,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
@@ -57,14 +71,37 @@ class LibraryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            allBooks.collect { books ->
-                _uiState.update { it.copy(books = books) }
+            combine(allBooks, userPreferences.libraryCategories) { books, storedCategories ->
+                books to buildLibraryCategories(books, storedCategories)
+            }.collect { (books, categories) ->
+                _uiState.update { current ->
+                    val existingIds = books.mapTo(mutableSetOf()) { it.id }
+                    val selectedCategory = current.selectedCategoryId
+                        .takeIf { id -> categories.any { it.id == id } }
+                        ?: LibraryCategoryIds.ALL
+                    current.copy(
+                        books = books,
+                        categories = categories,
+                        selectedCategoryId = selectedCategory,
+                        selectedBookIds = current.selectedBookIds.intersect(existingIds),
+                    )
+                }
             }
         }
     }
 
     val displayedBooks: StateFlow<List<Book>> = _uiState.map { state ->
         var list = state.books
+
+        // Category tabs follow Mihon's library-first flow. Status filters stay
+        // independent so a user can view "Reading" inside any custom category.
+        list = when (state.selectedCategoryId) {
+            LibraryCategoryIds.ALL -> list
+            LibraryCategoryIds.UNCATEGORIZED -> list.filter { it.libraryCategoryNames().isEmpty() }
+            else -> state.selectedCategoryId.customCategoryName()?.let { name ->
+                list.filter { book -> book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) } }
+            } ?: list
+        }
 
         // Filter
         list = when (state.filterOption) {
@@ -108,6 +145,16 @@ class LibraryViewModel @Inject constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
+    fun setSelectedCategory(categoryId: String) {
+        _uiState.update { current ->
+            if (current.categories.any { it.id == categoryId }) {
+                current.copy(selectedCategoryId = categoryId, selectedBookIds = emptySet())
+            } else {
+                current
+            }
+        }
+    }
+
     fun toggleViewMode() {
         _uiState.update {
             it.copy(viewMode = if (it.viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID)
@@ -120,6 +167,111 @@ class LibraryViewModel @Inject constructor(
 
     fun setFilterOption(option: FilterOption) {
         _uiState.update { it.copy(filterOption = option) }
+    }
+
+    fun toggleBookSelection(bookId: String) {
+        _uiState.update { current ->
+            val next = if (bookId in current.selectedBookIds) {
+                current.selectedBookIds - bookId
+            } else {
+                current.selectedBookIds + bookId
+            }
+            current.copy(selectedBookIds = next)
+        }
+    }
+
+    fun clearSelection() {
+        _uiState.update { it.copy(selectedBookIds = emptySet()) }
+    }
+
+    fun createCategory(name: String) {
+        val cleanName = sanitizeCategoryName(name) ?: return
+        viewModelScope.launch {
+            val existing = userPreferences.libraryCategories.first()
+            if (existing.none { it.equals(cleanName, ignoreCase = true) }) {
+                userPreferences.setLibraryCategories(existing + cleanName)
+            }
+            _uiState.update { it.copy(selectedCategoryId = LibraryCategoryIds.custom(cleanName)) }
+        }
+    }
+
+    fun renameCategory(categoryId: String, newName: String) {
+        val oldName = categoryId.customCategoryName() ?: return
+        val cleanName = sanitizeCategoryName(newName) ?: return
+        if (oldName.equals(cleanName, ignoreCase = true)) return
+        viewModelScope.launch {
+            val existing = userPreferences.libraryCategories.first()
+            if (existing.any { it.equals(cleanName, ignoreCase = true) }) return@launch
+            userPreferences.setLibraryCategories(existing
+                .filterNot { it.equals(oldName, ignoreCase = true) }
+                .toSet() + cleanName)
+            bookRepository.getAllBooksOnce().forEach { book ->
+                if (book.libraryCategoryNames().any { it.equals(oldName, ignoreCase = true) }) {
+                    bookRepository.updateBookTags(
+                        book.id,
+                        book.tags
+                            .removeLibraryCategory(oldName)
+                            .addLibraryCategory(cleanName),
+                    )
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    selectedCategoryId = LibraryCategoryIds.custom(cleanName),
+                    selectedBookIds = emptySet(),
+                )
+            }
+        }
+    }
+
+    fun deleteCategory(categoryId: String) {
+        val name = categoryId.customCategoryName() ?: return
+        viewModelScope.launch {
+            val existing = userPreferences.libraryCategories.first()
+            userPreferences.setLibraryCategories(existing.filterNot { it.equals(name, ignoreCase = true) }.toSet())
+            bookRepository.getAllBooksOnce().forEach { book ->
+                if (book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) }) {
+                    bookRepository.updateBookTags(book.id, book.tags.removeLibraryCategory(name))
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    selectedCategoryId = LibraryCategoryIds.ALL,
+                    selectedBookIds = emptySet(),
+                )
+            }
+        }
+    }
+
+    fun assignSelectionToCategory(categoryId: String) {
+        val selectedIds = _uiState.value.selectedBookIds
+        if (selectedIds.isEmpty()) return
+        viewModelScope.launch {
+            val categoryName = categoryId.customCategoryName()
+            if (categoryId != LibraryCategoryIds.UNCATEGORIZED && categoryName == null) return@launch
+            if (categoryName != null) {
+                val existing = userPreferences.libraryCategories.first()
+                if (existing.none { it.equals(categoryName, ignoreCase = true) }) {
+                    userPreferences.setLibraryCategories(existing + categoryName)
+                }
+            }
+            bookRepository.getAllBooksOnce()
+                .filter { it.id in selectedIds }
+                .forEach { book ->
+                    val nextTags = if (categoryId == LibraryCategoryIds.UNCATEGORIZED) {
+                        book.tags.removeAllLibraryCategories()
+                    } else {
+                        book.tags.addLibraryCategory(categoryName.orEmpty())
+                    }
+                    bookRepository.updateBookTags(book.id, nextTags)
+                }
+            _uiState.update {
+                it.copy(
+                    selectedBookIds = emptySet(),
+                    selectedCategoryId = if (categoryName != null) LibraryCategoryIds.custom(categoryName) else LibraryCategoryIds.UNCATEGORIZED,
+                )
+            }
+        }
     }
 
     fun deleteBook(bookId: String) {
@@ -224,7 +376,7 @@ class LibraryViewModel @Inject constructor(
             _uiState.update { it.copy(isImporting = true, importFeedback = null) }
             try {
                 val normalizedUrl = validateRemoteEpubUrl(url)
-                val fileName = uniqueImportFileName("${suggestedTitle.ifBlank { "opds-book" }}.epub")
+                val fileName = uniqueImportFileName("${suggestedTitle.ifBlank { "remote-book" }}.epub")
                 val destFile = withContext(Dispatchers.IO) {
                     downloadRemoteEpub(normalizedUrl, fileName)
                 }
@@ -266,7 +418,7 @@ class LibraryViewModel @Inject constructor(
                     it.copy(
                         importFeedback = ImportFeedback(
                             type = ImportFeedbackType.SUCCESS,
-                            title = "OPDS import complete",
+                            title = "Remote EPUB import complete",
                             message = "\"${book.title}\" downloaded with $totalChapters chapter${if (totalChapters == 1) "" else "s"}.",
                             bookId = book.id,
                         )
@@ -277,8 +429,8 @@ class LibraryViewModel @Inject constructor(
                     it.copy(
                         importFeedback = ImportFeedback(
                             type = ImportFeedbackType.ERROR,
-                            title = "OPDS import failed",
-                            message = e.message ?: "The selected OPDS book could not be downloaded.",
+                            title = "Remote EPUB import failed",
+                            message = e.message ?: "The selected remote EPUB could not be downloaded.",
                         )
                     )
                 }
@@ -391,11 +543,9 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun copyUriToInternalBookFile(uri: Uri, fileName: String): File {
-        val booksDir = File(appContext.filesDir, "books").canonicalFile.apply { mkdirs() }
-        val destFile = File(booksDir, fileName).canonicalFile
-        if (!destFile.path.startsWith(booksDir.path + File.separator)) {
-            error("Invalid import destination.")
-        }
+        val booksDir = MiyoStorage.booksDir(appContext)
+        val destFile = MiyoStorage.safeChild(booksDir, fileName)
+        val tempFile = MiyoStorage.safeChild(booksDir, "$fileName.${UUID.randomUUID()}.tmp")
 
         var copied = 0L
         val buffer = ByteArray(COPY_BUFFER_SIZE)
@@ -403,14 +553,13 @@ class LibraryViewModel @Inject constructor(
             ?: error("Could not open the selected EPUB.")
         try {
             inputStream.use { input ->
-                destFile.outputStream().use { output ->
+                tempFile.outputStream().use { output ->
                     while (true) {
                         val read = input.read(buffer)
                         if (read == -1) break
                         copied += read
                         if (copied > MAX_IMPORT_BYTES) {
                             output.flush()
-                            destFile.delete()
                             error("This EPUB is larger than the ${MAX_IMPORT_BYTES / 1024 / 1024} MB safety limit.")
                         }
                         output.write(buffer, 0, read)
@@ -418,13 +567,14 @@ class LibraryViewModel @Inject constructor(
                 }
             }
         } catch (error: Throwable) {
-            destFile.delete()
+            tempFile.delete()
             throw error
         }
         if (copied == 0L) {
-            destFile.delete()
+            tempFile.delete()
             error("The selected EPUB is empty.")
         }
+        commitTempFile(tempFile, destFile)
         return destFile
     }
 
@@ -435,20 +585,24 @@ class LibraryViewModel @Inject constructor(
         if (source.length() > MAX_IMPORT_BYTES) {
             error("This EPUB is larger than the ${MAX_IMPORT_BYTES / 1024 / 1024} MB safety limit.")
         }
-        val booksDir = File(appContext.filesDir, "books").canonicalFile.apply { mkdirs() }
-        val destFile = File(booksDir, fileName).canonicalFile
-        if (!destFile.path.startsWith(booksDir.path + File.separator)) {
-            error("Invalid import destination.")
-        }
-        source.inputStream().use { input ->
-            destFile.outputStream().use { output ->
-                input.copyTo(output, COPY_BUFFER_SIZE)
+        val booksDir = MiyoStorage.booksDir(appContext)
+        val destFile = MiyoStorage.safeChild(booksDir, fileName)
+        val tempFile = MiyoStorage.safeChild(booksDir, "$fileName.${UUID.randomUUID()}.tmp")
+        try {
+            source.inputStream().use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output, COPY_BUFFER_SIZE)
+                }
             }
+        } catch (error: Throwable) {
+            tempFile.delete()
+            throw error
         }
-        if (destFile.length() <= 0L) {
-            destFile.delete()
+        if (tempFile.length() <= 0L) {
+            tempFile.delete()
             error("Generated EPUB is empty.")
         }
+        commitTempFile(tempFile, destFile)
         return destFile
     }
 
@@ -465,11 +619,9 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun downloadRemoteEpub(url: String, fileName: String): File {
-        val booksDir = File(appContext.filesDir, "books").canonicalFile.apply { mkdirs() }
-        val destFile = File(booksDir, fileName).canonicalFile
-        if (!destFile.path.startsWith(booksDir.path + File.separator)) {
-            error("Invalid import destination.")
-        }
+        val booksDir = MiyoStorage.booksDir(appContext)
+        val destFile = MiyoStorage.safeChild(booksDir, fileName)
+        val tempFile = MiyoStorage.safeChild(booksDir, "$fileName.${UUID.randomUUID()}.tmp")
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 12_000
@@ -491,14 +643,13 @@ class LibraryViewModel @Inject constructor(
             val buffer = ByteArray(COPY_BUFFER_SIZE)
             try {
                 connection.inputStream.use { input ->
-                    destFile.outputStream().use { output ->
+                    tempFile.outputStream().use { output ->
                         while (true) {
                             val read = input.read(buffer)
                             if (read == -1) break
                             copied += read
                             if (copied > MAX_IMPORT_BYTES) {
                                 output.flush()
-                                destFile.delete()
                                 error("This EPUB is larger than the ${MAX_IMPORT_BYTES / 1024 / 1024} MB safety limit.")
                             }
                             output.write(buffer, 0, read)
@@ -506,13 +657,14 @@ class LibraryViewModel @Inject constructor(
                     }
                 }
             } catch (error: Throwable) {
-                destFile.delete()
+                tempFile.delete()
                 throw error
             }
             if (copied == 0L) {
-                destFile.delete()
+                tempFile.delete()
                 error("The downloaded EPUB is empty.")
             }
+            commitTempFile(tempFile, destFile)
             return destFile
         } finally {
             connection.disconnect()
@@ -553,11 +705,24 @@ class LibraryViewModel @Inject constructor(
         }
 
         return runCatching {
-            val coverDir = File(appContext.filesDir, "covers").apply { mkdirs() }
-            val coverFile = File(coverDir, "$bookId.$extension")
+            val coverFile = MiyoStorage.safeChild(MiyoStorage.coversDir(appContext), "$bookId.$extension")
             coverFile.writeBytes(Base64.decode(base64Payload, Base64.DEFAULT))
             Uri.fromFile(coverFile).toString()
         }.getOrNull()
+    }
+
+    private fun commitTempFile(tempFile: File, destFile: File) {
+        if (destFile.exists()) destFile.delete()
+        if (!tempFile.renameTo(destFile)) {
+            try {
+                tempFile.copyTo(destFile, overwrite = true)
+            } catch (copyError: Throwable) {
+                destFile.delete()
+                throw copyError
+            } finally {
+                tempFile.delete()
+            }
+        }
     }
 
     private companion object {
@@ -567,3 +732,90 @@ class LibraryViewModel @Inject constructor(
         const val COPY_BUFFER_SIZE = 8 * 1024
     }
 }
+
+object LibraryCategoryIds {
+    const val ALL = "system:all"
+    const val UNCATEGORIZED = "system:uncategorized"
+    private const val CUSTOM_PREFIX = "custom:"
+
+    fun custom(name: String): String = "$CUSTOM_PREFIX${name.trim()}"
+
+    fun customName(id: String): String? =
+        id.takeIf { it.startsWith(CUSTOM_PREFIX) }
+            ?.removePrefix(CUSTOM_PREFIX)
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+}
+
+private const val LIBRARY_CATEGORY_TAG_PREFIX = "category:"
+
+private fun buildLibraryCategories(
+    books: List<Book>,
+    storedCategoryNames: Set<String>,
+): List<LibraryCategory> {
+    val discoveredNames = books.flatMap { it.libraryCategoryNames() }
+    val customNames = (storedCategoryNames + discoveredNames)
+        .mapNotNull(::sanitizeCategoryName)
+        .distinctBy { it.lowercase() }
+        .sortedBy { it.lowercase() }
+
+    return buildList {
+        add(
+            LibraryCategory(
+                id = LibraryCategoryIds.ALL,
+                name = "All",
+                count = books.size,
+                isSystem = true,
+            ),
+        )
+        add(
+            LibraryCategory(
+                id = LibraryCategoryIds.UNCATEGORIZED,
+                name = "Uncategorized",
+                count = books.count { it.libraryCategoryNames().isEmpty() },
+                isSystem = true,
+            ),
+        )
+        customNames.forEach { name ->
+            add(
+                LibraryCategory(
+                    id = LibraryCategoryIds.custom(name),
+                    name = name,
+                    count = books.count { book ->
+                        book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) }
+                    },
+                    isMutable = true,
+                ),
+            )
+        }
+    }
+}
+
+private fun String.customCategoryName(): String? = LibraryCategoryIds.customName(this)
+
+private fun sanitizeCategoryName(name: String): String? =
+    name.trim()
+        .replace(Regex("\\s+"), " ")
+        .takeIf { it.length in 1..48 }
+
+private fun Book.libraryCategoryNames(): List<String> =
+    tags.mapNotNull { tag ->
+        tag.takeIf { it.startsWith(LIBRARY_CATEGORY_TAG_PREFIX, ignoreCase = true) }
+            ?.drop(LIBRARY_CATEGORY_TAG_PREFIX.length)
+            ?.let(::sanitizeCategoryName)
+    }.distinctBy { it.lowercase() }
+
+private fun List<String>.addLibraryCategory(name: String): List<String> {
+    val cleanName = sanitizeCategoryName(name) ?: return this
+    return (removeLibraryCategory(cleanName) + "$LIBRARY_CATEGORY_TAG_PREFIX$cleanName")
+        .distinctBy { it.lowercase() }
+}
+
+private fun List<String>.removeLibraryCategory(name: String): List<String> =
+    filterNot { tag ->
+        tag.startsWith(LIBRARY_CATEGORY_TAG_PREFIX, ignoreCase = true) &&
+            tag.drop(LIBRARY_CATEGORY_TAG_PREFIX.length).trim().equals(name.trim(), ignoreCase = true)
+    }
+
+private fun List<String>.removeAllLibraryCategories(): List<String> =
+    filterNot { it.startsWith(LIBRARY_CATEGORY_TAG_PREFIX, ignoreCase = true) }

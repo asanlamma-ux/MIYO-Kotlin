@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.domain.model.*
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +59,7 @@ fun ReaderLayoutPanelBottomSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -88,7 +89,7 @@ fun ReaderLayoutPanelBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = MiyoSpacing.large)
             ) {
                 SectionHeader("FLOW", Icons.Outlined.Tune, readerTheme)
                 Row(
@@ -107,7 +108,7 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(MiyoSpacing.medium))
                 ToggleRow(
                     title = "Tap zones",
                     subtitle = "Use reader edges for page movement",
@@ -116,7 +117,7 @@ fun ReaderLayoutPanelBottomSheet(
                     readerTheme = readerTheme,
                     onToggle = { onSettingsChanged(settings.copy(tapZonesEnabled = !settings.tapZonesEnabled)) },
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
                     title = "Chapter edge taps",
                     subtitle = "When off, side taps scroll within the chapter",
@@ -135,7 +136,7 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     },
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
                     title = "Continuous chapters",
                     subtitle = "Advance when the scroll reaches the end",
@@ -144,7 +145,7 @@ fun ReaderLayoutPanelBottomSheet(
                     readerTheme = readerTheme,
                     onToggle = { onSettingsChanged(settings.copy(autoAdvanceChapter = !settings.autoAdvanceChapter)) },
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
                     title = "Bionic reading",
                     subtitle = "Bold word openings for faster scanning",
@@ -153,7 +154,7 @@ fun ReaderLayoutPanelBottomSheet(
                     readerTheme = readerTheme,
                     onToggle = { onSettingsChanged(settings.copy(bionicReading = !settings.bionicReading)) },
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MiyoSpacing.large))
 
                 SectionHeader("MARGINS", Icons.Outlined.AlignHorizontalCenter, readerTheme)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -167,7 +168,7 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MiyoSpacing.large))
 
                 SectionHeader("COLUMN WIDTH", Icons.Outlined.ViewColumn, readerTheme)
                 Row(
@@ -186,7 +187,7 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(MiyoSpacing.medium))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     ReaderColumnLayout.entries.forEach { layout ->
                         val active = settings.readerColumnLayout == layout
@@ -198,7 +199,7 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MiyoSpacing.large))
             }
         }
     }
@@ -211,9 +212,9 @@ private fun SectionHeader(
     readerTheme: ReaderThemeColors,
     hint: String? = null
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = MiyoSpacing.small)) {
         Icon(icon, contentDescription = null, tint = readerTheme.secondaryText, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(MiyoSpacing.small))
         Text(
             title,
             color = readerTheme.secondaryText,
@@ -227,7 +228,7 @@ private fun SectionHeader(
             hint,
             color = readerTheme.secondaryText.copy(alpha = 0.9f),
             fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 10.dp)
+            modifier = Modifier.padding(bottom = MiyoSpacing.small)
         )
     }
 }
@@ -241,15 +242,15 @@ private fun Chip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(if (active) readerTheme.accent.copy(alpha = 0.15f) else readerTheme.background)
             .border(
                 width = 1.5.dp,
                 color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = MiyoSpacing.medium, vertical = 10.dp)
     ) {
         Text(
             label,
@@ -272,15 +273,15 @@ private fun ToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(readerTheme.background)
             .border(
                 width = 1.5.dp,
                 color = if (active) readerTheme.accent else readerTheme.secondaryText.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onToggle)
-            .padding(14.dp),
+            .padding(MiyoSpacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -293,7 +294,7 @@ private fun ToggleRow(
                 tint = if (active) readerTheme.accent else readerTheme.secondaryText,
                 modifier = Modifier.size(20.dp)
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MiyoSpacing.medium))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     title,
@@ -308,7 +309,7 @@ private fun ToggleRow(
                 )
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(MiyoSpacing.medium))
         Switch(
             checked = active,
             onCheckedChange = { onToggle() },

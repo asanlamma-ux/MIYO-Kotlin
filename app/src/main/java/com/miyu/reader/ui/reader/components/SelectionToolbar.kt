@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
 data class SelectionData(
@@ -86,16 +87,16 @@ fun SelectionToolbar(
     val selectionTop = with(density) { selection.y.toDp() }.coerceAtLeast(0.dp)
     val selectionHeight = with(density) { selection.height.toDp() }.coerceAtLeast(20.dp)
     val toolbarHeight = if (showColorRow) 98.dp else 54.dp
-    val toolbarWidth = (screenWidth - 24.dp).coerceAtMost(276.dp)
+    val toolbarWidth = (screenWidth - MiyoSpacing.large - MiyoSpacing.large).coerceAtMost(280.dp)
     val anchorLeft = (
         with(density) { selection.x.toDp() } - (toolbarWidth / 2)
-        ).coerceIn(12.dp, (screenWidth - toolbarWidth - 12.dp).coerceAtLeast(12.dp))
-    val belowTop = selectionTop + selectionHeight + 30.dp
-    val aboveTop = selectionTop - toolbarHeight - 20.dp
+        ).coerceIn(MiyoSpacing.medium, (screenWidth - toolbarWidth - MiyoSpacing.medium).coerceAtLeast(MiyoSpacing.medium))
+    val belowTop = selectionTop + selectionHeight + MiyoSpacing.large
+    val aboveTop = selectionTop - toolbarHeight - MiyoSpacing.large
     val anchorTop = when {
-        belowTop + toolbarHeight <= screenHeight - 20.dp -> belowTop
-        aboveTop >= 12.dp -> aboveTop
-        else -> (screenHeight - toolbarHeight - 12.dp).coerceAtLeast(12.dp)
+        belowTop + toolbarHeight <= screenHeight - MiyoSpacing.large -> belowTop
+        aboveTop >= MiyoSpacing.medium -> aboveTop
+        else -> (screenHeight - toolbarHeight - MiyoSpacing.medium).coerceAtLeast(MiyoSpacing.medium)
     }
 
     // Note Modal
@@ -135,7 +136,7 @@ fun SelectionToolbar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = MiyoSpacing.small, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ToolbarItem("Note", Icons.Outlined.Edit) { showNoteModal = true }
@@ -176,11 +177,11 @@ fun SelectionToolbar(
                 // Expanded Color Row
                 AnimatedVisibility(visible = showColorRow) {
                     Column {
-                        Divider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 6.dp))
+                        Divider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = MiyoSpacing.small))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 2.dp),
+                                .padding(horizontal = MiyoSpacing.medium, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -296,7 +297,7 @@ private fun NoteModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium)
                 .navigationBarsPadding(),
         ) {
             // Quote

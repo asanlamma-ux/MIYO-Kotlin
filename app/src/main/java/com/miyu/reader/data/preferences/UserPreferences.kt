@@ -152,6 +152,83 @@ class UserPreferences @Inject constructor(
         }
     }
 
+    val storagePermissionAutoRedirectComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_STORAGE_PERMISSION_AUTO_REDIRECT_COMPLETE] ?: false
+    }
+
+    suspend fun setStoragePermissionAutoRedirectComplete(complete: Boolean) {
+        context.dataStore.edit { it[KEY_STORAGE_PERMISSION_AUTO_REDIRECT_COMPLETE] = complete }
+    }
+
+    val downloadConcurrency: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[KEY_DOWNLOAD_CONCURRENCY] ?: DEFAULT_DOWNLOAD_CONCURRENCY).coerceIn(MIN_DOWNLOAD_CONCURRENCY, MAX_DOWNLOAD_CONCURRENCY)
+    }
+
+    suspend fun setDownloadConcurrency(value: Int) {
+        context.dataStore.edit {
+            it[KEY_DOWNLOAD_CONCURRENCY] = value.coerceIn(MIN_DOWNLOAD_CONCURRENCY, MAX_DOWNLOAD_CONCURRENCY)
+        }
+    }
+
+    val libraryCategories: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LIBRARY_CATEGORIES].orEmpty()
+    }
+
+    suspend fun setLibraryCategories(categories: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_LIBRARY_CATEGORIES] = categories
+                .mapNotNull { name -> name.trim().takeIf(String::isNotBlank) }
+                .toSet()
+        }
+    }
+
+    val sourcePinnedIds: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SOURCE_PINNED_IDS].orEmpty()
+    }
+
+    suspend fun setSourcePinnedIds(sourceIds: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_SOURCE_PINNED_IDS] = sourceIds
+                .mapNotNull { sourceId -> sourceId.trim().takeIf(String::isNotBlank) }
+                .toSet()
+        }
+    }
+
+    val sourceLanguageFilter: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SOURCE_LANGUAGE_FILTER].orEmpty()
+    }
+
+    suspend fun setSourceLanguageFilter(languages: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_SOURCE_LANGUAGE_FILTER] = languages
+                .mapNotNull { language -> language.trim().takeIf(String::isNotBlank) }
+                .toSet()
+        }
+    }
+
+    val lastUsedSourceId: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_USED_SOURCE_ID]
+    }
+
+    suspend fun setLastUsedSourceId(sourceId: String?) {
+        context.dataStore.edit {
+            if (sourceId.isNullOrBlank()) it.remove(KEY_LAST_USED_SOURCE_ID)
+            else it[KEY_LAST_USED_SOURCE_ID] = sourceId
+        }
+    }
+
+    val sourceRepositoryUrls: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SOURCE_REPOSITORY_URLS].orEmpty()
+    }
+
+    suspend fun setSourceRepositoryUrls(urls: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_SOURCE_REPOSITORY_URLS] = urls
+                .mapNotNull { url -> url.trim().takeIf(String::isNotBlank) }
+                .toSet()
+        }
+    }
+
     companion object {
         private val THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_FONT_FAMILY = stringPreferencesKey("font_family")
@@ -185,7 +262,18 @@ class UserPreferences @Inject constructor(
         private val KEY_READER_THEME_ID = stringPreferencesKey("reader_theme_id_v2")
         private val KEY_DAILY_GOAL_MINUTES = intPreferencesKey("daily_goal_minutes")
         private val KEY_STORAGE_DIRECTORY_URI = stringPreferencesKey("storage_directory_uri")
+        private val KEY_STORAGE_PERMISSION_AUTO_REDIRECT_COMPLETE =
+            booleanPreferencesKey("storage_permission_auto_redirect_complete_v1")
         private val KEY_INITIAL_SETUP_COMPLETE = booleanPreferencesKey("initial_setup_complete_v1")
+        private val KEY_LIBRARY_CATEGORIES = stringSetPreferencesKey("library_categories")
+        private val KEY_SOURCE_PINNED_IDS = stringSetPreferencesKey("source_pinned_ids")
+        private val KEY_SOURCE_LANGUAGE_FILTER = stringSetPreferencesKey("source_language_filter")
+        private val KEY_LAST_USED_SOURCE_ID = stringPreferencesKey("last_used_source_id")
+        private val KEY_SOURCE_REPOSITORY_URLS = stringSetPreferencesKey("source_repository_urls")
+        private val KEY_DOWNLOAD_CONCURRENCY = intPreferencesKey("download_concurrency_v1")
+        const val MIN_DOWNLOAD_CONCURRENCY = 2
+        const val MAX_DOWNLOAD_CONCURRENCY = 10
+        const val DEFAULT_DOWNLOAD_CONCURRENCY = 4
 
         private val SETUP_EXISTING_KEYS = setOf<Preferences.Key<*>>(
             THEME_MODE,
@@ -198,6 +286,7 @@ class UserPreferences @Inject constructor(
             KEY_READING_FLOW_MODE,
             KEY_DAILY_GOAL_MINUTES,
             KEY_STORAGE_DIRECTORY_URI,
+            KEY_DOWNLOAD_CONCURRENCY,
         )
 
         private fun isFreshInstallPreferences(prefs: Preferences): Boolean =

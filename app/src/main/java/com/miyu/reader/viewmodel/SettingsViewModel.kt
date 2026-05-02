@@ -11,6 +11,7 @@ import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.data.repository.DictionaryRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
+import com.miyu.reader.storage.MiyoStorage
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -31,6 +32,7 @@ data class SettingsUiState(
     val bookCount: Int = 0,
     val dailyGoalMinutes: Int = 30,
     val storageDirectoryUri: String? = null,
+    val downloadConcurrency: Int = UserPreferences.DEFAULT_DOWNLOAD_CONCURRENCY,
     val libraryBytes: Long = 0L,
     val starterDictionaries: List<DownloadedDictionary> = emptyList(),
     val downloadedDictionaries: List<DownloadedDictionary> = emptyList(),
@@ -89,6 +91,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.storageDirectoryUri.collect { uri ->
                 _uiState.update { it.copy(storageDirectoryUri = uri) }
+            }
+        }
+        viewModelScope.launch {
+            preferences.downloadConcurrency.collect { concurrency ->
+                _uiState.update { it.copy(downloadConcurrency = concurrency) }
             }
         }
         viewModelScope.launch {
@@ -224,8 +231,119 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { preferences.setStorageDirectoryUri(uri) }
     }
 
+    fun setDownloadConcurrency(concurrency: Int) {
+        viewModelScope.launch { preferences.setDownloadConcurrency(concurrency) }
+    }
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { preferences.setThemeMode(mode) }
+    }
+
+    suspend fun exportSettingsSnapshot(): String = withContext(Dispatchers.Default) {
+        val state = _uiState.value
+        val typography = state.typography
+        val reading = state.readingSettings
+        JSONObject()
+            .put("schema", 1)
+            .put("exportedAt", System.currentTimeMillis())
+            .put("themeMode", state.themeMode.name)
+            .put("readerThemeId", state.readerThemeId)
+            .put("dailyGoalMinutes", state.dailyGoalMinutes)
+            .put("downloadConcurrency", state.downloadConcurrency)
+            .put(
+                "typography",
+                JSONObject()
+                    .put("fontFamily", typography.fontFamily)
+                    .put("fontSize", typography.fontSize)
+                    .put("lineHeight", typography.lineHeight)
+                    .put("letterSpacing", typography.letterSpacing)
+                    .put("paragraphSpacing", typography.paragraphSpacing)
+                    .put("textAlign", typography.textAlign.name)
+                    .put("fontWeight", typography.fontWeight.value),
+            )
+            .put(
+                "reading",
+                JSONObject()
+                    .put("pageAnimation", reading.pageAnimation.name)
+                    .put("tapZonesEnabled", reading.tapZonesEnabled)
+                    .put("tapScrollPageRatio", reading.tapScrollPageRatio)
+                    .put("tapZoneNavMode", reading.tapZoneNavMode.name)
+                    .put("volumeButtonPageTurn", reading.volumeButtonPageTurn)
+                    .put("autoScrollSpeed", reading.autoScrollSpeed)
+                    .put("immersiveMode", reading.immersiveMode)
+                    .put("brightnessOverride", reading.brightnessOverride ?: JSONObject.NULL)
+                    .put("blueLightFilter", reading.blueLightFilter)
+                    .put("reducedMotion", reading.reducedMotion)
+                    .put("keepScreenOn", reading.keepScreenOn)
+                    .put("bionicReading", reading.bionicReading)
+                    .put("autoAdvanceChapter", reading.autoAdvanceChapter)
+                    .put("sleepTimerMinutes", reading.sleepTimerMinutes)
+                    .put("readingFlowMode", reading.readingFlowMode.name)
+                    .put("marginPreset", reading.marginPreset.name)
+                    .put("contentColumnWidth", reading.contentColumnWidth ?: JSONObject.NULL)
+                    .put("readerColumnLayout", reading.readerColumnLayout.name),
+            )
+            .toString(2)
+    }
+
+    suspend fun importSettingsSnapshot(rawJson: String): String {
+        val snapshot = withContext(Dispatchers.Default) { JSONObject(rawJson) }
+        val schema = snapshot.optInt("schema", 0)
+        require(schema == 1) { "Unsupported settings snapshot schema: $schema" }
+
+        val typographyJson = snapshot.optJSONObject("typography") ?: JSONObject()
+        val readingJson = snapshot.optJSONObject("reading") ?: JSONObject()
+        val defaultTypography = TypographySettings()
+        val defaultReading = ReadingSettings()
+
+        val importedTypography = TypographySettings(
+            fontFamily = typographyJson.optString("fontFamily", defaultTypography.fontFamily),
+            fontSize = typographyJson.optDouble("fontSize", defaultTypography.fontSize.toDouble()).toFloat().coerceIn(12f, 28f),
+            lineHeight = typographyJson.optDouble("lineHeight", defaultTypography.lineHeight.toDouble()).toFloat().coerceIn(1.2f, 2.0f),
+            letterSpacing = typographyJson.optDouble("letterSpacing", defaultTypography.letterSpacing.toDouble()).toFloat(),
+            paragraphSpacing = typographyJson.optDouble("paragraphSpacing", defaultTypography.paragraphSpacing.toDouble()).toFloat(),
+            textAlign = enumOrDefault(typographyJson.optString("textAlign"), defaultTypography.textAlign),
+            fontWeight = BodyFontWeight.entries.firstOrNull {
+                it.value == typographyJson.optInt("fontWeight", defaultTypography.fontWeight.value)
+            } ?: defaultTypography.fontWeight,
+        )
+
+        val importedReading = ReadingSettings(
+            pageAnimation = enumOrDefault(readingJson.optString("pageAnimation"), defaultReading.pageAnimation),
+            tapZonesEnabled = readingJson.optBoolean("tapZonesEnabled", defaultReading.tapZonesEnabled),
+            tapScrollPageRatio = readingJson.optDouble("tapScrollPageRatio", defaultReading.tapScrollPageRatio.toDouble()).toFloat(),
+            tapZoneNavMode = enumOrDefault(readingJson.optString("tapZoneNavMode"), defaultReading.tapZoneNavMode),
+            volumeButtonPageTurn = readingJson.optBoolean("volumeButtonPageTurn", defaultReading.volumeButtonPageTurn),
+            autoScrollSpeed = readingJson.optDouble("autoScrollSpeed", defaultReading.autoScrollSpeed.toDouble()).toFloat(),
+            immersiveMode = readingJson.optBoolean("immersiveMode", defaultReading.immersiveMode),
+            brightnessOverride = if (readingJson.has("brightnessOverride") && !readingJson.isNull("brightnessOverride")) {
+                readingJson.optDouble("brightnessOverride").toFloat()
+            } else {
+                defaultReading.brightnessOverride
+            },
+            blueLightFilter = readingJson.optBoolean("blueLightFilter", defaultReading.blueLightFilter),
+            reducedMotion = readingJson.optBoolean("reducedMotion", defaultReading.reducedMotion),
+            keepScreenOn = readingJson.optBoolean("keepScreenOn", defaultReading.keepScreenOn),
+            bionicReading = readingJson.optBoolean("bionicReading", defaultReading.bionicReading),
+            autoAdvanceChapter = readingJson.optBoolean("autoAdvanceChapter", defaultReading.autoAdvanceChapter),
+            sleepTimerMinutes = readingJson.optInt("sleepTimerMinutes", defaultReading.sleepTimerMinutes).coerceIn(0, 240),
+            readingFlowMode = enumOrDefault(readingJson.optString("readingFlowMode"), defaultReading.readingFlowMode),
+            marginPreset = enumOrDefault(readingJson.optString("marginPreset"), defaultReading.marginPreset),
+            contentColumnWidth = if (readingJson.has("contentColumnWidth") && !readingJson.isNull("contentColumnWidth")) {
+                readingJson.optInt("contentColumnWidth").coerceIn(320, 960)
+            } else {
+                defaultReading.contentColumnWidth
+            },
+            readerColumnLayout = enumOrDefault(readingJson.optString("readerColumnLayout"), defaultReading.readerColumnLayout),
+        )
+
+        preferences.setThemeMode(enumOrDefault(snapshot.optString("themeMode"), ThemeMode.SYSTEM))
+        preferences.setReaderThemeId(snapshot.optString("readerThemeId", DefaultReaderThemeId))
+        preferences.setDailyGoalMinutes(snapshot.optInt("dailyGoalMinutes", 30))
+        preferences.setDownloadConcurrency(snapshot.optInt("downloadConcurrency", UserPreferences.DEFAULT_DOWNLOAD_CONCURRENCY))
+        preferences.setTypography(importedTypography)
+        preferences.setReadingSettings(importedReading)
+        return "Settings snapshot imported. Reader, typography, theme, daily goal, and download preferences were restored."
     }
 
     suspend fun clearCache() = withContext(Dispatchers.IO) {
@@ -236,10 +354,14 @@ class SettingsViewModel @Inject constructor(
 
     suspend fun rescanLibrary(): RescanSummary = withContext(Dispatchers.IO) {
         val existingBooks = bookRepository.getAllBooksOnce()
-        val booksDir = File(appContext.filesDir, "books").apply { mkdirs() }
-        val epubFiles = booksDir.listFiles { file -> file.isFile && file.extension.equals("epub", ignoreCase = true) }
-            ?.toList()
-            ?: emptyList()
+        val booksDirs = listOf(MiyoStorage.booksDir(appContext), MiyoStorage.legacyBooksDir(appContext))
+            .filter { it.exists() && it.isDirectory }
+            .distinctBy { it.absolutePath }
+        val epubFiles = booksDirs.flatMap { dir ->
+            dir.listFiles { file -> file.isFile && file.extension.equals("epub", ignoreCase = true) }
+                ?.toList()
+                ?: emptyList()
+        }.distinctBy { it.absolutePath }
 
         val existingPaths = existingBooks.associateBy { File(it.filePath).absolutePath }
         var imported = 0
@@ -293,7 +415,9 @@ class SettingsViewModel @Inject constructor(
             preferences.setReaderThemeId(DefaultReaderThemeId)
             preferences.setThemeMode(ThemeMode.SYSTEM)
             preferences.setDailyGoalMinutes(30)
+            preferences.setDownloadConcurrency(UserPreferences.DEFAULT_DOWNLOAD_CONCURRENCY)
             preferences.setInitialSetupComplete(false)
+            preferences.setStoragePermissionAutoRedirectComplete(false)
         }
     }
 
@@ -415,8 +539,7 @@ class SettingsViewModel @Inject constructor(
         }
 
         return runCatching {
-            val coverDir = File(appContext.filesDir, "covers").apply { mkdirs() }
-            val coverFile = File(coverDir, "$bookId.$extension")
+            val coverFile = MiyoStorage.safeChild(MiyoStorage.coversDir(appContext), "$bookId.$extension")
             coverFile.writeBytes(Base64.decode(base64Payload, Base64.DEFAULT))
             Uri.fromFile(coverFile).toString()
         }.getOrNull()
@@ -427,3 +550,6 @@ class SettingsViewModel @Inject constructor(
         const val MAX_DICTIONARY_PACKAGE_BYTES = 12 * 1024 * 1024
     }
 }
+
+private inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
+    enumValues<T>().firstOrNull { it.name == name } ?: default

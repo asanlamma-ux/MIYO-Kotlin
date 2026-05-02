@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoScreenHeader
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.HistoryViewModel
 import java.time.Instant
@@ -72,12 +73,12 @@ fun HistoryScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp),
+                    .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.extraSmall),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.medium, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -91,8 +92,8 @@ fun HistoryScreen(
                         onClick = viewModel::clearSelectedHistory,
                         enabled = uiState.selectedIds.isNotEmpty(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
@@ -110,11 +111,16 @@ fun HistoryScreen(
                 message = "Start reading a book and it will appear here.",
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(32.dp),
+                    .padding(MiyoSpacing.extraLarge),
             )
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(
+                    start = MiyoSpacing.large,
+                    top = MiyoSpacing.extraSmall,
+                    end = MiyoSpacing.large,
+                    bottom = 96.dp,
+                ),
             ) {
                 grouped.forEach { (label, books) ->
                     // Section header
@@ -123,7 +129,7 @@ fun HistoryScreen(
                             label,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = colors.secondaryText,
-                            modifier = Modifier.padding(vertical = 10.dp),
+                            modifier = Modifier.padding(vertical = MiyoSpacing.small),
                         )
                     }
                     items(books, key = { it.id }) { book ->
@@ -142,7 +148,7 @@ fun HistoryScreen(
                                 else viewModel.toggleSelection(book.id)
                             },
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MiyoSpacing.small))
                     }
                 }
             }
@@ -164,7 +170,7 @@ private fun HistoryItem(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onPress, onLongClick = onLongPress),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) colors.accent.copy(alpha = 0.1f) else colors.cardBackground,
         ),
@@ -174,7 +180,7 @@ private fun HistoryItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(MiyoSpacing.medium),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Selection indicator
@@ -185,7 +191,7 @@ private fun HistoryItem(
                     tint = if (isSelected) colors.accent else colors.secondaryText.copy(alpha = 0.4f),
                     modifier = Modifier
                         .size(20.dp)
-                        .padding(end = 4.dp),
+                        .padding(end = MiyoSpacing.extraSmall),
                 )
             }
 
@@ -200,7 +206,7 @@ private fun HistoryItem(
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(MiyoSpacing.medium))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -212,7 +218,7 @@ private fun HistoryItem(
                 )
                 Text(book.author, style = MaterialTheme.typography.bodySmall, color = colors.secondaryText)
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(MiyoSpacing.small))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LinearProgressIndicator(
                         progress = { book.progress / 100f },
@@ -223,7 +229,7 @@ private fun HistoryItem(
                         color = colors.accent,
                         trackColor = colors.secondaryText.copy(alpha = 0.15f),
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(MiyoSpacing.small))
                     Text("${book.progress.toInt()}%", style = MaterialTheme.typography.labelSmall, color = colors.secondaryText)
 
                     Spacer(Modifier.weight(1f))

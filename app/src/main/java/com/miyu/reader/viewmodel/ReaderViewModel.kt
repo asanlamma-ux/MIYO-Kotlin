@@ -214,16 +214,34 @@ class ReaderViewModel @Inject constructor(
 
     fun navigateChapter(delta: Int) {
         val state = _uiState.value
+        navigateToChapter(
+            index = state.chapterIndex + delta,
+            restorePercent = 0f,
+            forceReload = false,
+        )
+    }
+
+    fun navigateChapterFromEdge(delta: Int, activeChapterIndex: Int) {
+        navigateToChapter(
+            index = activeChapterIndex + delta,
+            restorePercent = if (delta < 0) 1f else 0f,
+            forceReload = activeChapterIndex != _uiState.value.chapterIndex,
+        )
+    }
+
+    private fun navigateToChapter(index: Int, restorePercent: Float, forceReload: Boolean) {
+        val state = _uiState.value
         val book = state.book ?: return
-        val newIndex = (state.chapterIndex + delta).coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
-        if (newIndex != state.chapterIndex) {
+        val newIndex = index.coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
+        if (forceReload || newIndex != state.chapterIndex) {
             navigationTargetChapterIndex = newIndex
             ignoreProgressUntil = System.currentTimeMillis() + 1_600L
-            loadChapter(newIndex, book.filePath, 0f)
-            savePosition(newIndex, 0f)
+            val safeRestorePercent = restorePercent.coerceIn(0f, 1f)
+            loadChapter(newIndex, book.filePath, safeRestorePercent)
+            savePosition(newIndex, safeRestorePercent)
             _uiState.update {
                 it.copy(
-                    chapterScrollPercent = 0f,
+                    chapterScrollPercent = safeRestorePercent,
                     selection = null,
                     showControls = false,
                     pendingChapterAppend = null,

@@ -11,8 +11,15 @@ import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSearchResult
 import com.miyu.reader.domain.model.OnlineNovelSummary
 import com.miyu.reader.security.ReaderHtmlSanitizer
+import com.miyu.reader.storage.MiyoStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.jsoup.Connection
 import org.jsoup.Jsoup
@@ -26,6 +33,7 @@ import java.net.URL
 import java.time.Instant
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -36,6 +44,8 @@ import javax.inject.Singleton
 class OnlineNovelRepository @Inject constructor(
     @ApplicationContext private val appContext: Context,
 ) {
+    private val routeCookies = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>()
+
     val providers: List<OnlineNovelProvider> = listOf(
         OnlineNovelProvider(
             id = OnlineNovelProviderId.WTR_LAB,
@@ -122,6 +132,7 @@ class OnlineNovelRepository @Inject constructor(
         novel: OnlineNovelDetails,
         startChapter: Int,
         endChapter: Int,
+        concurrency: Int,
     ): GeneratedOnlineNovelEpub = withContext(Dispatchers.IO) {
         val provider = provider(novel.providerId)
         val chapters = novel.chapters.filter { it.order in startChapter..endChapter }
@@ -129,14 +140,39 @@ class OnlineNovelRepository @Inject constructor(
         if (chapters.size > MAX_DOWNLOAD_CHAPTERS) {
             error("Limit downloads to $MAX_DOWNLOAD_CHAPTERS chapters at a time.")
         }
+        val boundedConcurrency = concurrency.coerceIn(MIN_DOWNLOAD_CONCURRENCY, MAX_DOWNLOAD_CONCURRENCY)
+        val semaphore = Semaphore(boundedConcurrency)
 
-        val payloads = chapters.map { chapter ->
-            if (novel.providerId in siteProviders) {
-                fetchSiteChapter(provider, novel, chapter)
-            } else {
-                fetchGenericChapter(provider, novel, chapter)
+        val chapterResults = coroutineScope {
+            chapters.map { chapter ->
+                async {
+                    semaphore.withPermit {
+                        try {
+                            Result.success(fetchChapterWithRetry(provider, novel, chapter))
+                        } catch (error: Exception) {
+                            Result.failure(error)
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        val failures = chapterResults.mapIndexedNotNull { index, result ->
+            result.exceptionOrNull()?.let { error ->
+                val chapter = chapters[index]
+                "Chapter ${chapter.order}: ${error.message ?: error::class.java.simpleName}"
             }
-        }.sortedBy { it.order }
+        }
+        if (failures.isNotEmpty()) {
+            error(
+                buildString {
+                    append("Download failed for ${failures.size}/${chapters.size} chapters. No EPUB was written.")
+                    append("\n")
+                    append(failures.take(6).joinToString("\n"))
+                },
+            )
+        }
+
+        val payloads = chapterResults.map { it.getOrThrow() }.sortedBy { it.order }
 
         createGeneratedEpub(novel, payloads)
     }
@@ -451,41 +487,79 @@ class OnlineNovelRepository @Inject constructor(
         )
     }
 
+    private suspend fun fetchChapterWithRetry(
+        provider: OnlineNovelProvider,
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent {
+        var lastError: Exception? = null
+        repeat(PROVIDER_RETRY_ATTEMPTS) { attempt ->
+            try {
+                return if (novel.providerId in siteProviders) {
+                    fetchSiteChapter(provider, novel, chapter)
+                } else {
+                    fetchGenericChapter(provider, novel, chapter)
+                }
+            } catch (error: Exception) {
+                lastError = error
+                if (attempt < PROVIDER_RETRY_ATTEMPTS - 1) {
+                    delay(PROVIDER_RETRY_BASE_DELAY_MS * (attempt + 1L))
+                }
+            }
+        }
+        throw IllegalStateException(lastError?.message ?: "Could not fetch ${chapter.title}.", lastError)
+    }
+
     private fun buildRemoteNovelEpub(
         novel: OnlineNovelDetails,
         chapters: List<OnlineChapterContent>,
     ): File {
-        val generatedDir = File(appContext.cacheDir, "generated-epub").canonicalFile.apply { mkdirs() }
-        val fileName = "${slugify(novel.title, "${novel.providerId.name.lowercase()}-${novel.rawId}")}.epub"
-        val file = File(generatedDir, fileName).canonicalFile
-        if (!file.path.startsWith(generatedDir.path + File.separator)) {
-            error("Invalid generated EPUB destination.")
-        }
+        val generatedDir = MiyoStorage.onlineEpubDir(appContext)
+        val baseName = slugify(novel.title, "${novel.providerId.name.lowercase()}-${novel.rawId}")
+        val fileName = "$baseName-${Instant.now().toEpochMilli()}.epub"
+        val file = MiyoStorage.safeChild(generatedDir, fileName)
+        val tempFile = MiyoStorage.safeChild(generatedDir, "$fileName.${UUID.randomUUID()}.tmp")
 
-        ZipOutputStream(file.outputStream().buffered()).use { zip ->
-            zip.putStoredText("mimetype", "application/epub+zip")
-            zip.putText(
-                "META-INF/container.xml",
-                """<?xml version="1.0" encoding="utf-8"?>
+        try {
+            ZipOutputStream(tempFile.outputStream().buffered()).use { zip ->
+                zip.putStoredText("mimetype", "application/epub+zip")
+                zip.putText(
+                    "META-INF/container.xml",
+                    """<?xml version="1.0" encoding="utf-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
     <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
   </rootfiles>
 </container>"""
-            )
-            val cover = fetchCoverBinary(novel.coverUrl)
-            if (cover != null) {
-                zip.putBytes("OEBPS/images/cover.${cover.extension}", cover.bytes)
-                zip.putText("OEBPS/cover.xhtml", buildCoverPage(novel, cover))
+                )
+                val cover = fetchCoverBinary(novel.coverUrl)
+                if (cover != null) {
+                    zip.putBytes("OEBPS/images/cover.${cover.extension}", cover.bytes)
+                    zip.putText("OEBPS/cover.xhtml", buildCoverPage(novel, cover))
+                }
+                chapters.forEachIndexed { index, chapter ->
+                    zip.putText("OEBPS/chapter-${index + 1}.xhtml", wrapChapterHtml(chapter.title, chapter.html))
+                }
+                zip.putText("OEBPS/nav.xhtml", buildNav(chapters))
+                zip.putText("OEBPS/toc.ncx", buildNcx(novel, chapters))
+                zip.putText("OEBPS/content.opf", buildOpf(novel, chapters, cover))
             }
-            chapters.forEachIndexed { index, chapter ->
-                zip.putText("OEBPS/chapter-${index + 1}.xhtml", wrapChapterHtml(chapter.title, chapter.html))
+            if (tempFile.length() <= 0L) error("Generated EPUB is empty.")
+            if (!tempFile.renameTo(file)) {
+                try {
+                    tempFile.copyTo(file, overwrite = true)
+                } catch (copyError: Throwable) {
+                    file.delete()
+                    throw copyError
+                } finally {
+                    tempFile.delete()
+                }
             }
-            zip.putText("OEBPS/nav.xhtml", buildNav(chapters))
-            zip.putText("OEBPS/toc.ncx", buildNcx(novel, chapters))
-            zip.putText("OEBPS/content.opf", buildOpf(novel, chapters, cover))
+            return file
+        } catch (error: Throwable) {
+            tempFile.delete()
+            throw error
         }
-        return file
     }
 
     private fun fetchCoverBinary(coverUrl: String?): CoverBinary? {
@@ -528,6 +602,8 @@ class OnlineNovelRepository @Inject constructor(
         form: Map<String, String> = emptyMap(),
     ): Document {
         val safeUrl = validatePublicHttpsUrl(url)
+        val host = URI(safeUrl).host.orEmpty()
+        val cookies = routeCookies.getOrPut(host) { ConcurrentHashMap() }
         val request = Jsoup.connect(safeUrl)
             .method(method)
             .timeout(PROVIDER_TIMEOUT_MS)
@@ -536,8 +612,11 @@ class OnlineNovelRepository @Inject constructor(
             .ignoreHttpErrors(false)
             .userAgent(USER_AGENT)
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .cookies(cookies)
         form.forEach { (key, value) -> request.data(key, value) }
-        return request.execute().parse()
+        val response = request.execute()
+        cookies.putAll(response.cookies())
+        return response.parse()
     }
 
     private fun absoluteUrl(provider: OnlineNovelProvider, value: String): String =
@@ -831,7 +910,12 @@ $navPoints
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
             .take(72)
-            .ifBlank { fallback }
+            .ifBlank {
+                fallback.lowercase(Locale.ROOT)
+                    .replace(Regex("[^a-z0-9]+"), "-")
+                    .trim('-')
+                    .take(72)
+            }
             .ifBlank { "remote-${UUID.randomUUID()}" }
 
     private data class SelectorSet(
@@ -856,6 +940,10 @@ $navPoints
         const val MAX_HTML_BYTES = 4 * 1024 * 1024
         const val MAX_COVER_BYTES = 6 * 1024 * 1024
         const val MAX_DOWNLOAD_CHAPTERS = 250
+        const val MIN_DOWNLOAD_CONCURRENCY = 2
+        const val MAX_DOWNLOAD_CONCURRENCY = 10
+        const val PROVIDER_RETRY_ATTEMPTS = 3
+        const val PROVIDER_RETRY_BASE_DELAY_MS = 450L
 
         val siteProviders = setOf(
             OnlineNovelProviderId.FANMTL,

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.miyu.reader.R
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
@@ -76,13 +77,13 @@ fun ThemePickerBottomSheet(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 18.dp)
-                .padding(bottom = 28.dp),
+                .padding(horizontal = MiyoSpacing.large)
+                .padding(bottom = MiyoSpacing.extraLarge),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 14.dp),
+                    .padding(top = MiyoSpacing.extraSmall, bottom = MiyoSpacing.medium),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
@@ -98,7 +99,7 @@ fun ThemePickerBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(MiyoSpacing.medium))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "Reader Theme",
@@ -118,7 +119,7 @@ fun ThemePickerBottomSheet(
 
             ActiveThemeCard(theme = activeTheme)
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(MiyoSpacing.large))
 
             ThemeSection(
                 title = "Normal",
@@ -128,7 +129,7 @@ fun ThemePickerBottomSheet(
                 onThemeSelected = onThemeSelected,
             )
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(MiyoSpacing.large))
 
             ThemeSection(
                 title = "Special",
@@ -138,7 +139,7 @@ fun ThemePickerBottomSheet(
                 onThemeSelected = onThemeSelected,
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(MiyoSpacing.medium))
 
             TextButton(onClick = { onThemeSelected(DefaultReaderThemeId) }) {
                 Icon(Icons.Outlined.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -154,14 +155,14 @@ private fun ActiveThemeCard(theme: ReaderThemeColors) {
     val shellColors = LocalMIYUColors.current
     Surface(
         color = shellColors.cardBackground,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(MiyoSpacing.extraLarge),
         tonalElevation = 0.dp,
         shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ThemeMiniPreview(theme, modifier = Modifier.size(width = 94.dp, height = 118.dp))
@@ -174,13 +175,13 @@ private fun ActiveThemeCard(theme: ReaderThemeColors) {
                     ),
                     color = theme.accent,
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(MiyoSpacing.small))
                 Text(
                     theme.name,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = shellColors.onBackground,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
                 Text(
                     when {
                         theme.isSpecial -> "Special art pack"
@@ -190,8 +191,8 @@ private fun ActiveThemeCard(theme: ReaderThemeColors) {
                     style = MaterialTheme.typography.bodySmall,
                     color = shellColors.secondaryText,
                 )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Spacer(Modifier.height(MiyoSpacing.small))
+                Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
                     listOf(theme.background, theme.text, theme.accent).forEach { color ->
                         Box(
                             modifier = Modifier
@@ -224,18 +225,18 @@ private fun ThemeSection(
         ),
         color = shellColors.secondaryText,
     )
-    Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(MiyoSpacing.extraSmall))
     Text(
         subtitle,
         style = MaterialTheme.typography.bodySmall,
         color = shellColors.secondaryText,
     )
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(MiyoSpacing.small))
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
     ) {
         themes.forEach { theme ->
             ThemeCard(

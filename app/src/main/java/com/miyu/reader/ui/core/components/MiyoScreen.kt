@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 
 @Composable
@@ -51,7 +52,7 @@ fun MiyoScreenHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top,
     ) {
@@ -72,7 +73,7 @@ fun MiyoScreenHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
                 count?.let {
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(MiyoSpacing.small))
                     Surface(
                         shape = CircleShape,
                         color = colors.cardBackground.copy(alpha = 0.88f),
@@ -80,7 +81,7 @@ fun MiyoScreenHeader(
                     ) {
                         Text(
                             text = it.toString(),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = MiyoSpacing.small),
                             color = colors.secondaryText,
                             fontWeight = FontWeight.Black,
                         )
@@ -88,7 +89,7 @@ fun MiyoScreenHeader(
                 }
             }
             subtitle?.let {
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodyMedium,
@@ -130,7 +131,7 @@ fun MiyoEmptyScreen(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 28.dp),
+            .padding(horizontal = MiyoSpacing.large),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -148,14 +149,14 @@ fun MiyoEmptyScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(MiyoSpacing.large))
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
                 color = colors.onBackground,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MiyoSpacing.small))
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
@@ -163,12 +164,12 @@ fun MiyoEmptyScreen(
                 textAlign = TextAlign.Center,
             )
             if (actionLabel != null && onAction != null) {
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(MiyoSpacing.large))
                 Button(
                     onClick = onAction,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
                     shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(horizontal = MiyoSpacing.large, vertical = 12.dp),
                 ) {
                     Text(actionLabel, fontWeight = FontWeight.Bold)
                 }
@@ -191,7 +192,7 @@ fun MiyoWorkspaceSurface(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
             content = content,
         )
     }
@@ -205,8 +206,8 @@ fun MiyoWorkspaceExitButton(
     val colors = LocalMIYUColors.current
     TextButton(
         onClick = onClick,
-        modifier = Modifier.padding(bottom = 8.dp),
-        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+        modifier = Modifier.padding(bottom = MiyoSpacing.small),
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = MiyoSpacing.small),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,

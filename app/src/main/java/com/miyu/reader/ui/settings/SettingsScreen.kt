@@ -1,8 +1,6 @@
 package com.miyu.reader.ui.settings
 
 import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -21,24 +19,33 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
 import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.domain.model.DownloadedDictionary
+import com.miyu.reader.permissions.MiyoPermissions
+import com.miyu.reader.storage.MiyoStorage
+import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.core.components.settings.MiyoExpandableChoiceSetting as ExpandableChoiceSetting
 import com.miyu.reader.ui.core.components.settings.MiyoSectionLabel as SectionLabel
 import com.miyu.reader.ui.core.components.settings.MiyoSettingsItem as SettingsRow
 import com.miyu.reader.ui.core.components.settings.MiyoSettingsSection as SettingsSection
 import com.miyu.reader.ui.core.components.settings.MiyoSettingsSwitch as SettingsToggle
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.library.LibraryWorkspaceSurface
 import com.miyu.reader.ui.library.WorkspaceExitButton
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.viewmodel.SettingsViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class SettingsDialogState(
     val title: String,
@@ -50,6 +57,7 @@ private data class SettingsDialogState(
 fun SettingsScreen(
     onOpenThemePicker: () -> Unit = {},
     onOpenAdvancedSettings: () -> Unit = {},
+    onOpenReaderSettings: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -76,76 +84,19 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 164.dp),
     ) {
-        Text(
-            "Settings",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            color = colors.onBackground,
+        MiyoScreenHeader(
+            title = "Settings",
+            eyebrow = "Normal configuration",
+            subtitle = "Koodo-style categories for common controls. Deeper maintenance and reader behavior live in their own workspaces.",
         )
 
-        SettingsSection(title = "Account") {
-            SettingsRow(
-                icon = Icons.Outlined.Login,
-                title = "Sign In / Sign Up",
-                subtitle = "Uses Supabase when MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY are configured.",
-                onClick = {
-                    dialogState = SettingsDialogState(
-                        title = "Supabase Configuration",
-                        message = "Set MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY as Gradle properties or environment variables before building.",
-                    )
-                },
-                accentColor = colors.accent,
-            )
-        }
-
-        SettingsSection(title = "Daily Goal") {
-            Text(
-                "Minutes to aim for each day. Progress targets persist on-device.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.secondaryText,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-            )
-            FlowRow(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                listOf(15, 30, 45, 60, 90, 120).forEach { minutes ->
-                    val selected = uiState.dailyGoalMinutes == minutes
-                    OutlinedButton(
-                        onClick = { viewModel.setDailyGoalMinutes(minutes) },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = if (selected) {
-                            ButtonDefaults.outlinedButtonColors(
-                                containerColor = colors.accent,
-                                contentColor = Color.White,
-                            )
-                        } else {
-                            ButtonDefaults.outlinedButtonColors()
-                        },
-                        modifier = Modifier.width(92.dp),
-                    ) {
-                        Text(
-                            "$minutes min",
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-        }
-
-        SettingsSection(title = "Appearance") {
+        SettingsSection(title = "Quick Setup") {
             ExpandableChoiceSetting(
                 expanded = expandedSettingKey == "theme_mode",
                 onExpandedChange = { expandedSettingKey = if (it) "theme_mode" else null },
                 icon = Icons.Outlined.DarkMode,
                 title = "App Theme",
-                subtitle = when (uiState.themeMode) {
-                    ThemeMode.SYSTEM -> "Follow OS"
-                    ThemeMode.LIGHT -> "Light mode"
-                    ThemeMode.DARK -> "Dark mode"
-                },
+                subtitle = "Controls the shell palette. Reader themes stay selectable from the palette picker.",
                 accentColor = colors.accent,
                 currentValue = when (uiState.themeMode) {
                     ThemeMode.SYSTEM -> "Follow OS"
@@ -166,7 +117,7 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Palette,
                 title = "Reader Theme",
-                subtitle = "Choose the active reading palette from the RN-style picker.",
+                subtitle = "Choose special RN-style palettes and apply them immediately.",
                 onClick = onOpenThemePicker,
                 accentColor = colors.accent,
                 trailing = {
@@ -176,75 +127,89 @@ fun SettingsScreen(
                     )
                 },
             )
-            SettingsRow(
-                icon = Icons.Outlined.Tune,
-                title = "Advanced Settings",
-                subtitle = "Reader behavior, storage, maintenance, and deeper app controls.",
-                onClick = onOpenAdvancedSettings,
-                accentColor = colors.accent,
-            )
-        }
-
-        SettingsSection(title = "Typography") {
-            SettingsRow(
-                icon = Icons.Outlined.TextFields,
-                title = "Font Size",
-                subtitle = "${uiState.typography.fontSize.toInt()}px",
-                accentColor = colors.accent,
-            )
-            Slider(
-                value = uiState.typography.fontSize,
-                onValueChange = viewModel::setFontSize,
-                valueRange = 12f..28f,
-                steps = 15,
-                modifier = Modifier.padding(horizontal = 20.dp),
-                colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
-            )
-            SettingsRow(
-                icon = Icons.Outlined.Sort,
-                title = "Line Height",
-                subtitle = "%.1f".format(uiState.typography.lineHeight),
-                accentColor = colors.accent,
-            )
-            Slider(
-                value = uiState.typography.lineHeight,
-                onValueChange = viewModel::setLineHeight,
-                valueRange = 1.2f..2.0f,
-                steps = 7,
-                modifier = Modifier.padding(horizontal = 20.dp),
-                colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
-            )
             ExpandableChoiceSetting(
-                expanded = expandedSettingKey == "text_align",
-                onExpandedChange = { expandedSettingKey = if (it) "text_align" else null },
-                icon = Icons.Outlined.FormatAlignLeft,
-                title = "Text Alignment",
-                subtitle = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
+                expanded = expandedSettingKey == "daily_goal",
+                onExpandedChange = { expandedSettingKey = if (it) "daily_goal" else null },
+                icon = Icons.Outlined.TrackChanges,
+                title = "Daily Reading Goal",
+                subtitle = "Home tab progress target for reading time.",
                 accentColor = colors.accent,
-                currentValue = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
-                choices = TextAlign.entries,
-                choiceLabel = { align -> align.name.lowercase().replaceFirstChar { it.uppercase() } },
-                selectedChoice = uiState.typography.textAlign,
-                onChoiceSelected = viewModel::setTextAlign,
+                currentValue = "${uiState.dailyGoalMinutes} min",
+                choices = listOf(15, 30, 45, 60, 90, 120),
+                choiceLabel = { "$it min" },
+                selectedChoice = uiState.dailyGoalMinutes,
+                onChoiceSelected = viewModel::setDailyGoalMinutes,
             )
         }
 
-        SettingsSection(title = "Advanced") {
+        SettingsSection(title = "Configuration") {
             SettingsRow(
-                icon = Icons.Outlined.Tune,
-                title = "Advanced Settings",
-                subtitle = "Reader behavior, storage, maintenance, and deeper controls live on a dedicated screen.",
+                icon = Icons.Outlined.MenuBook,
+                title = "Reader Settings",
+                subtitle = "Typography, page animation, tap zones, margins, and chapter flow.",
+                onClick = onOpenReaderSettings,
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Folder,
+                title = "Library & Storage",
+                subtitle = "Watched folder, app-data directory, cache, rescan, and duplicate audit.",
                 onClick = onOpenAdvancedSettings,
                 accentColor = colors.accent,
+                trailing = {
+                    Text(
+                        formatStorageBytes(uiState.libraryBytes),
+                        color = colors.secondaryText,
+                    )
+                },
             )
-        }
-
-        SettingsSection(title = "Language Tools") {
+            SettingsRow(
+                icon = Icons.Outlined.CloudDownload,
+                title = "Downloads & Sources",
+                subtitle = "Provider routing, background notifications, and chapter concurrency.",
+                onClick = onOpenAdvancedSettings,
+                accentColor = colors.accent,
+                trailing = {
+                    Text(
+                        "${uiState.downloadConcurrency} workers",
+                        color = colors.secondaryText,
+                    )
+                },
+            )
             SettingsRow(
                 icon = Icons.Outlined.MenuBook,
                 title = "Dictionary Library",
                 subtitle = "${uiState.downloadedDictionaries.size} installed · offline lookup packs and imports",
                 onClick = { showDictionaryLibrary = true },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Tune,
+                title = "Advanced Settings",
+                subtitle = "Permissions, backups, maintenance, source internals, and developer-level tools.",
+                onClick = onOpenAdvancedSettings,
+                accentColor = colors.accent,
+            )
+        }
+
+        SettingsSection(title = "Account & Sync") {
+            SettingsRow(
+                icon = Icons.Outlined.Login,
+                title = "Sign In / Sign Up",
+                subtitle = "Supabase-backed sync is available when project keys are supplied at build time.",
+                onClick = {
+                    dialogState = SettingsDialogState(
+                        title = "Supabase Configuration",
+                        message = "Set MIYU_SUPABASE_URL and MIYU_SUPABASE_ANON_KEY as Gradle properties or environment variables before building.",
+                    )
+                },
+                accentColor = colors.accent,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.Sync,
+                title = "Sync & Backup",
+                subtitle = "Export/import settings snapshots locally. Cloud sync remains opt-in.",
+                onClick = onOpenAdvancedSettings,
                 accentColor = colors.accent,
             )
         }
@@ -253,7 +218,7 @@ fun SettingsScreen(
             SettingsRow(
                 icon = Icons.Outlined.Info,
                 title = "MIYU Reader",
-                subtitle = "Version 1.0.0",
+                subtitle = "Version 1.0.0 · ${uiState.bookCount} book(s) tracked",
                 accentColor = colors.accent,
             )
         }
@@ -313,13 +278,44 @@ fun SettingsScreen(
 fun AdvancedSettingsScreen(
     onBack: () -> Unit,
     onOpenReaderSettings: () -> Unit,
+    onOpenTerms: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
     val context = LocalContext.current
+    val appDataPath = remember(context) {
+        MiyoStorage.rootDir(context).absolutePath.substringAfter("/Android/data/")
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var dialogState by remember { mutableStateOf<SettingsDialogState?>(null) }
+    var expandedSettingKey by remember { mutableStateOf<String?>(null) }
+    var permissionSnapshot by remember { mutableStateOf(MiyoPermissions.snapshot(context)) }
+    val runtimePermissionRequester = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        permissionSnapshot = MiyoPermissions.snapshot(context)
+        MiyoPermissions.openStoragePermissionSettings(context)
+    }
+    val requestRuntimeThenOpenStorage = {
+        val permissions = MiyoPermissions.runtimePermissionsToRequest(context)
+        if (permissions.isNotEmpty()) {
+            runtimePermissionRequester.launch(permissions)
+        } else {
+            MiyoPermissions.openStoragePermissionSettings(context)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner.lifecycle) {
+        val observer = object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                permissionSnapshot = MiyoPermissions.snapshot(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val storagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -334,6 +330,38 @@ fun AdvancedSettingsScreen(
             title = "Storage Updated",
             message = "New watched folder: ${storageLabel(uri.toString())}",
         )
+    }
+    var pendingSettingsSnapshot by remember { mutableStateOf<String?>(null) }
+    val settingsExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        val payload = pendingSettingsSnapshot
+        pendingSettingsSnapshot = null
+        if (uri == null || payload == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val message = runCatching {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                        writer.write(payload)
+                    } ?: error("Could not open the selected export file.")
+                }
+                "Settings snapshot was exported."
+            }.getOrElse { it.message ?: "Settings export failed." }
+            dialogState = SettingsDialogState("Settings Snapshot", message)
+        }
+    }
+    val settingsImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val message = runCatching {
+                val rawJson = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                        ?: error("Could not open the selected settings file.")
+                }
+                viewModel.importSettingsSnapshot(rawJson)
+            }.getOrElse { it.message ?: "Settings import failed." }
+            dialogState = SettingsDialogState("Settings Snapshot", message)
+        }
     }
 
     LibraryWorkspaceSurface {
@@ -365,7 +393,153 @@ fun AdvancedSettingsScreen(
                 )
             }
 
+            SettingsSection(title = "Language Tools") {
+                SettingsRow(
+                    icon = Icons.Outlined.Translate,
+                    title = "Term Groups",
+                    subtitle = "Manage MTL correction groups and reader replacement dictionaries.",
+                    onClick = onOpenTerms,
+                    accentColor = colors.accent,
+                )
+            }
+
+            SettingsSection(title = "Permissions") {
+                SettingsRow(
+                    icon = Icons.Outlined.Folder,
+                    title = "Storage Permission",
+                    subtitle = "Open Android's all-files toggle for watched folders and EPUB exports.",
+                    onClick = requestRuntimeThenOpenStorage,
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(
+                            if (permissionSnapshot.storageReady) "Granted" else "Missing",
+                            color = if (permissionSnapshot.storageReady) colors.accent else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Image,
+                    title = "Media Cover Access",
+                    subtitle = "Request Android media access for external book covers on Android 13+.",
+                    onClick = {
+                        val permissions = MiyoPermissions.runtimePermissionsToRequest(context)
+                        if (permissions.isNotEmpty()) runtimePermissionRequester.launch(permissions)
+                        else permissionSnapshot = MiyoPermissions.snapshot(context)
+                    },
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(
+                            if (permissionSnapshot.mediaImagesGranted) "Granted" else "Missing",
+                            color = if (permissionSnapshot.mediaImagesGranted) colors.accent else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Notifications,
+                    title = "Download Notifications",
+                    subtitle = "Allow progress and failure notifications for background downloads.",
+                    onClick = {
+                        val permissions = MiyoPermissions.runtimePermissionsToRequest(context)
+                        if (permissions.isNotEmpty()) runtimePermissionRequester.launch(permissions)
+                        else permissionSnapshot = MiyoPermissions.snapshot(context)
+                    },
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(
+                            if (permissionSnapshot.notificationGranted) "Granted" else "Missing",
+                            color = if (permissionSnapshot.notificationGranted) colors.accent else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Info,
+                    title = "Background Downloads",
+                    subtitle = "Open Android's battery optimization control so downloads can continue outside Miyo.",
+                    onClick = {
+                        MiyoPermissions.openBatteryOptimizationSettings(context)
+                        permissionSnapshot = MiyoPermissions.snapshot(context)
+                    },
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(
+                            if (permissionSnapshot.batteryOptimizationIgnored) "Allowed" else "Limited",
+                            color = if (permissionSnapshot.batteryOptimizationIgnored) colors.accent else colors.secondaryText,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                )
+            }
+
+            SettingsSection(title = "Downloads") {
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "download_concurrency",
+                    onExpandedChange = { expandedSettingKey = if (it) "download_concurrency" else null },
+                    icon = Icons.Outlined.CloudDownload,
+                    title = "Download Concurrency",
+                    subtitle = "Parallel chapter requests. Higher values are faster but harder on unstable sites.",
+                    accentColor = colors.accent,
+                    currentValue = "${uiState.downloadConcurrency} workers",
+                    choices = (2..10).toList(),
+                    choiceLabel = { "$it" },
+                    selectedChoice = uiState.downloadConcurrency,
+                    onChoiceSelected = viewModel::setDownloadConcurrency,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Public,
+                    title = "Recommendation Routing",
+                    subtitle = "Browse ranks pinned, last-used, direct HTTP, and language-matching sources first.",
+                    accentColor = colors.accent,
+                )
+            }
+
+            SettingsSection(title = "Data & Backup") {
+                SettingsRow(
+                    icon = Icons.Outlined.FileUpload,
+                    title = "Export Settings Snapshot",
+                    subtitle = "Save a Koodo-style JSON snapshot of reader, typography, theme, and download settings.",
+                    onClick = {
+                        scope.launch {
+                            val snapshot = runCatching { viewModel.exportSettingsSnapshot() }
+                                .getOrElse {
+                                    dialogState = SettingsDialogState(
+                                        "Settings Snapshot",
+                                        it.message ?: "Settings export failed.",
+                                    )
+                                    return@launch
+                                }
+                            pendingSettingsSnapshot = snapshot
+                            settingsExportLauncher.launch("miyo-settings.json")
+                        }
+                    },
+                    accentColor = colors.accent,
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.FileDownload,
+                    title = "Import Settings Snapshot",
+                    subtitle = "Restore a previously exported MIYO settings JSON snapshot.",
+                    onClick = { settingsImportLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
+                    accentColor = colors.accent,
+                )
+            }
+
             SettingsSection(title = "Storage") {
+                SettingsRow(
+                    icon = Icons.Outlined.Folder,
+                    title = "App Data Directory",
+                    subtitle = "Imports and downloaded novels are stored in Miyo's Android app-data folder.",
+                    accentColor = colors.accent,
+                    trailing = {
+                        Text(
+                            appDataPath,
+                            color = colors.secondaryText,
+                            modifier = Modifier.widthIn(max = 180.dp),
+                            maxLines = 2,
+                        )
+                    },
+                )
                 SettingsRow(
                     icon = Icons.Outlined.Folder,
                     title = "Storage Location",
@@ -444,14 +618,7 @@ fun AdvancedSettingsScreen(
                     icon = Icons.Outlined.OpenInNew,
                     title = "Open App Settings",
                     subtitle = "Open Android permission and storage settings for Miyo.",
-                    onClick = {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null),
-                            ),
-                        )
-                    },
+                    onClick = { MiyoPermissions.openAppSettings(context) },
                     accentColor = colors.accent,
                 )
                 SettingsRow(
@@ -515,6 +682,50 @@ fun ReaderSettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
+            SettingsSection(title = "Typography") {
+                SettingsRow(
+                    icon = Icons.Outlined.TextFields,
+                    title = "Font Size",
+                    subtitle = "${uiState.typography.fontSize.toInt()}px",
+                    accentColor = colors.accent,
+                )
+                Slider(
+                    value = uiState.typography.fontSize,
+                    onValueChange = viewModel::setFontSize,
+                    valueRange = 12f..28f,
+                    steps = 15,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
+                )
+                SettingsRow(
+                    icon = Icons.Outlined.Sort,
+                    title = "Line Height",
+                    subtitle = "%.1f".format(uiState.typography.lineHeight),
+                    accentColor = colors.accent,
+                )
+                Slider(
+                    value = uiState.typography.lineHeight,
+                    onValueChange = viewModel::setLineHeight,
+                    valueRange = 1.2f..2.0f,
+                    steps = 7,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    colors = SliderDefaults.colors(thumbColor = colors.accent, activeTrackColor = colors.accent),
+                )
+                ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "text_align",
+                    onExpandedChange = { expandedSettingKey = if (it) "text_align" else null },
+                    icon = Icons.Outlined.FormatAlignLeft,
+                    title = "Text Alignment",
+                    subtitle = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
+                    accentColor = colors.accent,
+                    currentValue = uiState.typography.textAlign.name.lowercase().replaceFirstChar { it.uppercase() },
+                    choices = TextAlign.entries,
+                    choiceLabel = { align -> align.name.lowercase().replaceFirstChar { it.uppercase() } },
+                    selectedChoice = uiState.typography.textAlign,
+                    onChoiceSelected = viewModel::setTextAlign,
+                )
+            }
+
             SettingsSection(title = "Flow") {
                 ExpandableChoiceSetting(
                     expanded = expandedSettingKey == "page_animation",
@@ -563,7 +774,7 @@ fun ReaderSettingsScreen(
                     onExpandedChange = { expandedSettingKey = if (it) "sleep_timer" else null },
                     icon = Icons.Outlined.Info,
                     title = "Sleep Timer",
-                    subtitle = "Automatically close the session after the selected duration.",
+                    subtitle = "Show a reader timeout dialog after the selected duration.",
                     accentColor = colors.accent,
                     currentValue = if (uiState.readingSettings.sleepTimerMinutes == 0) "Off" else "${uiState.readingSettings.sleepTimerMinutes} minutes",
                     choices = listOf(0, 15, 30, 45, 60, 90, 120),
@@ -657,7 +868,7 @@ private fun DictionaryLibrarySheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(horizontal = 24.dp, vertical = 8.dp),
         ) {
             Text(
                 "Dictionary Library",

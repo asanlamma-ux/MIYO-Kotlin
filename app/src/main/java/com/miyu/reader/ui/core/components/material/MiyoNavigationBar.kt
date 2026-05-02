@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +27,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 
 @Composable
@@ -46,9 +47,8 @@ fun MiyoNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 80.dp)
                 .navigationBarsPadding()
-                .padding(horizontal = 6.dp, vertical = 6.dp)
+                .height(80.dp)
                 .selectableGroup(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -87,23 +87,25 @@ fun RowScope.MiyoNavigationBarItem(
                 role = Role.Tab,
                 onClick = onClick,
             )
-            .padding(vertical = 4.dp),
+            .padding(vertical = MiyoSpacing.extraSmall),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
-                .padding(bottom = 6.dp)
+                .padding(bottom = MiyoSpacing.small)
                 .size(width = 20.dp, height = 3.dp)
                 .clip(RoundedCornerShape(50))
                 .background(indicatorColor),
         )
         icon(iconColor)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(MiyoSpacing.extraSmall))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = labelColor,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

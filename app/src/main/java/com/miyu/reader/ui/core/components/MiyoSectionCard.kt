@@ -13,7 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 
 @Composable
@@ -24,16 +24,18 @@ fun MiyoSectionCard(
 ) {
     val colors = LocalMIYUColors.current
     Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+        shape = RoundedCornerShape(MiyoSpacing.extraLarge),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground.copy(alpha = 0.94f)),
         elevation = CardDefaults.cardElevation(defaultElevation = if (colors.isDark) 0.dp else 2.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
             content = {
                 Text(
                     title,

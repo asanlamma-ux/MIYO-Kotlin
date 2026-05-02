@@ -8,10 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
+import android.view.KeyEvent
+import android.view.WindowManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
-import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.*
@@ -53,6 +55,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.miyu.reader.security.ReaderHtmlSanitizer
 import com.miyu.reader.ui.components.ThemePickerBottomSheet
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderColors
 import com.miyu.reader.ui.theme.ReaderThemeColors
 import com.miyu.reader.ui.theme.SpecialThemeBackdrop
@@ -66,10 +69,10 @@ import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.viewmodel.ReaderTermDetail
 
-import android.webkit.JavascriptInterface
 import coil.compose.AsyncImage
 import com.miyu.reader.ui.reader.components.SelectionToolbar
 import com.miyu.reader.ui.reader.components.SelectionData
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 
@@ -99,6 +102,17 @@ fun ReaderScreen(
     }
     val readerWebViewRef = remember { java.util.concurrent.atomic.AtomicReference<WebView?>() }
     var lastAppendId by remember { mutableStateOf(-1L) }
+    var sleepTimerExpired by remember { mutableStateOf(false) }
+    var sleepTimerRestartKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(bookId, readingSettings.sleepTimerMinutes, sleepTimerRestartKey) {
+        sleepTimerExpired = false
+        val minutes = readingSettings.sleepTimerMinutes
+        if (minutes > 0) {
+            delay(minutes.toLong() * 60_000L)
+            sleepTimerExpired = true
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -211,6 +225,11 @@ fun ReaderScreen(
             AndroidView(
                 factory = { context ->
                     ReaderWebView(context).apply {
+                        volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
+                        onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        requestFocus()
                         @SuppressLint("SetJavaScriptEnabled")
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = false
@@ -237,6 +256,8 @@ fun ReaderScreen(
                     }.also { readerWebViewRef.set(it) }
                 },
                 update = { webView ->
+                    webView.volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
+                    webView.onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
                     webView.setBackgroundColor(bgColor.toArgb())
                     val restorePercent = uiState.chapterScrollPercent.coerceIn(0f, 1f)
                     webView.webViewClient = object : SecureReaderWebViewClient() {
@@ -530,11 +551,11 @@ fun ReaderScreen(
                 Text(
                     "Chapters",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
                     color = textColor,
                 )
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 32.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
                     val chapCount = uiState.totalChapters.coerceAtLeast(1)
                     itemsIndexed(List(chapCount) { it }) { index, _ ->
@@ -557,10 +578,58 @@ fun ReaderScreen(
                 }
             }
         }
+
+        if (sleepTimerExpired) {
+            ReaderSleepTimerDialog(
+                minutes = readingSettings.sleepTimerMinutes,
+                readerTheme = readerTheme,
+                onCloseReader = onBack,
+                onContinueReading = {
+                    sleepTimerExpired = false
+                    sleepTimerRestartKey += 1
+                },
+            )
+        }
     }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+@Composable
+private fun ReaderSleepTimerDialog(
+    minutes: Int,
+    readerTheme: ReaderThemeColors,
+    onCloseReader: () -> Unit,
+    onContinueReading: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onContinueReading,
+        containerColor = readerTheme.cardBackground,
+        title = {
+            Text(
+                "Sleep timer finished",
+                color = readerTheme.text,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            )
+        },
+        text = {
+            Text(
+                "Your $minutes-minute reading timer has ended.",
+                color = readerTheme.secondaryText,
+            )
+        },
+        confirmButton = {
+            Button(onClick = onCloseReader) {
+                Text("Close reader")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onContinueReading) {
+                Text("Continue")
+            }
+        },
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -874,28 +943,6 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
   letter-spacing: 0.06em;
   opacity: 0.82;
 }
-.miyu-pull-next {
-  position: fixed;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  z-index: 20;
-  padding: 0.7em 1.05em;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
-  color: white !important;
-  font-family: system-ui, sans-serif;
-  font-size: 0.72em;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-.miyu-pull-next.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(-4px);
-}
 @media (max-width: 720px) {
   body { max-width: none; column-count: 1; }
 }
@@ -1073,9 +1120,9 @@ document.addEventListener('selectionchange', function() {
 	    var totalChapters = $safeTotalChapters;
 	    var appendRequestInFlight = false;
 	    var appendLoader = null;
-	    var pullHint = null;
 	    var touchStartY = 0;
-	    var pullDistance = 0;
+	    var edgePullDistance = 0;
+	    var edgePullDirection = 0;
 	    function currentProgress() {
 	        var doc = document.documentElement;
 	        var scrollTop = window.scrollY || doc.scrollTop || 0;
@@ -1126,6 +1173,17 @@ document.addEventListener('selectionchange', function() {
 	        var doc = document.documentElement;
 	        return doc.scrollHeight - ((window.scrollY || doc.scrollTop || 0) + window.innerHeight);
 	    }
+	    function currentScrollTop() {
+	        var doc = document.documentElement;
+	        return window.scrollY || doc.scrollTop || 0;
+	    }
+	    function hasNextChapter() {
+	        return !totalChapters || loadedThroughChapterIndex < totalChapters - 1;
+	    }
+	    function hasPreviousChapter() {
+	        var progress = currentProgress();
+	        return progress.chapterIndex > 0;
+	    }
 	    function showContinuousLoader() {
 	        if (appendLoader) return;
 	        appendLoader = document.createElement('div');
@@ -1137,33 +1195,29 @@ document.addEventListener('selectionchange', function() {
 	        if (appendLoader && appendLoader.parentNode) appendLoader.parentNode.removeChild(appendLoader);
 	        appendLoader = null;
 	    }
-	    function showPullHint(distance) {
-	        if (!pullHint) {
-	            pullHint = document.createElement('div');
-	            pullHint.className = 'miyu-pull-next';
-	            document.body.appendChild(pullHint);
-	        }
-	        var percent = Math.max(0, Math.min(1, distance / 88));
-	        pullHint.textContent = percent >= 1
-	            ? ($autoAdvance ? 'Release to load next chapter' : 'Release for next chapter')
-	            : ($autoAdvance ? 'Pull for next chapter' : 'Pull for next chapter');
-	        pullHint.className = 'miyu-pull-next visible';
-	    }
-	    function resetPullInteraction() {
-	        if (pullHint) pullHint.className = 'miyu-pull-next';
-	        pullDistance = 0;
+	    function resetEdgePull() {
+	        edgePullDistance = 0;
+	        edgePullDirection = 0;
+	        document.body.style.transition = 'transform 140ms ease-out';
 	        document.body.style.transform = 'translateY(0px)';
+	        setTimeout(function() {
+	            document.body.style.transition = '';
+	        }, 160);
+	    }
+	    function applyEdgeResistance(offset) {
+	        document.body.style.transition = 'none';
+	        document.body.style.transform = 'translateY(' + offset + 'px)';
 	    }
 	    function maybeRequestNextChapter(force) {
 	        if (!$autoAdvance || appendRequestInFlight) return;
-	        if (totalChapters > 0 && loadedThroughChapterIndex >= totalChapters - 1) return;
+	        if (!hasNextChapter()) return;
 	        if (force) {
 	            if (remainingScroll() > 28) return;
 	        } else if (remainingScroll() > 14) {
 	            return;
 	        }
 	        appendRequestInFlight = true;
-	        resetPullInteraction();
+	        resetEdgePull();
 	        showContinuousLoader();
 	        postProgress(true);
 	        if (window.AndroidBridge) window.AndroidBridge.onReaderAppendNextChapter();
@@ -1216,33 +1270,48 @@ document.addEventListener('selectionchange', function() {
 	    }, { passive: true });
 	    window.addEventListener('touchstart', function(event) {
 	        touchStartY = event.touches && event.touches.length ? event.touches[0].clientY : 0;
-	        pullDistance = 0;
+	        edgePullDistance = 0;
+	        edgePullDirection = 0;
 	    }, { passive: true });
 	    window.addEventListener('touchmove', function(event) {
-	        if (appendRequestInFlight || remainingScroll() > 28) return;
+	        if (appendRequestInFlight) return;
 	        var currentY = event.touches && event.touches.length ? event.touches[0].clientY : touchStartY;
-	        pullDistance = Math.max(0, touchStartY - currentY);
-	        if (pullDistance > 18) {
-	            showPullHint(pullDistance);
-	            var resistance = Math.min(26, pullDistance * 0.16);
-	            document.body.style.transform = 'translateY(' + (-resistance) + 'px)';
-	        } else {
-	            document.body.style.transform = 'translateY(0px)';
+	        var pullUp = Math.max(0, touchStartY - currentY);
+	        var pullDown = Math.max(0, currentY - touchStartY);
+	        var nextEligible = remainingScroll() <= 28 && hasNextChapter();
+	        var previousEligible = currentScrollTop() <= 2 && hasPreviousChapter();
+	        if (nextEligible && pullUp > 18) {
+	            edgePullDirection = 1;
+	            edgePullDistance = pullUp;
+	            applyEdgeResistance(-Math.min(28, pullUp * 0.16));
+	        } else if (previousEligible && pullDown > 18) {
+	            edgePullDirection = -1;
+	            edgePullDistance = pullDown;
+	            applyEdgeResistance(Math.min(28, pullDown * 0.16));
+	        } else if (edgePullDistance > 0) {
+	            resetEdgePull();
 	        }
 	    }, { passive: true });
 	    window.addEventListener('touchend', function() {
-	        if (pullDistance > 88) {
-	            if ($autoAdvance) {
+	        var direction = edgePullDirection;
+	        var distance = edgePullDistance;
+	        if (distance > 88) {
+	            resetEdgePull();
+	            if (direction > 0 && $autoAdvance) {
 	                maybeRequestNextChapter(true);
-	            } else if (window.AndroidBridge && (!totalChapters || loadedThroughChapterIndex < totalChapters - 1)) {
-	                resetPullInteraction();
-	                window.AndroidBridge.onReaderEdgeTap(1);
+	            } else if (window.AndroidBridge && direction !== 0) {
+	                var activeProgress = currentProgress();
+	                if (window.AndroidBridge.onReaderPullChapter) {
+	                    window.AndroidBridge.onReaderPullChapter(direction, activeProgress.chapterIndex);
+	                } else {
+	                    window.AndroidBridge.onReaderEdgeTap(direction);
+	                }
 	                return;
 	            }
 	        } else {
-	            resetPullInteraction();
+	            resetEdgePull();
 	        }
-	        resetPullInteraction();
+	        resetEdgePull();
 	    }, { passive: true });
 	    window.addEventListener('pagehide', function() { postProgress(true); });
 	    window.addEventListener('beforeunload', function() { postProgress(true); });
@@ -1295,9 +1364,23 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 private class ReaderWebView(context: Context) : WebView(context) {
+    var volumeNavigationEnabled: Boolean = false
+    var onVolumeNavigation: ((Int) -> Unit)? = null
+
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = null
 
     override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (volumeNavigationEnabled && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                val delta = if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) -1 else 1
+                onVolumeNavigation?.invoke(delta)
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
 }
 
 private open class SecureReaderWebViewClient : WebViewClient() {
@@ -1360,6 +1443,11 @@ private class ReaderJsInterface(private val viewModel: ReaderViewModel) {
     @JavascriptInterface
     fun onReaderEdgeTap(delta: Int) {
         viewModel.navigateChapter(delta)
+    }
+
+    @JavascriptInterface
+    fun onReaderPullChapter(delta: Int, activeChapterIndex: Int) {
+        viewModel.navigateChapterFromEdge(delta, activeChapterIndex)
     }
 
     @JavascriptInterface
