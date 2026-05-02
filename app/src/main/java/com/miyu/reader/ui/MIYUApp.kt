@@ -1,5 +1,6 @@
 package com.miyu.reader.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -25,6 +26,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.miyu.reader.R
+import com.miyu.reader.domain.model.OnlineNovelSummary
 import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.permissions.MiyoPermissions
 import com.miyu.reader.storage.MiyoBackupManager
@@ -32,6 +34,7 @@ import com.miyu.reader.ui.browse.BrowseWorkflowScreen
 import com.miyu.reader.ui.browse.DownloadsWorkflowScreen
 import com.miyu.reader.ui.browse.GlobalSourceSearchScreen
 import com.miyu.reader.ui.browse.MigrationWorkflowScreen
+import com.miyu.reader.ui.browse.OnlineNovelDetailsScreen
 import com.miyu.reader.ui.browse.ProviderRepositoriesScreen
 import com.miyu.reader.ui.browse.SourceVerifierScreen
 import com.miyu.reader.ui.browse.SourceUpdatesWorkflowScreen
@@ -79,6 +82,7 @@ sealed class Screen(
     data object DownloadQueue : Screen("browse/downloads", "Downloads")
     data object SourceDetails : Screen("browse/source/{sourceId}", "Source Details")
     data object SourceVerifier : Screen("browse/source/{sourceId}/verify", "Source Verifier")
+    data object OnlineNovelDetails : Screen("browse/novel?providerId={providerId}&path={path}&title={title}", "Novel Details")
     data object BookDetails : Screen("library/book/{bookId}", "Book Details")
     data object AdvancedSettings : Screen("settings/advanced", "Advanced Settings")
     data object ReaderSettings : Screen("settings/reader", "Reader Settings")
@@ -179,6 +183,7 @@ fun MIYUApp() {
                 Screen.DownloadQueue.route,
                 Screen.SourceDetails.route,
                 Screen.SourceVerifier.route,
+                Screen.OnlineNovelDetails.route,
                 Screen.BookDetails.route,
                 Screen.Settings.route,
                 Screen.AdvancedSettings.route,
@@ -198,6 +203,11 @@ fun MIYUApp() {
         }
         val openBookDetails: (String) -> Unit = { bookId ->
             navController.navigate("library/book/$bookId")
+        }
+        val openOnlineNovelDetails: (OnlineNovelSummary) -> Unit = { novel ->
+            navController.navigate(
+                "browse/novel?providerId=${novel.providerId.name}&path=${Uri.encode(novel.path)}&title=${Uri.encode(novel.title)}",
+            )
         }
         val openSettings = {
             navController.navigate(Screen.Settings.route) {
@@ -325,6 +335,7 @@ fun MIYUApp() {
                             onBack = { navController.popBackStack() },
                             onOpenSource = { sourceId -> navController.navigate("browse/source/$sourceId") },
                             onOpenVerifier = { sourceId -> navController.navigate("browse/source/$sourceId/verify") },
+                            onOpenNovel = openOnlineNovelDetails,
                         )
                     }
                     composable(Screen.SourceRepositories.route) {
@@ -357,6 +368,47 @@ fun MIYUApp() {
                             onBack = { navController.popBackStack() },
                             onOpenDownloads = { navController.navigate(Screen.DownloadQueue.route) },
                             onOpenVerifier = { navController.navigate("browse/source/$sourceId/verify") },
+                            onOpenNovel = openOnlineNovelDetails,
+                            onImportGeneratedEpub = { generated ->
+                                libraryViewModel.importGeneratedOnlineNovelEpub(
+                                    filePath = generated.filePath,
+                                    fileName = generated.fileName,
+                                    suggestedTitle = generated.title,
+                                )
+                            },
+                        )
+                    }
+                    composable(
+                        route = Screen.OnlineNovelDetails.route,
+                        arguments = listOf(
+                            navArgument("providerId") {
+                                type = NavType.StringType
+                                defaultValue = ""
+                            },
+                            navArgument("path") {
+                                type = NavType.StringType
+                                defaultValue = ""
+                            },
+                            navArgument("title") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { backStackEntry ->
+                        val libraryEntry = remember(backStackEntry) {
+                            runCatching { navController.getBackStackEntry(Screen.Library.route) }.getOrNull()
+                        }
+                        val libraryViewModel: LibraryViewModel = if (libraryEntry != null) {
+                            hiltViewModel(libraryEntry)
+                        } else {
+                            hiltViewModel()
+                        }
+                        OnlineNovelDetailsScreen(
+                            providerId = backStackEntry.arguments?.getString("providerId").orEmpty(),
+                            path = Uri.decode(backStackEntry.arguments?.getString("path").orEmpty()),
+                            fallbackTitle = backStackEntry.arguments?.getString("title")?.let(Uri::decode),
+                            onBack = { navController.popBackStack() },
                             onImportGeneratedEpub = { generated ->
                                 libraryViewModel.importGeneratedOnlineNovelEpub(
                                     filePath = generated.filePath,

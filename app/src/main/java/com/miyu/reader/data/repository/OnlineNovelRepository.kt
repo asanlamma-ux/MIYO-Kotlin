@@ -265,9 +265,10 @@ class OnlineNovelRepository @Inject constructor(
         doc.select("ul.novel-list li.novel-item").mapNotNull { node ->
             val link = node.selectFirst("a[href]") ?: return@mapNotNull null
             val path = parsePath(provider, link.attr("href"))
+            val cleanPath = path.substringBefore('?')
             val slug = Regex("/novel/([^/.]+)\\.html$", RegexOption.IGNORE_CASE)
-                .find(path)?.groupValues?.getOrNull(1)
-                ?: path.trim('/').ifBlank { "novel" }
+                .find(cleanPath)?.groupValues?.getOrNull(1)
+                ?: cleanPath.trim('/').ifBlank { "novel" }
             val title = node.textFrom(".novel-title")
                 .ifBlank { link.attr("title") }
                 .ifBlank { link.text() }
@@ -304,9 +305,10 @@ class OnlineNovelRepository @Inject constructor(
                 val link = node.selectFirst(selectors.link) ?: node.closest("a[href]") ?: return@mapNotNull null
                 val path = parsePath(provider, link.attr("href"))
                 if (path.isBlank() || path == "/") return@mapNotNull null
+                val cleanPath = path.substringBefore('?')
                 val slug = Regex("/novel/([^/.]+?)(?:\\.html|/|$)", RegexOption.IGNORE_CASE)
-                    .find(path)?.groupValues?.getOrNull(1)
-                    ?: path.trim('/').substringAfterLast('/').ifBlank { path.trim('/') }
+                    .find(cleanPath)?.groupValues?.getOrNull(1)
+                    ?: cleanPath.trim('/').substringAfterLast('/').removeSuffix(".html").ifBlank { cleanPath.trim('/') }
                 val titleNode = selectors.title?.let { node.selectFirst(it) } ?: link
                 val coverNode = selectors.cover?.let { node.selectFirst(it) }
                 val statsNode = selectors.stats?.let { node.selectFirst(it) }
@@ -400,14 +402,19 @@ class OnlineNovelRepository @Inject constructor(
             "ul.chapter-list li a[href]",
             ".chapter-list a[href]",
             ".chapterlist a[href]",
+            ".chapter-list .chapter-title a[href]",
             "ul.list-chapter li a[href]",
             ".list-chapter a[href]",
+            ".list-chapters a[href]",
             "#chapter-list a[href]",
             ".chapters-list a[href]",
+            ".episode-list a[href]",
             "#chp-catalogue-m a[href]",
             ".chapter-item a[href]",
-            "a.last-read-url[href]",
             ".m-newest2 ul li a[href]",
+            ".catalog a[href*=chapter]",
+            "[class*=chapter] a[href]",
+            "a.last-read-url[href]",
             "li a[href*=chapter]",
             "a[href*=/chapter/]",
         )
@@ -420,7 +427,9 @@ class OnlineNovelRepository @Inject constructor(
                     title = link.text().cleanText().ifBlank { "Chapter $order" },
                     path = path,
                 )
-            }.filter { it.path.isNotBlank() }.distinctBy { it.path }.sortedBy { it.order }
+            }.filter { it.path.isNotBlank() && it.isLikelyChapterLink() }
+                .distinctBy { it.path }
+                .sortedBy { it.order }
             if (chapters.isNotEmpty()) return chapters
         }
         return emptyList()
@@ -627,7 +636,12 @@ class OnlineNovelRepository @Inject constructor(
 
     private fun parsePath(provider: OnlineNovelProvider, value: String): String {
         if (value.isBlank()) return ""
-        return runCatching { URI(provider.baseUrl).resolve(value).path.orEmpty() }.getOrDefault(value)
+        return runCatching {
+            val resolved = URI(provider.baseUrl).resolve(value)
+            val path = resolved.rawPath.orEmpty()
+            val query = resolved.rawQuery?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+            "$path$query"
+        }.getOrDefault(value)
     }
 
     private fun validatePublicHttpsUrl(url: String): String {
@@ -682,10 +696,16 @@ class OnlineNovelRepository @Inject constructor(
             ?.let { absoluteUrlOrNull(provider, it.attr("content").ifBlank { it.attr("data-src").ifBlank { it.attr("src") } }) }
 
     private fun parseSiteGenres(doc: Document): List<String> =
-        doc.select(".categories .property-item").map { it.text().cleanText() }.filter { it.isNotBlank() }.distinct()
+        doc.select(".categories .property-item, .genres a, .genre a, a[href*=genre], a[href*=category], a[href*=genres]")
+            .map { it.text().cleanText() }
+            .filter { it.isNotBlank() }
+            .distinct()
 
     private fun parseSiteTags(doc: Document): List<String> =
-        doc.select(".categories .tag, .tags .content .tag").map { it.text().cleanText() }.filter { it.isNotBlank() }.distinct()
+        doc.select(".categories .tag, .tags .content .tag, .tags a, .tag a, a[href*=tag], a[href*=tags]")
+            .map { it.text().cleanText() }
+            .filter { it.isNotBlank() }
+            .distinct()
 
     private fun parseGenericTitle(doc: Document): String =
         doc.selectFirst(".r-n-bk-name, h1.booktitle, h1.tit, h1.novel-title, .novel-title h1, h1.title, h1, meta[property=og:title], meta[name=twitter:title]")
@@ -726,11 +746,39 @@ class OnlineNovelRepository @Inject constructor(
             .orEmpty()
             .ifBlank { "Unknown" }
 
-    private fun parseChapterOrder(path: String): Int? =
-        Regex("(?:chapter[-_/]|_)(\\d+)(?:\\.html?)?/?$", RegexOption.IGNORE_CASE)
-            .find(path)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    private fun OnlineChapterSummary.isLikelyChapterLink(): Boolean {
+        val cleanPath = path.substringBefore('?').substringBefore('#').lowercase(Locale.ROOT)
+        val cleanTitle = title.lowercase(Locale.ROOT)
+        if (
+            cleanPath.isBlank() ||
+            cleanPath == "/" ||
+            cleanPath.contains("javascript:") ||
+            cleanPath.contains("/search") ||
+            cleanPath.contains("/genre") ||
+            cleanPath.contains("/category") ||
+            cleanPath.contains("/tag/") ||
+            cleanPath.contains("/tags/")
+        ) {
+            return false
+        }
+        if (cleanTitle in setOf("next", "previous", "prev", "latest", "read more", "show all")) return false
+        return cleanPath.contains("chapter") ||
+            cleanPath.contains("chap") ||
+            parseChapterOrder(path) != null ||
+            cleanTitle.startsWith("chapter") ||
+            cleanTitle.startsWith("ch ") ||
+            cleanTitle.startsWith("ch.") ||
+            cleanTitle in setOf("prologue", "epilogue") ||
+            Regex("^(chapter\\s*)?\\d+([:.\\-\\s]|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleanTitle)
+    }
+
+    private fun parseChapterOrder(path: String): Int? {
+        val cleanPath = path.substringBefore('?').substringBefore('#')
+        return Regex("(?:chapter[-_/]|_)(\\d+)(?:\\.html?)?/?$", RegexOption.IGNORE_CASE)
+            .find(cleanPath)?.groupValues?.getOrNull(1)?.toIntOrNull()
             ?: Regex("/(\\d+)(?:\\.html?)?/?$", RegexOption.IGNORE_CASE)
-                .find(path)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                .find(cleanPath)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    }
 
     private fun wrapChapterHtml(title: String, body: String): String =
         """<?xml version="1.0" encoding="utf-8"?>

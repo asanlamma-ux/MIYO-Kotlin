@@ -71,6 +71,9 @@ class NovelSourcePluginRegistry @Inject constructor(
     fun source(sourceId: String): NovelSourcePluginItem? =
         allSources.firstOrNull { it.id == sourceId }
 
+    fun sourceIdForProvider(providerId: OnlineNovelProviderId): String =
+        providerId.toSourcePluginId()
+
     suspend fun search(sourceId: String, query: String, page: Int): OnlineNovelSearchResult =
         plugin(sourceId).searchNovels(query, page.coerceAtLeast(1))
 

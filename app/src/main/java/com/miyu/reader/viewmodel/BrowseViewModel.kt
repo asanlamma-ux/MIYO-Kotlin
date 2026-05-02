@@ -8,6 +8,8 @@ import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
+import com.miyu.reader.domain.model.OnlineNovelDetails
+import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 enum class BrowseSourceTab(val label: String) {
@@ -57,8 +60,11 @@ data class BrowseUiState(
     val page: Int = 1,
     val hasMore: Boolean = false,
     val loading: Boolean = false,
+    val detailsLoading: Boolean = false,
     val downloadingKey: String? = null,
     val generatedEpub: GeneratedOnlineNovelEpub? = null,
+    val selectedNovelSummary: OnlineNovelSummary? = null,
+    val selectedNovelDetails: OnlineNovelDetails? = null,
     val error: String? = null,
 ) {
     val visibleSources: List<NovelSourcePluginItem>
@@ -380,6 +386,106 @@ class BrowseViewModel @Inject constructor(
         }
     }
 
+    fun loadNovelDetails(providerId: OnlineNovelProviderId, path: String, fallbackTitle: String? = null) {
+        val sourceId = sourceRegistry.sourceIdForProvider(providerId)
+        val source = sourceRegistry.source(sourceId)
+        if (source == null) {
+            _uiState.update { it.copy(error = "Source not found.", detailsLoading = false) }
+            return
+        }
+        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
+            _uiState.update {
+                it.copy(
+                    error = "${source.name} cannot load details until its plugin runtime is available.",
+                    selectedNovelDetails = null,
+                    detailsLoading = false,
+                )
+            }
+            return
+        }
+        val summary = cachedSummary(providerId, path) ?: routeSummary(providerId, source.name, path, fallbackTitle)
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    detailsLoading = true,
+                    selectedNovelSummary = summary,
+                    selectedNovelDetails = null,
+                    generatedEpub = null,
+                    error = null,
+                )
+            }
+            runCatching {
+                sourceRegistry.details(summary)
+            }.onSuccess { details ->
+                _uiState.update {
+                    it.copy(
+                        detailsLoading = false,
+                        selectedNovelDetails = details,
+                        selectedNovelSummary = summary,
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        detailsLoading = false,
+                        selectedNovelDetails = null,
+                        error = error.message ?: "Novel details failed to load.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadNovelDetails(details: OnlineNovelDetails) {
+        val sourceId = sourceRegistry.sourceIdForProvider(details.providerId)
+        val source = sourceRegistry.source(sourceId)
+        if (source == null) {
+            _uiState.update { it.copy(error = "Source not found.") }
+            return
+        }
+        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
+            _uiState.update { it.copy(error = "${source.name} cannot download until its plugin runtime is available.") }
+            return
+        }
+        val chapters = details.chapters.sortedBy { it.order }
+        if (chapters.isEmpty()) {
+            _uiState.update { it.copy(error = "No chapters were found for ${details.title}.") }
+            return
+        }
+        val downloadKey = "${details.providerId}:${details.path}"
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    downloadingKey = downloadKey,
+                    generatedEpub = null,
+                    error = null,
+                )
+            }
+            runCatching {
+                val start = chapters.first().order
+                val end = chapters.take(250).last().order
+                sourceRegistry.downloadAsEpub(sourceId, details, start, end, _uiState.value.downloadConcurrency)
+            }.onSuccess { generated ->
+                _uiState.update {
+                    it.copy(
+                        downloadingKey = null,
+                        generatedEpub = generated,
+                        error = null,
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        downloadingKey = null,
+                        generatedEpub = null,
+                        error = error.message ?: "Novel download failed.",
+                    )
+                }
+            }
+        }
+    }
+
     fun downloadNovel(sourceId: String, summary: OnlineNovelSummary) {
         val source = sourceRegistry.source(sourceId)
         if (source == null) {
@@ -425,4 +531,45 @@ class BrowseViewModel @Inject constructor(
             }
         }
     }
+
+    private fun cachedSummary(providerId: OnlineNovelProviderId, path: String): OnlineNovelSummary? {
+        val normalizedPath = path.normalizedProviderPath()
+        val state = _uiState.value
+        return (state.results + state.globalSearchResults.flatMap { it.novels })
+            .firstOrNull { it.providerId == providerId && it.path.normalizedProviderPath() == normalizedPath }
+    }
+
+    private fun routeSummary(
+        providerId: OnlineNovelProviderId,
+        providerLabel: String,
+        path: String,
+        fallbackTitle: String?,
+    ): OnlineNovelSummary {
+        val cleanPath = path.normalizedProviderPath().ifBlank { "/" }
+        val slug = cleanPath
+            .substringBefore('?')
+            .trim('/')
+            .substringAfterLast('/')
+            .removeSuffix(".html")
+            .ifBlank { fallbackTitle.orEmpty().slugToken() }
+            .ifBlank { providerId.name.lowercase(Locale.ROOT) }
+        return OnlineNovelSummary(
+            providerId = providerId,
+            providerLabel = providerLabel,
+            rawId = slug,
+            slug = slug,
+            path = cleanPath,
+            title = fallbackTitle?.takeIf { it.isNotBlank() } ?: slug.replace('-', ' ').replace('_', ' '),
+        )
+    }
+
+    private fun String.normalizedProviderPath(): String =
+        trim().ifBlank { "/" }.let { value ->
+            if (value.startsWith("/")) value else "/$value"
+        }
+
+    private fun String.slugToken(): String =
+        lowercase(Locale.ROOT)
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
 }

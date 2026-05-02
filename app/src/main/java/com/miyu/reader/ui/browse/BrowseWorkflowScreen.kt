@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,6 +54,7 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -69,6 +72,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,6 +94,9 @@ import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
+import com.miyu.reader.domain.model.OnlineChapterSummary
+import com.miyu.reader.domain.model.OnlineNovelDetails
+import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoIconActionButton
@@ -404,6 +411,7 @@ fun SourceWorkflowDetailScreen(
     onBack: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenVerifier: () -> Unit,
+    onOpenNovel: (OnlineNovelSummary) -> Unit,
     onImportGeneratedEpub: (GeneratedOnlineNovelEpub) -> Unit,
     viewModel: BrowseViewModel = hiltViewModel(),
 ) {
@@ -490,6 +498,7 @@ fun SourceWorkflowDetailScreen(
                             NovelCoverTile(
                                 novel = novel,
                                 downloading = state.downloadingKey == key,
+                                onOpen = { onOpenNovel(novel) },
                                 onDownload = { viewModel.downloadNovel(source.id, novel) },
                                 modifier = Modifier.weight(1f),
                             )
@@ -545,6 +554,7 @@ fun GlobalSourceSearchScreen(
     onBack: () -> Unit,
     onOpenSource: (String) -> Unit,
     onOpenVerifier: (String) -> Unit,
+    onOpenNovel: (OnlineNovelSummary) -> Unit,
     viewModel: BrowseViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -674,6 +684,7 @@ fun GlobalSourceSearchScreen(
                             viewModel.recordSourceOpened(result.source.id)
                             onOpenSource(result.source.id)
                         },
+                        onOpenNovel = onOpenNovel,
                         onDownload = { novel -> viewModel.downloadNovel(result.source.id, novel) },
                         downloadingKey = state.downloadingKey,
                     )
@@ -690,6 +701,366 @@ fun GlobalSourceSearchScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun OnlineNovelDetailsScreen(
+    providerId: String,
+    path: String,
+    fallbackTitle: String?,
+    onBack: () -> Unit,
+    onImportGeneratedEpub: (GeneratedOnlineNovelEpub) -> Unit,
+    viewModel: BrowseViewModel = hiltViewModel(),
+) {
+    val provider = remember(providerId) {
+        runCatching { OnlineNovelProviderId.valueOf(providerId) }.getOrNull()
+    }
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = LocalMIYUColors.current
+
+    LaunchedEffect(provider, path, fallbackTitle) {
+        if (provider != null) {
+            viewModel.loadNovelDetails(provider, path, fallbackTitle)
+        }
+    }
+
+    MiyoWorkspaceSurface {
+        MiyoWorkspaceExitButton(label = "Exit novel details", onClick = onBack)
+
+        if (provider == null) {
+            MiyoEmptyScreen(
+                icon = Icons.Outlined.ErrorOutline,
+                title = "Provider not found",
+                message = "Return to Browse and open the result again.",
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@MiyoWorkspaceSurface
+        }
+
+        val details = state.selectedNovelDetails
+        val summary = state.selectedNovelSummary
+        val downloading = details?.let { state.downloadingKey == "${it.providerId}:${it.path}" } == true
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 56.dp),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+        ) {
+            item {
+                OnlineNovelHeroCard(
+                    details = details,
+                    summary = summary,
+                    fallbackTitle = fallbackTitle,
+                    loading = state.detailsLoading,
+                    downloading = downloading,
+                    onDownload = {
+                        details?.let(viewModel::downloadNovelDetails)
+                    },
+                )
+            }
+            state.error?.let { error ->
+                item {
+                    SourceNoticeCard(
+                        icon = Icons.Outlined.ErrorOutline,
+                        title = "Provider error",
+                        message = error,
+                        isError = true,
+                    )
+                }
+            }
+            state.generatedEpub?.let { generated ->
+                item {
+                    GeneratedEpubCard(
+                        generated = generated,
+                        onImport = { onImportGeneratedEpub(generated) },
+                    )
+                }
+            }
+            if (details == null && state.detailsLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(96.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = colors.accent)
+                    }
+                }
+            }
+            details?.let { novel ->
+                item { OnlineNovelDescriptionCard(novel) }
+                item { OnlineNovelTagCard(novel) }
+                item { OnlineNovelChapterCard(novel.chapters) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OnlineNovelHeroCard(
+    details: OnlineNovelDetails?,
+    summary: OnlineNovelSummary?,
+    fallbackTitle: String?,
+    loading: Boolean,
+    downloading: Boolean,
+    onDownload: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    val title = details?.title ?: summary?.title ?: fallbackTitle ?: "Novel"
+    val author = details?.author ?: summary?.author ?: "Unknown Author"
+    val coverUrl = details?.coverUrl ?: summary?.coverUrl
+    val providerLabel = details?.providerLabel ?: summary?.providerLabel ?: "Provider"
+    val chapterCount = details?.chapterCount ?: summary?.chapterCount ?: details?.chapters?.size
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = BorderStroke(1.dp, colors.accent.copy(alpha = 0.18f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium)) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = colors.secondaryText.copy(alpha = 0.12f),
+                    modifier = Modifier.size(width = 108.dp, height = 150.dp),
+                ) {
+                    if (coverUrl != null) {
+                        AsyncImage(
+                            model = coverUrl,
+                            contentDescription = title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent)
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                ) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                        color = colors.onBackground,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        author,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.secondaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                        verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                    ) {
+                        SourcePill(providerLabel)
+                        details?.status?.takeIf { it.isNotBlank() && it != "Unknown" }?.let { SourcePill(it) }
+                        chapterCount?.let { SourcePill("$it chapters") }
+                    }
+                    Button(
+                        onClick = onDownload,
+                        enabled = details != null && details.chapters.isNotEmpty() && !downloading,
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        if (downloading || loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(Icons.Outlined.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            when {
+                                downloading -> "Exporting"
+                                details == null -> "Loading"
+                                details.chapters.isEmpty() -> "No chapters"
+                                else -> "Download EPUB"
+                            },
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineNovelDescriptionCard(novel: OnlineNovelDetails) {
+    val colors = LocalMIYUColors.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+        ) {
+            Text(
+                "Description",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                color = colors.onBackground,
+            )
+            Text(
+                novel.summary.ifBlank { "No description was found for this provider result." },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OnlineNovelTagCard(novel: OnlineNovelDetails) {
+    val colors = LocalMIYUColors.current
+    val tags = (novel.genres + novel.tags).distinct().take(32)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+        ) {
+            Text(
+                "Tags",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                color = colors.onBackground,
+            )
+            if (tags.isEmpty()) {
+                Text("No tags found.", color = colors.secondaryText, style = MaterialTheme.typography.bodyMedium)
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                    verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                ) {
+                    tags.forEach { tag ->
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    tag,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            enabled = false,
+                            shape = RoundedCornerShape(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineNovelChapterCard(chapters: List<OnlineChapterSummary>) {
+    val colors = LocalMIYUColors.current
+    val visibleChapters = chapters.sortedBy { it.order }.take(120)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(modifier = Modifier.padding(vertical = MiyoSpacing.small)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Chapters",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                    color = colors.onBackground,
+                )
+                Text(
+                    chapters.size.toString(),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.secondaryText,
+                )
+            }
+            if (chapters.isEmpty()) {
+                Text(
+                    "No chapters were found. Try another provider result or refresh the source later.",
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+                    color = colors.secondaryText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                visibleChapters.forEach { chapter ->
+                    OnlineChapterRow(chapter)
+                }
+                if (visibleChapters.size < chapters.size) {
+                    Text(
+                        "Showing first ${visibleChapters.size} chapters.",
+                        modifier = Modifier.padding(horizontal = MiyoSpacing.medium, vertical = MiyoSpacing.small),
+                        color = colors.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnlineChapterRow(chapter: OnlineChapterSummary) {
+    val colors = LocalMIYUColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MiyoSpacing.medium, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            chapter.order.toString(),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Black),
+            color = colors.accent,
+            modifier = Modifier.width(40.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                chapter.title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            chapter.updatedAt?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -796,6 +1167,7 @@ private fun SearchHistoryRow(
 private fun GlobalSearchSourceResultBlock(
     result: GlobalSearchSourceResult,
     onOpenSource: () -> Unit,
+    onOpenNovel: (OnlineNovelSummary) -> Unit,
     onDownload: (OnlineNovelSummary) -> Unit,
     downloadingKey: String?,
 ) {
@@ -845,6 +1217,7 @@ private fun GlobalSearchSourceResultBlock(
                     GlobalNovelCoverTile(
                         novel = novel,
                         downloading = downloadingKey == "${novel.providerId}:${novel.path}",
+                        onOpen = { onOpenNovel(novel) },
                         onDownload = { onDownload(novel) },
                     )
                 }
@@ -1528,13 +1901,14 @@ private fun GeneratedEpubCard(
 private fun GlobalNovelCoverTile(
     novel: OnlineNovelSummary,
     downloading: Boolean,
+    onOpen: () -> Unit,
     onDownload: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Column(
         modifier = Modifier
             .width(128.dp)
-            .clickable(enabled = !downloading, onClick = onDownload),
+            .clickable(onClick = onOpen),
     ) {
         Box {
             Surface(
@@ -1590,6 +1964,25 @@ private fun GlobalNovelCoverTile(
                         )
                     }
                 }
+            } else {
+                Surface(
+                    color = colors.cardBackground.copy(alpha = 0.88f),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(36.dp)
+                        .clickable(onClick = onDownload),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Outlined.CloudDownload,
+                            contentDescription = "Download EPUB",
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -1607,6 +2000,7 @@ private fun GlobalNovelCoverTile(
 private fun NovelCoverTile(
     novel: OnlineNovelSummary,
     downloading: Boolean,
+    onOpen: () -> Unit,
     onDownload: () -> Unit,
     modifier: Modifier = Modifier,
     width: androidx.compose.ui.unit.Dp? = null,
@@ -1615,6 +2009,7 @@ private fun NovelCoverTile(
     Column(
         modifier = modifier
             .then(if (width != null) Modifier.width(width) else Modifier)
+            .clickable(onClick = onOpen)
             .padding(4.dp),
     ) {
         Box {
