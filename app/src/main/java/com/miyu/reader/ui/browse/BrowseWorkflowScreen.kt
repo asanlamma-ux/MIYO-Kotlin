@@ -483,7 +483,7 @@ fun SourceWorkflowDetailScreen(
                     item {
                         GeneratedEpubCard(
                             generated = generated,
-                            onImport = { onImportGeneratedEpub(generated) },
+                            onImport = {},
                         )
                     }
                 }
@@ -775,7 +775,7 @@ fun OnlineNovelDetailsScreen(
                 item {
                     GeneratedEpubCard(
                         generated = generated,
-                        onImport = { onImportGeneratedEpub(generated) },
+                        onImport = {},
                     )
                 }
             }
@@ -1894,16 +1894,6 @@ private fun GeneratedEpubCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.secondaryText,
             )
-            Button(
-                onClick = onImport,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Import into library", fontWeight = FontWeight.Bold)
-            }
         }
     }
 }

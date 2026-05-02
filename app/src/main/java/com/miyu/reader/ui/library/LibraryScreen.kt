@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -44,12 +45,12 @@ import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Tune
@@ -65,15 +66,15 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -131,13 +132,17 @@ fun LibraryScreen(
             ),
         )
     }
-    val selectedCategory = categories.firstOrNull { it.id == uiState.selectedCategoryId } ?: categories.first()
+    val visibleCategories = categories.filter { !it.isHidden || it.id == LibraryCategoryIds.ALL }
+    val selectedCategory = visibleCategories.firstOrNull { it.id == uiState.selectedCategoryId } ?: visibleCategories.first()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
-    var showManageCategory by remember { mutableStateOf(false) }
+    var showCategoryManager by remember { mutableStateOf(false) }
     var showAssignCategory by remember { mutableStateOf(false) }
+    var showCategoryPicker by remember { mutableStateOf(false) }
     var incognitoMode by remember { mutableStateOf(false) }
+    var selectedBookForOptions by remember { mutableStateOf<Book?>(null) }
+    var pendingBookCategoryId by remember { mutableStateOf(LibraryCategoryIds.ALL) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -146,6 +151,36 @@ fun LibraryScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        if (showCategoryManager) {
+            CategoryManagerScreen(
+                categories = categories.filter { it.id != LibraryCategoryIds.ALL },
+                onBack = { showCategoryManager = false },
+                onCreateCategory = { showCreateCategory = true },
+                onSelectCategory = {
+                    viewModel.setSelectedCategory(it)
+                    showCategoryManager = false
+                },
+                onDeleteCategories = { ids ->
+                    ids.forEach(viewModel::deleteCategory)
+                },
+                onSetHidden = { ids, hidden ->
+                    ids.forEach { id -> viewModel.setCategoryHidden(id, hidden) }
+                },
+            )
+            if (showCreateCategory) {
+                CategoryNameDialog(
+                    title = "Create category",
+                    initialName = "",
+                    confirmLabel = "Create",
+                    onDismiss = { showCreateCategory = false },
+                    onConfirm = {
+                        viewModel.createCategory(it)
+                        showCreateCategory = false
+                    },
+                )
+            }
+            return@Box
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -156,6 +191,7 @@ fun LibraryScreen(
                     selectedCount = uiState.selectedBookIds.size,
                     onClear = viewModel::clearSelection,
                     onAssignCategory = { showAssignCategory = true },
+                    onDeleteSelection = viewModel::deleteSelectedBooks,
                 )
             }
 
@@ -180,9 +216,7 @@ fun LibraryScreen(
                     },
                     onOpenBrowse = onOpenBrowse,
                     onToggleView = viewModel::toggleViewMode,
-                    onManageCategory = {
-                        if (selectedCategory.isMutable) showManageCategory = true else showCreateCategory = true
-                    },
+                    onManageCategory = { showCategoryManager = true },
                     onToggleIncognito = { incognitoMode = !incognitoMode },
                     onOpenSettings = onOpenSettings,
                     onOpenThemePicker = onOpenThemePicker,
@@ -191,11 +225,10 @@ fun LibraryScreen(
                 )
             }
 
-            LibraryCategoryTabs(
-                categories = categories,
-                selectedCategoryId = uiState.selectedCategoryId,
-                onSelect = viewModel::setSelectedCategory,
-                onCreateCategory = { showCreateCategory = true },
+            LibraryCategorySelectorRow(
+                selectedCategory = selectedCategory,
+                onOpenPicker = { showCategoryPicker = true },
+                onOpenManager = { showCategoryManager = true },
             )
 
             Spacer(Modifier.height(6.dp))
@@ -232,7 +265,10 @@ fun LibraryScreen(
                                 else onOpenBook(book.id)
                             },
                             onLongPress = { viewModel.toggleBookSelection(book.id) },
-                            onMore = { onOpenBookDetails(book.id) },
+                            onMore = {
+                                pendingBookCategoryId = book.primaryLibraryCategoryId()
+                                selectedBookForOptions = book
+                            },
                         )
                     }
                 }
@@ -252,7 +288,10 @@ fun LibraryScreen(
                                 else onOpenBook(book.id)
                             },
                             onLongPress = { viewModel.toggleBookSelection(book.id) },
-                            onMore = { onOpenBookDetails(book.id) },
+                            onMore = {
+                                pendingBookCategoryId = book.primaryLibraryCategoryId()
+                                selectedBookForOptions = book
+                            },
                         )
                     }
                 }
@@ -302,32 +341,60 @@ fun LibraryScreen(
             )
         }
 
-        if (showManageCategory && selectedCategory.isMutable) {
-            ManageCategoryDialog(
-                category = selectedCategory,
-                onDismiss = { showManageCategory = false },
-                onRename = {
-                    viewModel.renameCategory(selectedCategory.id, it)
-                    showManageCategory = false
-                },
-                onDelete = {
-                    viewModel.deleteCategory(selectedCategory.id)
-                    showManageCategory = false
-                },
-            )
-        }
-
         if (showAssignCategory) {
-            AssignCategoryDialog(
-                categories = categories.filter { it.isMutable || it.id == LibraryCategoryIds.UNCATEGORIZED },
+            CategoryPickerBottomSheet(
+                title = "Move selected books",
+                categories = visibleCategories,
                 onDismiss = { showAssignCategory = false },
-                onAssign = {
+                onChoose = {
                     viewModel.assignSelectionToCategory(it)
                     showAssignCategory = false
                 },
                 onCreateCategory = {
                     showAssignCategory = false
                     showCreateCategory = true
+                },
+            )
+        }
+
+        if (showCategoryPicker) {
+            CategoryPickerBottomSheet(
+                title = "Categories",
+                categories = visibleCategories,
+                onDismiss = { showCategoryPicker = false },
+                onChoose = {
+                    viewModel.setSelectedCategory(it)
+                    showCategoryPicker = false
+                },
+                onCreateCategory = {
+                    showCategoryPicker = false
+                    showCreateCategory = true
+                },
+            )
+        }
+
+        selectedBookForOptions?.let { book ->
+            BookOptionsBottomSheet(
+                book = book,
+                categories = visibleCategories,
+                selectedCategoryId = pendingBookCategoryId,
+                onDismiss = { selectedBookForOptions = null },
+                onChooseCategory = { pendingBookCategoryId = it },
+                onApplyCategory = {
+                    viewModel.assignBookToCategory(book.id, pendingBookCategoryId)
+                    selectedBookForOptions = null
+                },
+                onCreateCategory = {
+                    selectedBookForOptions = null
+                    showCreateCategory = true
+                },
+                onDelete = {
+                    viewModel.deleteBook(book.id)
+                    selectedBookForOptions = null
+                },
+                onOpenDetails = {
+                    selectedBookForOptions = null
+                    onOpenBookDetails(book.id)
                 },
             )
         }
@@ -400,7 +467,7 @@ private fun LibraryToolbar(
                         )
                         HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text("Favorite categories") },
+                            text = { Text("Categories") },
                             onClick = {
                                 dismiss()
                                 onManageCategory()
@@ -461,6 +528,7 @@ private fun LibrarySelectionToolbar(
     selectedCount: Int,
     onClear: () -> Unit,
     onAssignCategory: () -> Unit,
+    onDeleteSelection: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Surface(
@@ -487,6 +555,9 @@ private fun LibrarySelectionToolbar(
             )
             IconButton(onClick = onAssignCategory) {
                 Icon(Icons.Filled.Label, contentDescription = "Assign category", tint = colors.accent)
+            }
+            IconButton(onClick = onDeleteSelection) {
+                Icon(Icons.Filled.Delete, contentDescription = "Delete selected books", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -520,63 +591,49 @@ private fun LibrarySearchBar(
 }
 
 @Composable
-private fun LibraryCategoryTabs(
-    categories: List<LibraryCategory>,
-    selectedCategoryId: String,
-    onSelect: (String) -> Unit,
-    onCreateCategory: () -> Unit,
+private fun LibraryCategorySelectorRow(
+    selectedCategory: LibraryCategory,
+    onOpenPicker: () -> Unit,
+    onOpenManager: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
-    val selectedIndex = categories.indexOfFirst { it.id == selectedCategoryId }.coerceAtLeast(0)
-
-    ScrollableTabRow(
-        selectedTabIndex = selectedIndex,
-        containerColor = Color.Transparent,
-        contentColor = colors.accent,
-        edgePadding = 16.dp,
-        divider = {},
-        modifier = Modifier.padding(top = 6.dp),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        categories.forEach { category ->
-            Tab(
-                selected = category.id == selectedCategoryId,
-                onClick = { onSelect(category.id) },
-                selectedContentColor = colors.accent,
-                unselectedContentColor = colors.secondaryText,
-                text = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = category.name,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        CountPill(
-                            count = category.count,
-                            compact = true,
-                            selected = category.id == selectedCategoryId,
-                        )
-                    }
-                },
-            )
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(18.dp),
+            color = colors.cardBackground,
+            border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.22f)),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenPicker)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Icons.Outlined.Category, contentDescription = null, tint = colors.accent)
+                Text(
+                    selectedCategory.name,
+                    modifier = Modifier.weight(1f),
+                    color = colors.onBackground,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                CountPill(count = selectedCategory.count, compact = true, selected = true)
+            }
         }
-        Tab(
-            selected = false,
-            onClick = onCreateCategory,
-            selectedContentColor = colors.accent,
-            unselectedContentColor = colors.secondaryText,
-            text = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Category", fontWeight = FontWeight.Bold)
-                }
-            },
+        HeaderActionButton(
+            icon = Icons.Filled.MoreVert,
+            contentDescription = "Manage categories",
+            onClick = onOpenManager,
         )
     }
 }
@@ -957,116 +1014,383 @@ private fun CategoryNameDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ManageCategoryDialog(
-    category: LibraryCategory,
-    onDismiss: () -> Unit,
-    onRename: (String) -> Unit,
-    onDelete: () -> Unit,
-) {
-    var name by remember(category.id) { mutableStateOf(category.name) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Category, contentDescription = null) },
-        title = { Text("Manage category") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Category name") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                )
-                Text(
-                    text = "${category.count} book${if (category.count == 1) "" else "s"} in this category.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onRename(name) },
-                enabled = name.trim().isNotBlank() && name.trim() != category.name,
-            ) {
-                Text("Rename")
-            }
-        },
-        dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
-                TextButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            }
-        },
-    )
-}
-
-@Composable
-private fun AssignCategoryDialog(
+private fun CategoryPickerBottomSheet(
+    title: String,
     categories: List<LibraryCategory>,
     onDismiss: () -> Unit,
-    onAssign: (String) -> Unit,
+    onChoose: (String) -> Unit,
     onCreateCategory: () -> Unit,
 ) {
+    var query by remember { mutableStateOf("") }
     val colors = LocalMIYUColors.current
-    AlertDialog(
+    val filteredCategories = remember(categories, query) {
+        categories.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+    }
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Label, contentDescription = null) },
-        title = { Text("Assign category") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEach { category ->
+        containerColor = colors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                color = colors.onBackground,
+            )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                placeholder = { Text("Search categories") },
+            )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(filteredCategories, key = { it.id }) { category ->
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { onAssign(category.id) },
-                        shape = RoundedCornerShape(14.dp),
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onChoose(category.id) },
+                        shape = RoundedCornerShape(16.dp),
                         color = colors.cardBackground,
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Icon(
-                                if (category.id == LibraryCategoryIds.UNCATEGORIZED) Icons.Outlined.Label else Icons.Filled.BookmarkAdded,
+                                if (category.id == LibraryCategoryIds.ALL) Icons.Filled.Category else Icons.Filled.BookmarkAdded,
                                 contentDescription = null,
                                 tint = colors.accent,
                             )
-                            Spacer(Modifier.width(12.dp))
                             Text(
                                 category.name,
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.onBackground,
                             )
                             CountPill(count = category.count, compact = true)
                         }
                     }
                 }
-                OutlinedButton(
-                    onClick = onCreateCategory,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("New category")
+            }
+            OutlinedButton(
+                onClick = onCreateCategory,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("New category")
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookOptionsBottomSheet(
+    book: Book,
+    categories: List<LibraryCategory>,
+    selectedCategoryId: String,
+    onDismiss: () -> Unit,
+    onChooseCategory: (String) -> Unit,
+    onApplyCategory: () -> Unit,
+    onCreateCategory: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenDetails: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId } ?: categories.first()
+    var showInlinePicker by remember { mutableStateOf(false) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                BookCover(book = book, modifier = Modifier.size(56.dp, 78.dp), cornerRadius = 12)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        book.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = colors.onBackground,
+                    )
+                    Text(
+                        book.author.takeIf { it.isNotBlank() } ?: "Unknown",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.secondaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = colors.cardBackground,
+                border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.18f)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showInlinePicker = true },
+                    ) {
+                        Text(
+                            "Category",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.secondaryText,
+                        )
+                        Text(
+                            selectedCategory.name,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.onBackground,
+                        )
+                    }
+                    HeaderActionButton(
+                        icon = Icons.Filled.Check,
+                        contentDescription = "Apply category",
+                        onClick = onApplyCategory,
+                    )
+                }
             }
-        },
-    )
+            OutlinedButton(
+                onClick = onOpenDetails,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Filled.MenuBook, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("View details")
+            }
+            OutlinedButton(
+                onClick = onDelete,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(8.dp))
+                Text("Delete book", color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+    if (showInlinePicker) {
+        CategoryPickerBottomSheet(
+            title = "Choose category",
+            categories = categories,
+            onDismiss = { showInlinePicker = false },
+            onChoose = {
+                onChooseCategory(it)
+                showInlinePicker = false
+            },
+            onCreateCategory = {
+                showInlinePicker = false
+                onCreateCategory()
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun CategoryManagerScreen(
+    categories: List<LibraryCategory>,
+    onBack: () -> Unit,
+    onCreateCategory: () -> Unit,
+    onSelectCategory: (String) -> Unit,
+    onDeleteCategories: (Set<String>) -> Unit,
+    onSetHidden: (Set<String>, Boolean) -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    var query by remember { mutableStateOf("") }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val filteredCategories = remember(categories, query) {
+        categories.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                HeaderActionButton(
+                    icon = if (selectedIds.isEmpty()) Icons.Filled.ArrowBack else Icons.Filled.Clear,
+                    contentDescription = if (selectedIds.isEmpty()) "Back" else "Cancel selection",
+                    onClick = {
+                        if (selectedIds.isEmpty()) onBack() else selectedIds = emptySet()
+                    },
+                )
+                Text(
+                    if (selectedIds.isEmpty()) "Categories" else "${selectedIds.size} selected",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+                    color = colors.onBackground,
+                )
+                if (selectedIds.isNotEmpty()) {
+                    val selectedCategories = categories.filter { it.id in selectedIds }
+                    val shouldHideSelected = selectedCategories.any { !it.isHidden }
+                    HeaderActionButton(
+                        icon = if (shouldHideSelected) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (shouldHideSelected) "Hide categories" else "Show categories",
+                        onClick = {
+                            onSetHidden(selectedIds, shouldHideSelected)
+                            selectedIds = emptySet()
+                        },
+                    )
+                    HeaderActionButton(
+                        icon = Icons.Filled.Delete,
+                        contentDescription = "Delete categories",
+                        onClick = {
+                            onDeleteCategories(selectedIds)
+                            selectedIds = emptySet()
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                placeholder = { Text("Search categories") },
+            )
+            Spacer(Modifier.height(14.dp))
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(filteredCategories, key = { it.id }) { category ->
+                    val isSelected = category.id in selectedIds
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = {
+                                    if (selectedIds.isNotEmpty()) {
+                                        selectedIds = if (isSelected) selectedIds - category.id else selectedIds + category.id
+                                    } else {
+                                        onSelectCategory(category.id)
+                                    }
+                                },
+                                onLongClick = {
+                                    selectedIds = if (isSelected) selectedIds - category.id else selectedIds + category.id
+                                },
+                            ),
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (isSelected) colors.accent.copy(alpha = 0.14f) else colors.cardBackground,
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) colors.accent.copy(alpha = 0.38f) else colors.secondaryText.copy(alpha = 0.16f),
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Icon(
+                                if (category.isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = null,
+                                tint = if (category.isHidden) colors.secondaryText else colors.accent,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    category.name,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.onBackground,
+                                )
+                                Text(
+                                    "${category.count} book${if (category.count == 1) "" else "s"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.secondaryText,
+                                )
+                            }
+                            if (selectedIds.isEmpty()) {
+                                HeaderActionButton(
+                                    icon = if (category.isHidden) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                    contentDescription = if (category.isHidden) "Show category" else "Hide category",
+                                    onClick = { onSetHidden(setOf(category.id), !category.isHidden) },
+                                )
+                            } else if (isSelected) {
+                                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = colors.accent)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        FloatingActionButton(
+            onClick = onCreateCategory,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 20.dp, bottom = 24.dp),
+            containerColor = colors.accent,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = "New category")
+        }
+    }
+}
+
+private const val LIBRARY_CATEGORY_TAG_PREFIX = "category:"
+
+private fun Book.primaryLibraryCategoryId(): String {
+    val category = tags
+        .asSequence()
+        .mapNotNull { tag ->
+            tag.takeIf { it.startsWith(LIBRARY_CATEGORY_TAG_PREFIX, ignoreCase = true) }
+                ?.substringAfter(':')
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+        }
+        .firstOrNull()
+    return category?.let(LibraryCategoryIds::custom) ?: LibraryCategoryIds.ALL
 }
 
 @Composable

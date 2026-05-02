@@ -40,6 +40,7 @@ data class LibraryCategory(
     val count: Int,
     val isSystem: Boolean = false,
     val isMutable: Boolean = false,
+    val isHidden: Boolean = false,
 )
 
 data class LibraryUiState(
@@ -71,13 +72,13 @@ class LibraryViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(allBooks, userPreferences.libraryCategories) { books, storedCategories ->
-                books to buildLibraryCategories(books, storedCategories)
+            combine(allBooks, userPreferences.libraryCategories, userPreferences.hiddenLibraryCategories) { books, storedCategories, hiddenCategories ->
+                books to buildLibraryCategories(books, storedCategories, hiddenCategories)
             }.collect { (books, categories) ->
                 _uiState.update { current ->
                     val existingIds = books.mapTo(mutableSetOf()) { it.id }
                     val selectedCategory = current.selectedCategoryId
-                        .takeIf { id -> categories.any { it.id == id } }
+                        .takeIf { id -> categories.any { it.id == id && !it.isHidden } }
                         ?: LibraryCategoryIds.ALL
                     current.copy(
                         books = books,
@@ -97,7 +98,6 @@ class LibraryViewModel @Inject constructor(
         // independent so a user can view "Reading" inside any custom category.
         list = when (state.selectedCategoryId) {
             LibraryCategoryIds.ALL -> list
-            LibraryCategoryIds.UNCATEGORIZED -> list.filter { it.libraryCategoryNames().isEmpty() }
             else -> state.selectedCategoryId.customCategoryName()?.let { name ->
                 list.filter { book -> book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) } }
             } ?: list
@@ -201,10 +201,17 @@ class LibraryViewModel @Inject constructor(
         if (oldName.equals(cleanName, ignoreCase = true)) return
         viewModelScope.launch {
             val existing = userPreferences.libraryCategories.first()
+            val hidden = userPreferences.hiddenLibraryCategories.first()
             if (existing.any { it.equals(cleanName, ignoreCase = true) }) return@launch
             userPreferences.setLibraryCategories(existing
                 .filterNot { it.equals(oldName, ignoreCase = true) }
                 .toSet() + cleanName)
+            userPreferences.setHiddenLibraryCategories(
+                hidden
+                    .filterNot { it.equals(oldName, ignoreCase = true) }
+                    .toSet()
+                    .let { names -> if (hidden.any { it.equals(oldName, ignoreCase = true) }) names + cleanName else names },
+            )
             bookRepository.getAllBooksOnce().forEach { book ->
                 if (book.libraryCategoryNames().any { it.equals(oldName, ignoreCase = true) }) {
                     bookRepository.updateBookTags(
@@ -228,7 +235,9 @@ class LibraryViewModel @Inject constructor(
         val name = categoryId.customCategoryName() ?: return
         viewModelScope.launch {
             val existing = userPreferences.libraryCategories.first()
+            val hidden = userPreferences.hiddenLibraryCategories.first()
             userPreferences.setLibraryCategories(existing.filterNot { it.equals(name, ignoreCase = true) }.toSet())
+            userPreferences.setHiddenLibraryCategories(hidden.filterNot { it.equals(name, ignoreCase = true) }.toSet())
             bookRepository.getAllBooksOnce().forEach { book ->
                 if (book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) }) {
                     bookRepository.updateBookTags(book.id, book.tags.removeLibraryCategory(name))
@@ -248,7 +257,7 @@ class LibraryViewModel @Inject constructor(
         if (selectedIds.isEmpty()) return
         viewModelScope.launch {
             val categoryName = categoryId.customCategoryName()
-            if (categoryId != LibraryCategoryIds.UNCATEGORIZED && categoryName == null) return@launch
+            if (categoryId != LibraryCategoryIds.ALL && categoryName == null) return@launch
             if (categoryName != null) {
                 val existing = userPreferences.libraryCategories.first()
                 if (existing.none { it.equals(categoryName, ignoreCase = true) }) {
@@ -258,18 +267,63 @@ class LibraryViewModel @Inject constructor(
             bookRepository.getAllBooksOnce()
                 .filter { it.id in selectedIds }
                 .forEach { book ->
-                    val nextTags = if (categoryId == LibraryCategoryIds.UNCATEGORIZED) {
+                    val nextTags = if (categoryId == LibraryCategoryIds.ALL) {
                         book.tags.removeAllLibraryCategories()
                     } else {
-                        book.tags.addLibraryCategory(categoryName.orEmpty())
+                        book.tags
+                            .removeAllLibraryCategories()
+                            .addLibraryCategory(categoryName.orEmpty())
                     }
                     bookRepository.updateBookTags(book.id, nextTags)
                 }
             _uiState.update {
                 it.copy(
                     selectedBookIds = emptySet(),
-                    selectedCategoryId = if (categoryName != null) LibraryCategoryIds.custom(categoryName) else LibraryCategoryIds.UNCATEGORIZED,
+                    selectedCategoryId = if (categoryName != null) LibraryCategoryIds.custom(categoryName) else LibraryCategoryIds.ALL,
                 )
+            }
+        }
+    }
+
+    fun assignBookToCategory(bookId: String, categoryId: String) {
+        viewModelScope.launch {
+            val categoryName = categoryId.customCategoryName()
+            if (categoryId != LibraryCategoryIds.ALL && categoryName == null) return@launch
+            if (categoryName != null) {
+                val existing = userPreferences.libraryCategories.first()
+                if (existing.none { it.equals(categoryName, ignoreCase = true) }) {
+                    userPreferences.setLibraryCategories(existing + categoryName)
+                }
+            }
+            val book = bookRepository.getBook(bookId) ?: return@launch
+            val nextTags = if (categoryId == LibraryCategoryIds.ALL) {
+                book.tags.removeAllLibraryCategories()
+            } else {
+                book.tags
+                    .removeAllLibraryCategories()
+                    .addLibraryCategory(categoryName.orEmpty())
+            }
+            bookRepository.updateBookTags(book.id, nextTags)
+        }
+    }
+
+    fun deleteSelectedBooks() {
+        val selectedIds = _uiState.value.selectedBookIds
+        if (selectedIds.isEmpty()) return
+        viewModelScope.launch {
+            selectedIds.forEach { bookRepository.deleteBook(it) }
+            _uiState.update { it.copy(selectedBookIds = emptySet()) }
+        }
+    }
+
+    fun setCategoryHidden(categoryId: String, hidden: Boolean) {
+        val name = categoryId.customCategoryName() ?: return
+        viewModelScope.launch {
+            val existing = userPreferences.hiddenLibraryCategories.first().toMutableSet()
+            if (hidden) existing.add(name) else existing.removeAll { it.equals(name, ignoreCase = true) }
+            userPreferences.setHiddenLibraryCategories(existing)
+            if (hidden && _uiState.value.selectedCategoryId == categoryId) {
+                _uiState.update { it.copy(selectedCategoryId = LibraryCategoryIds.ALL, selectedBookIds = emptySet()) }
             }
         }
     }
@@ -735,7 +789,6 @@ class LibraryViewModel @Inject constructor(
 
 object LibraryCategoryIds {
     const val ALL = "system:all"
-    const val UNCATEGORIZED = "system:uncategorized"
     private const val CUSTOM_PREFIX = "custom:"
 
     fun custom(name: String): String = "$CUSTOM_PREFIX${name.trim()}"
@@ -752,12 +805,16 @@ private const val LIBRARY_CATEGORY_TAG_PREFIX = "category:"
 private fun buildLibraryCategories(
     books: List<Book>,
     storedCategoryNames: Set<String>,
+    hiddenCategoryNames: Set<String>,
 ): List<LibraryCategory> {
     val discoveredNames = books.flatMap { it.libraryCategoryNames() }
     val customNames = (storedCategoryNames + discoveredNames)
         .mapNotNull(::sanitizeCategoryName)
         .distinctBy { it.lowercase() }
         .sortedBy { it.lowercase() }
+    val hiddenNames = hiddenCategoryNames
+        .mapNotNull(::sanitizeCategoryName)
+        .toSet()
 
     return buildList {
         add(
@@ -765,14 +822,6 @@ private fun buildLibraryCategories(
                 id = LibraryCategoryIds.ALL,
                 name = "All",
                 count = books.size,
-                isSystem = true,
-            ),
-        )
-        add(
-            LibraryCategory(
-                id = LibraryCategoryIds.UNCATEGORIZED,
-                name = "Uncategorized",
-                count = books.count { it.libraryCategoryNames().isEmpty() },
                 isSystem = true,
             ),
         )
@@ -785,6 +834,7 @@ private fun buildLibraryCategories(
                         book.libraryCategoryNames().any { it.equals(name, ignoreCase = true) }
                     },
                     isMutable = true,
+                    isHidden = hiddenNames.any { it.equals(name, ignoreCase = true) },
                 ),
             )
         }

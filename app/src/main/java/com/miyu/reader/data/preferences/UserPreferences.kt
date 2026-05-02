@@ -198,6 +198,18 @@ class UserPreferences @Inject constructor(
         }
     }
 
+    val hiddenLibraryCategories: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_HIDDEN_LIBRARY_CATEGORIES].orEmpty()
+    }
+
+    suspend fun setHiddenLibraryCategories(categories: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_HIDDEN_LIBRARY_CATEGORIES] = categories
+                .mapNotNull { name -> name.trim().takeIf(String::isNotBlank) }
+                .toSet()
+        }
+    }
+
     val sourcePinnedIds: Flow<Set<String>> = context.dataStore.data.map { prefs ->
         prefs[KEY_SOURCE_PINNED_IDS].orEmpty()
     }
@@ -321,6 +333,7 @@ class UserPreferences @Inject constructor(
             booleanPreferencesKey("storage_permission_auto_redirect_complete_v1")
         private val KEY_INITIAL_SETUP_COMPLETE = booleanPreferencesKey("initial_setup_complete_v1")
         private val KEY_LIBRARY_CATEGORIES = stringSetPreferencesKey("library_categories")
+        private val KEY_HIDDEN_LIBRARY_CATEGORIES = stringSetPreferencesKey("library_hidden_categories")
         private val KEY_SOURCE_PINNED_IDS = stringSetPreferencesKey("source_pinned_ids")
         private val KEY_SOURCE_LANGUAGE_FILTER = stringSetPreferencesKey("source_language_filter")
         private val KEY_LAST_USED_SOURCE_ID = stringPreferencesKey("last_used_source_id")
