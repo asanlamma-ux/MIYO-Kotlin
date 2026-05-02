@@ -309,6 +309,51 @@ fun ReaderScreen(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+
+            AnimatedVisibility(
+                visible = initialReaderDelayComplete && uiState.isLoading && uiState.chapterHtml.isNotEmpty(),
+                modifier = Modifier.matchParentSize(),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(bgColor.copy(alpha = 0.72f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = readerTheme.cardBackground.copy(alpha = 0.96f),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 10.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.4.dp,
+                                color = readerTheme.accent,
+                            )
+                            Column {
+                                Text(
+                                    "Loading chapter",
+                                    color = readerTheme.text,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                )
+                                Text(
+                                    "Please wait for the page to settle.",
+                                    color = readerTheme.secondaryText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ── Selection Toolbar ───────────────────────────────────────
