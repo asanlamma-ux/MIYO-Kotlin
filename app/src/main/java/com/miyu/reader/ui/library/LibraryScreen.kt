@@ -592,7 +592,7 @@ private fun EmptyLibraryState(
         },
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, bottom = 96.dp),
+            .padding(start = 24.dp, end = 24.dp, bottom = 96.dp),
     )
 }
 
