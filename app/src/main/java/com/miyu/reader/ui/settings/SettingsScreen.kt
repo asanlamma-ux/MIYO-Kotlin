@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
+import com.miyu.reader.domain.model.ReaderMode
 import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.domain.model.ThemeMode
@@ -756,6 +757,29 @@ fun ReaderSettingsScreen(
 
             SettingsSection(title = "Flow") {
                 ExpandableChoiceSetting(
+                    expanded = expandedSettingKey == "reader_mode",
+                    onExpandedChange = { expandedSettingKey = if (it) "reader_mode" else null },
+                    icon = Icons.Outlined.ViewColumn,
+                    title = "Reader Mode",
+                    subtitle = "Koodo-style scroll, single page, or double page layout.",
+                    accentColor = colors.accent,
+                    currentValue = when (uiState.readingSettings.readerMode) {
+                        ReaderMode.SCROLL -> "Scroll"
+                        ReaderMode.SINGLE -> "Single page"
+                        ReaderMode.DOUBLE -> "Double page"
+                    },
+                    choices = ReaderMode.entries,
+                    choiceLabel = {
+                        when (it) {
+                            ReaderMode.SCROLL -> "Scroll"
+                            ReaderMode.SINGLE -> "Single page"
+                            ReaderMode.DOUBLE -> "Double page"
+                        }
+                    },
+                    selectedChoice = uiState.readingSettings.readerMode,
+                    onChoiceSelected = viewModel::setReaderMode,
+                )
+                ExpandableChoiceSetting(
                     expanded = expandedSettingKey == "page_animation",
                     onExpandedChange = { expandedSettingKey = if (it) "page_animation" else null },
                     icon = Icons.Outlined.Tune,
@@ -864,6 +888,65 @@ fun ReaderSettingsScreen(
                     subtitle = "Prevent the device from sleeping during reading sessions.",
                     checked = uiState.readingSettings.keepScreenOn,
                     onCheckedChange = viewModel::setKeepScreenOn,
+                    accentColor = colors.accent,
+                )
+            }
+
+            SettingsSection(title = "Reader Chrome") {
+                SettingsToggle(
+                    icon = Icons.Outlined.Fullscreen,
+                    title = "Hide Top Controls",
+                    subtitle = "Keep the header controls out of the reader overlay.",
+                    checked = uiState.readingSettings.hideReaderHeader,
+                    onCheckedChange = viewModel::setHideReaderHeader,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.Fullscreen,
+                    title = "Hide Bottom Controls",
+                    subtitle = "Hide progress and quick tools from the reader overlay.",
+                    checked = uiState.readingSettings.hideReaderFooter,
+                    onCheckedChange = viewModel::setHideReaderFooter,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TouchApp,
+                    title = "Lock Reader Navigation",
+                    subtitle = "Disable edge taps and pull chapter navigation.",
+                    checked = uiState.readingSettings.readerNavLocked,
+                    onCheckedChange = viewModel::setReaderNavLocked,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TextFields,
+                    title = "Selection Tools Popup",
+                    subtitle = "Show MIYO tools after selecting reader text.",
+                    checked = uiState.readingSettings.selectionPopupEnabled,
+                    onCheckedChange = viewModel::setSelectionPopupEnabled,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.FormatIndentIncrease,
+                    title = "Show Page Border",
+                    subtitle = "Draw a subtle Koodo-style frame inside the reader.",
+                    checked = uiState.readingSettings.showPageBorder,
+                    onCheckedChange = viewModel::setShowPageBorder,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.MenuBook,
+                    title = "Overwrite Link Style",
+                    subtitle = "Normalize EPUB links to the active reader palette.",
+                    checked = uiState.readingSettings.overwriteLinkStyle,
+                    onCheckedChange = viewModel::setOverwriteLinkStyle,
+                    accentColor = colors.accent,
+                )
+                SettingsToggle(
+                    icon = Icons.Outlined.TextFields,
+                    title = "Overwrite Text Style",
+                    subtitle = "Force imported chapter text to use MIYO typography.",
+                    checked = uiState.readingSettings.overwriteTextStyle,
+                    onCheckedChange = viewModel::setOverwriteTextStyle,
                     accentColor = colors.accent,
                 )
             }

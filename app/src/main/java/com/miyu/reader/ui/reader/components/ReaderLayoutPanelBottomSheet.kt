@@ -91,6 +91,40 @@ fun ReaderLayoutPanelBottomSheet(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = MiyoSpacing.large)
             ) {
+                SectionHeader("READER MODE", Icons.Outlined.ViewColumn, readerTheme)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    ReaderMode.entries.forEach { mode ->
+                        val active = settings.readerMode == mode
+                        Chip(
+                            label = when (mode) {
+                                ReaderMode.SCROLL -> "Scroll"
+                                ReaderMode.SINGLE -> "Single page"
+                                ReaderMode.DOUBLE -> "Double page"
+                            },
+                            active = active,
+                            readerTheme = readerTheme,
+                            onClick = {
+                                onSettingsChanged(
+                                    settings.copy(
+                                        readerMode = mode,
+                                        readerColumnLayout = if (mode == ReaderMode.DOUBLE) {
+                                            ReaderColumnLayout.TWO
+                                        } else {
+                                            ReaderColumnLayout.SINGLE
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(MiyoSpacing.large))
+
                 SectionHeader("FLOW", Icons.Outlined.Tune, readerTheme)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -199,6 +233,76 @@ fun ReaderLayoutPanelBottomSheet(
                         )
                     }
                 }
+                Spacer(Modifier.height(MiyoSpacing.large))
+
+                SectionHeader(
+                    "KOODO CONTROLS",
+                    Icons.Outlined.Tune,
+                    readerTheme,
+                    hint = "Reader chrome and selection behavior ported from Koodo-style controls.",
+                )
+                ToggleRow(
+                    title = "Hide top controls",
+                    subtitle = "Keep the chapter header out of the reading space",
+                    icon = Icons.Outlined.Fullscreen,
+                    active = settings.hideReaderHeader,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(hideReaderHeader = !settings.hideReaderHeader)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Hide bottom controls",
+                    subtitle = "Hide progress and quick reader tools when controls open",
+                    icon = Icons.Outlined.Fullscreen,
+                    active = settings.hideReaderFooter,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(hideReaderFooter = !settings.hideReaderFooter)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Lock reader navigation",
+                    subtitle = "Disable edge taps and pull chapter changes",
+                    icon = Icons.Outlined.TouchApp,
+                    active = settings.readerNavLocked,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(readerNavLocked = !settings.readerNavLocked)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Selection tools popup",
+                    subtitle = "Show MIYO tools after text selection",
+                    icon = Icons.Outlined.TextFields,
+                    active = settings.selectionPopupEnabled,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(selectionPopupEnabled = !settings.selectionPopupEnabled)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Show page border",
+                    subtitle = "Add a subtle Koodo-style reading page frame",
+                    icon = Icons.Outlined.FormatIndentIncrease,
+                    active = settings.showPageBorder,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(showPageBorder = !settings.showPageBorder)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Overwrite link style",
+                    subtitle = "Normalize EPUB links to the reader palette",
+                    icon = Icons.Outlined.MenuBook,
+                    active = settings.overwriteLinkStyle,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(overwriteLinkStyle = !settings.overwriteLinkStyle)) },
+                )
+                Spacer(Modifier.height(MiyoSpacing.small))
+                ToggleRow(
+                    title = "Overwrite text style",
+                    subtitle = "Force imported chapter text to match typography settings",
+                    icon = Icons.Outlined.TextFields,
+                    active = settings.overwriteTextStyle,
+                    readerTheme = readerTheme,
+                    onToggle = { onSettingsChanged(settings.copy(overwriteTextStyle = !settings.overwriteTextStyle)) },
+                )
                 Spacer(Modifier.height(MiyoSpacing.large))
             }
         }

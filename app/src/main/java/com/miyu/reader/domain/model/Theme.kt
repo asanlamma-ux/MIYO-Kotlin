@@ -58,6 +58,9 @@ enum class MarginPreset { NARROW, MEDIUM, WIDE }
 enum class ReaderColumnLayout { SINGLE, TWO }
 
 @Keep
+enum class ReaderMode { SCROLL, SINGLE, DOUBLE }
+
+@Keep
 enum class TapZoneNavMode { SCROLL, CHAPTER }
 
 @Keep
@@ -66,6 +69,7 @@ enum class ReaderFlowMode { SCROLL, PAGED }
 @Keep
 @Serializable
 data class ReadingSettings(
+    val readerMode: ReaderMode = ReaderMode.SCROLL,
     val pageAnimation: PageAnimation = PageAnimation.SLIDE,
     val tapZonesEnabled: Boolean = true,
     val tapScrollPageRatio: Float = 0.82f,
@@ -84,6 +88,13 @@ data class ReadingSettings(
     val marginPreset: MarginPreset = MarginPreset.MEDIUM,
     val contentColumnWidth: Int? = 720,
     val readerColumnLayout: ReaderColumnLayout = ReaderColumnLayout.SINGLE,
+    val hideReaderHeader: Boolean = false,
+    val hideReaderFooter: Boolean = false,
+    val readerNavLocked: Boolean = false,
+    val selectionPopupEnabled: Boolean = true,
+    val showPageBorder: Boolean = false,
+    val overwriteLinkStyle: Boolean = true,
+    val overwriteTextStyle: Boolean = true,
 )
 
 @Keep

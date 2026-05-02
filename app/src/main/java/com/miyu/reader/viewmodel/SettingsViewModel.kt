@@ -149,6 +149,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setReaderMode(mode: ReaderMode) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(
+                current.copy(
+                    readerMode = mode,
+                    readerColumnLayout = if (mode == ReaderMode.DOUBLE) ReaderColumnLayout.TWO else ReaderColumnLayout.SINGLE,
+                ),
+            )
+        }
+    }
+
     fun setTapZonesEnabled(enabled: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.readingSettings
@@ -219,6 +231,55 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setHideReaderHeader(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(hideReaderHeader = enabled))
+        }
+    }
+
+    fun setHideReaderFooter(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(hideReaderFooter = enabled))
+        }
+    }
+
+    fun setReaderNavLocked(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(readerNavLocked = enabled))
+        }
+    }
+
+    fun setSelectionPopupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(selectionPopupEnabled = enabled))
+        }
+    }
+
+    fun setShowPageBorder(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(showPageBorder = enabled))
+        }
+    }
+
+    fun setOverwriteLinkStyle(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(overwriteLinkStyle = enabled))
+        }
+    }
+
+    fun setOverwriteTextStyle(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.readingSettings
+            preferences.setReadingSettings(current.copy(overwriteTextStyle = enabled))
+        }
+    }
+
     fun setReaderThemeId(id: String) {
         viewModelScope.launch { preferences.setReaderThemeId(id) }
     }
@@ -264,6 +325,7 @@ class SettingsViewModel @Inject constructor(
             .put(
                 "reading",
                 JSONObject()
+                    .put("readerMode", reading.readerMode.name)
                     .put("pageAnimation", reading.pageAnimation.name)
                     .put("tapZonesEnabled", reading.tapZonesEnabled)
                     .put("tapScrollPageRatio", reading.tapScrollPageRatio)
@@ -281,7 +343,14 @@ class SettingsViewModel @Inject constructor(
                     .put("readingFlowMode", reading.readingFlowMode.name)
                     .put("marginPreset", reading.marginPreset.name)
                     .put("contentColumnWidth", reading.contentColumnWidth ?: JSONObject.NULL)
-                    .put("readerColumnLayout", reading.readerColumnLayout.name),
+                    .put("readerColumnLayout", reading.readerColumnLayout.name)
+                    .put("hideReaderHeader", reading.hideReaderHeader)
+                    .put("hideReaderFooter", reading.hideReaderFooter)
+                    .put("readerNavLocked", reading.readerNavLocked)
+                    .put("selectionPopupEnabled", reading.selectionPopupEnabled)
+                    .put("showPageBorder", reading.showPageBorder)
+                    .put("overwriteLinkStyle", reading.overwriteLinkStyle)
+                    .put("overwriteTextStyle", reading.overwriteTextStyle),
             )
             .toString(2)
     }
@@ -309,6 +378,7 @@ class SettingsViewModel @Inject constructor(
         )
 
         val importedReading = ReadingSettings(
+            readerMode = enumOrDefault(readingJson.optString("readerMode"), defaultReading.readerMode),
             pageAnimation = enumOrDefault(readingJson.optString("pageAnimation"), defaultReading.pageAnimation),
             tapZonesEnabled = readingJson.optBoolean("tapZonesEnabled", defaultReading.tapZonesEnabled),
             tapScrollPageRatio = readingJson.optDouble("tapScrollPageRatio", defaultReading.tapScrollPageRatio.toDouble()).toFloat(),
@@ -335,6 +405,13 @@ class SettingsViewModel @Inject constructor(
                 defaultReading.contentColumnWidth
             },
             readerColumnLayout = enumOrDefault(readingJson.optString("readerColumnLayout"), defaultReading.readerColumnLayout),
+            hideReaderHeader = readingJson.optBoolean("hideReaderHeader", defaultReading.hideReaderHeader),
+            hideReaderFooter = readingJson.optBoolean("hideReaderFooter", defaultReading.hideReaderFooter),
+            readerNavLocked = readingJson.optBoolean("readerNavLocked", defaultReading.readerNavLocked),
+            selectionPopupEnabled = readingJson.optBoolean("selectionPopupEnabled", defaultReading.selectionPopupEnabled),
+            showPageBorder = readingJson.optBoolean("showPageBorder", defaultReading.showPageBorder),
+            overwriteLinkStyle = readingJson.optBoolean("overwriteLinkStyle", defaultReading.overwriteLinkStyle),
+            overwriteTextStyle = readingJson.optBoolean("overwriteTextStyle", defaultReading.overwriteTextStyle),
         )
 
         preferences.setThemeMode(enumOrDefault(snapshot.optString("themeMode"), ThemeMode.SYSTEM))

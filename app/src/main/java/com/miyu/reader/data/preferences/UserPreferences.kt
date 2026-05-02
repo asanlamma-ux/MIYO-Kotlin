@@ -75,6 +75,7 @@ class UserPreferences @Inject constructor(
     val readingSettings: Flow<ReadingSettings> = context.dataStore.data.map { prefs ->
         val defaults = ReadingSettings()
         ReadingSettings(
+            readerMode = ReaderMode.valueOf(prefs[KEY_READER_MODE] ?: defaults.readerMode.name),
             pageAnimation = PageAnimation.valueOf(prefs[KEY_PAGE_ANIMATION] ?: defaults.pageAnimation.name),
             tapZonesEnabled = prefs[KEY_TAP_ZONES_ENABLED] ?: defaults.tapZonesEnabled,
             tapScrollPageRatio = prefs[KEY_TAP_SCROLL_RATIO] ?: defaults.tapScrollPageRatio,
@@ -93,11 +94,19 @@ class UserPreferences @Inject constructor(
             marginPreset = MarginPreset.valueOf(prefs[KEY_MARGIN_PRESET] ?: defaults.marginPreset.name),
             contentColumnWidth = prefs[KEY_COLUMN_WIDTH] ?: defaults.contentColumnWidth,
             readerColumnLayout = ReaderColumnLayout.valueOf(prefs[KEY_COLUMN_LAYOUT] ?: defaults.readerColumnLayout.name),
+            hideReaderHeader = prefs[KEY_HIDE_READER_HEADER] ?: defaults.hideReaderHeader,
+            hideReaderFooter = prefs[KEY_HIDE_READER_FOOTER] ?: defaults.hideReaderFooter,
+            readerNavLocked = prefs[KEY_READER_NAV_LOCKED] ?: defaults.readerNavLocked,
+            selectionPopupEnabled = prefs[KEY_SELECTION_POPUP_ENABLED] ?: defaults.selectionPopupEnabled,
+            showPageBorder = prefs[KEY_SHOW_PAGE_BORDER] ?: defaults.showPageBorder,
+            overwriteLinkStyle = prefs[KEY_OVERWRITE_LINK_STYLE] ?: defaults.overwriteLinkStyle,
+            overwriteTextStyle = prefs[KEY_OVERWRITE_TEXT_STYLE] ?: defaults.overwriteTextStyle,
         )
     }
 
     suspend fun setReadingSettings(settings: ReadingSettings) {
         context.dataStore.edit {
+            it[KEY_READER_MODE] = settings.readerMode.name
             it[KEY_PAGE_ANIMATION] = settings.pageAnimation.name
             it[KEY_TAP_ZONES_ENABLED] = settings.tapZonesEnabled
             it[KEY_TAP_SCROLL_RATIO] = settings.tapScrollPageRatio
@@ -118,6 +127,13 @@ class UserPreferences @Inject constructor(
             if (settings.contentColumnWidth != null) it[KEY_COLUMN_WIDTH] = settings.contentColumnWidth
             else it.remove(KEY_COLUMN_WIDTH)
             it[KEY_COLUMN_LAYOUT] = settings.readerColumnLayout.name
+            it[KEY_HIDE_READER_HEADER] = settings.hideReaderHeader
+            it[KEY_HIDE_READER_FOOTER] = settings.hideReaderFooter
+            it[KEY_READER_NAV_LOCKED] = settings.readerNavLocked
+            it[KEY_SELECTION_POPUP_ENABLED] = settings.selectionPopupEnabled
+            it[KEY_SHOW_PAGE_BORDER] = settings.showPageBorder
+            it[KEY_OVERWRITE_LINK_STYLE] = settings.overwriteLinkStyle
+            it[KEY_OVERWRITE_TEXT_STYLE] = settings.overwriteTextStyle
         }
     }
 
@@ -238,6 +254,7 @@ class UserPreferences @Inject constructor(
         private val KEY_PARAGRAPH_SPACING = floatPreferencesKey("paragraph_spacing")
         private val KEY_TEXT_ALIGN = stringPreferencesKey("text_align")
         private val KEY_FONT_WEIGHT = intPreferencesKey("font_weight")
+        private val KEY_READER_MODE = stringPreferencesKey("reader_mode_v1")
         private val KEY_PAGE_ANIMATION = stringPreferencesKey("page_animation")
         private val KEY_TAP_ZONES_ENABLED = booleanPreferencesKey("tap_zones")
         private val KEY_TAP_SCROLL_RATIO = floatPreferencesKey("tap_scroll_ratio")
@@ -256,6 +273,13 @@ class UserPreferences @Inject constructor(
         private val KEY_MARGIN_PRESET = stringPreferencesKey("margin_preset")
         private val KEY_COLUMN_WIDTH = intPreferencesKey("column_width")
         private val KEY_COLUMN_LAYOUT = stringPreferencesKey("column_layout")
+        private val KEY_HIDE_READER_HEADER = booleanPreferencesKey("hide_reader_header")
+        private val KEY_HIDE_READER_FOOTER = booleanPreferencesKey("hide_reader_footer")
+        private val KEY_READER_NAV_LOCKED = booleanPreferencesKey("reader_nav_locked")
+        private val KEY_SELECTION_POPUP_ENABLED = booleanPreferencesKey("selection_popup_enabled")
+        private val KEY_SHOW_PAGE_BORDER = booleanPreferencesKey("show_page_border")
+        private val KEY_OVERWRITE_LINK_STYLE = booleanPreferencesKey("overwrite_link_style")
+        private val KEY_OVERWRITE_TEXT_STYLE = booleanPreferencesKey("overwrite_text_style")
         private val KEY_LAST_BOOK_ID = stringPreferencesKey("last_book_id")
         // v2 intentionally ignores stale values from early broken builds where
         // the picker could persist Night Mode as the apparent first-run theme.
@@ -281,6 +305,7 @@ class UserPreferences @Inject constructor(
             KEY_FONT_FAMILY,
             KEY_FONT_SIZE,
             KEY_LINE_HEIGHT,
+            KEY_READER_MODE,
             KEY_PAGE_ANIMATION,
             KEY_TAP_ZONES_ENABLED,
             KEY_READING_FLOW_MODE,

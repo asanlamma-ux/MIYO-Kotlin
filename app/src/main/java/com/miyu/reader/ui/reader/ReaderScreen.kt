@@ -65,6 +65,7 @@ import com.miyu.reader.viewmodel.ReaderViewModel
 import com.miyu.reader.domain.model.MarginPreset
 import com.miyu.reader.domain.model.PageAnimation
 import com.miyu.reader.domain.model.ReaderColumnLayout
+import com.miyu.reader.domain.model.ReaderMode
 import com.miyu.reader.domain.model.TapZoneNavMode
 import com.miyu.reader.domain.model.TextAlign
 import com.miyu.reader.viewmodel.ReaderTermDetail
@@ -111,6 +112,12 @@ fun ReaderScreen(
         if (minutes > 0) {
             delay(minutes.toLong() * 60_000L)
             sleepTimerExpired = true
+        }
+    }
+
+    LaunchedEffect(readingSettings.selectionPopupEnabled) {
+        if (!readingSettings.selectionPopupEnabled) {
+            viewModel.clearSelection()
         }
     }
 
@@ -211,21 +218,28 @@ fun ReaderScreen(
                 fontSize = typography.fontSize,
                 lineHeight = typography.lineHeight,
                 textAlign = typography.textAlign,
+                readerMode = readingSettings.readerMode,
                 marginPreset = readingSettings.marginPreset,
                 contentColumnWidth = readingSettings.contentColumnWidth,
                 readerColumnLayout = readingSettings.readerColumnLayout,
                 pageAnimation = readingSettings.pageAnimation,
-                tapZonesEnabled = readingSettings.tapZonesEnabled,
+                tapZonesEnabled = readingSettings.tapZonesEnabled && !readingSettings.readerNavLocked,
                 tapScrollPageRatio = readingSettings.tapScrollPageRatio,
                 tapZoneNavMode = readingSettings.tapZoneNavMode,
                 bionicReading = readingSettings.bionicReading,
                 autoAdvanceChapter = readingSettings.autoAdvanceChapter,
+                navigationLocked = readingSettings.readerNavLocked,
+                selectionPopupEnabled = readingSettings.selectionPopupEnabled,
+                showPageBorder = readingSettings.showPageBorder,
+                overwriteLinkStyle = readingSettings.overwriteLinkStyle,
+                overwriteTextStyle = readingSettings.overwriteTextStyle,
             )
 
             AndroidView(
                 factory = { context ->
                     ReaderWebView(context).apply {
                         volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
+                        suppressSystemSelectionToolbar = readingSettings.selectionPopupEnabled
                         onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
                         isFocusable = true
                         isFocusableInTouchMode = true
@@ -257,6 +271,7 @@ fun ReaderScreen(
                 },
                 update = { webView ->
                     webView.volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
+                    webView.suppressSystemSelectionToolbar = readingSettings.selectionPopupEnabled
                     webView.onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
                     webView.setBackgroundColor(bgColor.toArgb())
                     val restorePercent = uiState.chapterScrollPercent.coerceIn(0f, 1f)
@@ -288,7 +303,7 @@ fun ReaderScreen(
         }
 
         // ── Selection Toolbar ───────────────────────────────────────
-        if (uiState.selection != null) {
+        if (readingSettings.selectionPopupEnabled && uiState.selection != null) {
             SelectionToolbar(
                 selection = uiState.selection,
                 readerTheme = readerTheme,
@@ -362,7 +377,7 @@ fun ReaderScreen(
 
         // ── Top controls overlay ────────────────────────────────────
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.selection == null,
+            visible = uiState.showControls && uiState.selection == null && !readingSettings.hideReaderHeader,
             enter = fadeIn() + slideInVertically(),
             exit = fadeOut() + slideOutVertically(),
             modifier = Modifier.align(Alignment.TopCenter),
@@ -431,7 +446,7 @@ fun ReaderScreen(
 
         // ── Bottom controls overlay ─────────────────────────────────
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.selection == null,
+            visible = uiState.showControls && uiState.selection == null && !readingSettings.hideReaderFooter,
             enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -861,6 +876,7 @@ private fun buildReaderHtml(
     fontSize: Float,
     lineHeight: Float,
     textAlign: TextAlign,
+    readerMode: ReaderMode,
     marginPreset: MarginPreset,
     contentColumnWidth: Int?,
     readerColumnLayout: ReaderColumnLayout,
@@ -870,14 +886,38 @@ private fun buildReaderHtml(
     tapZoneNavMode: TapZoneNavMode,
     bionicReading: Boolean,
     autoAdvanceChapter: Boolean,
+    navigationLocked: Boolean,
+    selectionPopupEnabled: Boolean,
+    showPageBorder: Boolean,
+    overwriteLinkStyle: Boolean,
+    overwriteTextStyle: Boolean,
 ): String {
     val scrollBehavior = if (pageAnimation == PageAnimation.NONE) "auto" else "smooth"
-    val maxWidthCss = contentColumnWidth?.let { "${it.coerceIn(360, 1200)}px" } ?: "none"
-    val columnCount = if (readerColumnLayout == ReaderColumnLayout.TWO) 2 else 1
+    val modeDefaultWidth = when (readerMode) {
+        ReaderMode.SCROLL -> contentColumnWidth
+        ReaderMode.SINGLE -> contentColumnWidth ?: 640
+        ReaderMode.DOUBLE -> contentColumnWidth ?: 960
+    }
+    val maxWidthCss = modeDefaultWidth?.let { "${it.coerceIn(360, 1200)}px" } ?: "none"
+    val columnCount = when (readerMode) {
+        ReaderMode.DOUBLE -> 2
+        else -> if (readerColumnLayout == ReaderColumnLayout.TWO) 2 else 1
+    }
+    val bodyClasses = buildList {
+        if (showPageBorder) add("miyu-page-border")
+        add("miyu-mode-${readerMode.name.lowercase()}")
+    }.joinToString(" ")
+    val bodyTextRule = if (overwriteTextStyle) "color: $textColor !important;" else "color: $textColor;"
+    val nestedTextRule = if (overwriteTextStyle) "body :not(a) { color: $textColor !important; }" else ""
+    val linkRule = if (overwriteLinkStyle) {
+        "a { color: $accentColor !important; text-decoration: none; border-bottom: 1px solid rgba(154, 119, 71, 0.35); }"
+    } else {
+        "a { color: inherit; }"
+    }
     val themeCss = """
 html, body {
   background: $bgColor !important;
-  color: $textColor !important;
+  $bodyTextRule
   font-family: 'Georgia', serif;
   font-size: ${fontSize.toInt()}px;
   line-height: $lineHeight;
@@ -898,8 +938,13 @@ body {
   column-gap: 36px;
   transform: translateY(0px);
 }
-body :not(a) { color: $textColor !important; }
-a { color: $accentColor !important; text-decoration: none; }
+$nestedTextRule
+$linkRule
+body.miyu-page-border {
+  outline: 1px solid rgba(154, 119, 71, 0.26);
+  outline-offset: -10px;
+  box-shadow: inset 0 0 0 1px rgba(154, 119, 71, 0.12);
+}
 img { max-width: 100%; height: auto; }
 .miyu-term {
   border-bottom: 2px dotted $accentColor;
@@ -967,11 +1012,11 @@ blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1e
 $themeCss
 </style>
 </head>
-<body>
+<body class="$bodyClasses">
 	<section class="miyu-chapter" data-miyu-chapter-index="$chapterIndex">
 	$bodyContent
 	</section>
-	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter, chapterIndex, totalChapters)}
+	${readerBridgeScript(tapZonesEnabled, tapScrollPageRatio, tapZoneNavMode, bionicReading, autoAdvanceChapter, navigationLocked, selectionPopupEnabled, chapterIndex, totalChapters)}
 	</body>
 </html>
 """.trimIndent()
@@ -999,12 +1044,16 @@ private fun readerBridgeScript(
     tapZoneNavMode: TapZoneNavMode,
     bionicReading: Boolean,
     autoAdvanceChapter: Boolean,
+    navigationLocked: Boolean,
+    selectionPopupEnabled: Boolean,
     chapterIndex: Int,
     totalChapters: Int,
 ): String {
     val tapZones = if (tapZonesEnabled) "true" else "false"
     val bionic = if (bionicReading) "true" else "false"
     val autoAdvance = if (autoAdvanceChapter) "true" else "false"
+    val navLocked = if (navigationLocked) "true" else "false"
+    val selectionPopup = if (selectionPopupEnabled) "true" else "false"
     val scrollRatio = tapScrollPageRatio.coerceIn(0.25f, 1f)
     val navMode = tapZoneNavMode.name
     val initialChapterIndex = chapterIndex.coerceAtLeast(0)
@@ -1029,8 +1078,9 @@ document.addEventListener('click', function(event) {
         return;
     }
     var tapZonesEnabled = $tapZones;
+    var navigationLocked = $navLocked;
     var navMode = "$navMode";
-    if (tapZonesEnabled) {
+    if (tapZonesEnabled && !navigationLocked) {
         var x = event.clientX || 0;
         var width = window.innerWidth || document.documentElement.clientWidth || 1;
         if (x < width * 0.24 || x > width * 0.76) {
@@ -1083,6 +1133,7 @@ function originalTextForSelection(selection) {
 }
 
 document.addEventListener('selectionchange', function() {
+    if (!$selectionPopup) return;
     if (window.__miyuSelectionTimer) {
         clearTimeout(window.__miyuSelectionTimer);
     }
@@ -1118,6 +1169,7 @@ document.addEventListener('selectionchange', function() {
 	    var lastProgressPost = 0;
 	    var loadedThroughChapterIndex = $initialChapterIndex;
 	    var totalChapters = $safeTotalChapters;
+	    var navigationLocked = $navLocked;
 	    var appendRequestInFlight = false;
 	    var appendLoader = null;
 	    var touchStartY = 0;
@@ -1209,7 +1261,7 @@ document.addEventListener('selectionchange', function() {
 	        document.body.style.transform = 'translateY(' + offset + 'px)';
 	    }
 	    function maybeRequestNextChapter(force) {
-	        if (!$autoAdvance || appendRequestInFlight) return;
+	        if (!$autoAdvance || navigationLocked || appendRequestInFlight) return;
 	        if (!hasNextChapter()) return;
 	        if (force) {
 	            if (remainingScroll() > 28) return;
@@ -1278,6 +1330,7 @@ document.addEventListener('selectionchange', function() {
 	        var currentY = event.touches && event.touches.length ? event.touches[0].clientY : touchStartY;
 	        var pullUp = Math.max(0, touchStartY - currentY);
 	        var pullDown = Math.max(0, currentY - touchStartY);
+	        if (navigationLocked) return;
 	        var nextEligible = remainingScroll() <= 28 && hasNextChapter();
 	        var previousEligible = currentScrollTop() <= 2 && hasPreviousChapter();
 	        if (nextEligible && pullUp > 18) {
@@ -1365,11 +1418,14 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 private class ReaderWebView(context: Context) : WebView(context) {
     var volumeNavigationEnabled: Boolean = false
+    var suppressSystemSelectionToolbar: Boolean = true
     var onVolumeNavigation: ((Int) -> Unit)? = null
 
-    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = null
+    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
+        if (suppressSystemSelectionToolbar) null else super.startActionMode(callback)
 
-    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? =
+        if (suppressSystemSelectionToolbar) null else super.startActionMode(callback, type)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (volumeNavigationEnabled && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
