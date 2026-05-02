@@ -5,6 +5,8 @@ import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePlugin
 import com.miyu.reader.domain.model.NovelSourcePluginItem
+import com.miyu.reader.domain.model.OnlineChapterContent
+import com.miyu.reader.domain.model.OnlineChapterSummary
 import com.miyu.reader.domain.model.OnlineNovelDetails
 import com.miyu.reader.domain.model.OnlineNovelProvider
 import com.miyu.reader.domain.model.OnlineNovelProviderId
@@ -82,6 +84,13 @@ class NovelSourcePluginRegistry @Inject constructor(
     suspend fun details(summary: OnlineNovelSummary): OnlineNovelDetails =
         plugin(summary.providerId.toSourcePluginId()).parseNovel(summary)
 
+    suspend fun chapterContent(
+        sourceId: String,
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent =
+        plugin(sourceId).fetchChapterContent(novel, chapter)
+
     suspend fun downloadAsEpub(
         sourceId: String,
         novel: OnlineNovelDetails,
@@ -121,6 +130,12 @@ private class BuiltInNovelSourcePlugin(
 
     override suspend fun parseNovel(summary: OnlineNovelSummary): OnlineNovelDetails =
         repository.getDetails(summary)
+
+    override suspend fun fetchChapterContent(
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent =
+        repository.getChapterContent(novel, chapter)
 
     override suspend fun downloadAsEpub(
         novel: OnlineNovelDetails,

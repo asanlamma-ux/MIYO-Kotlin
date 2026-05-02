@@ -228,7 +228,6 @@ fun LibraryScreen(
             LibraryCategorySelectorRow(
                 selectedCategory = selectedCategory,
                 onOpenPicker = { showCategoryPicker = true },
-                onOpenManager = { showCategoryManager = true },
             )
 
             Spacer(Modifier.height(6.dp))
@@ -433,7 +432,6 @@ private fun LibraryToolbar(
                     onOpenSettings = onOpenSettings,
                     onOpenThemePicker = onOpenThemePicker,
                     onExportData = onSaveAndExport,
-                    onImportData = onSaveAndExport,
                     onAbout = onAbout,
                     extraItems = { dismiss ->
                         DropdownMenuItem(
@@ -594,7 +592,6 @@ private fun LibrarySearchBar(
 private fun LibraryCategorySelectorRow(
     selectedCategory: LibraryCategory,
     onOpenPicker: () -> Unit,
-    onOpenManager: () -> Unit,
 ) {
     val colors = LocalMIYUColors.current
     Row(
@@ -630,11 +627,6 @@ private fun LibraryCategorySelectorRow(
                 CountPill(count = selectedCategory.count, compact = true, selected = true)
             }
         }
-        HeaderActionButton(
-            icon = Icons.Filled.MoreVert,
-            contentDescription = "Manage categories",
-            onClick = onOpenManager,
-        )
     }
 }
 

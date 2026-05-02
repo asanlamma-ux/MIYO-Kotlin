@@ -6,7 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,19 +33,19 @@ import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.MenuBook
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,20 +56,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.miyu.reader.domain.model.Book
 import com.miyu.reader.domain.model.ReadingStatus
 import com.miyu.reader.ui.components.BookCover
+import com.miyu.reader.ui.core.components.MiyoNovelDetailsBottomDock
+import com.miyu.reader.ui.core.components.MiyoNovelDetailsScaffold
 import com.miyu.reader.ui.core.components.MiyoSectionCard
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
@@ -90,6 +87,7 @@ fun BookDetailsScreen(
     val colors = LocalMIYUColors.current
     val context = LocalContext.current
     var selectedChapterIndexes by remember(state.book?.id) { mutableStateOf<Set<Int>>(emptySet()) }
+    var showChapterSheet by remember(state.book?.id) { mutableStateOf(false) }
 
     val coverPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -101,51 +99,40 @@ fun BookDetailsScreen(
         viewModel.updateBookCover(uri)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        state.book?.coverUri?.let { coverUri ->
-            AsyncImage(
-                model = coverUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(34.dp),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to colors.background.copy(alpha = 0.54f),
-                        0.2f to colors.background.copy(alpha = 0.84f),
-                        1f to colors.background.copy(alpha = 0.97f),
-                    ),
-                ),
-        )
-
-        LibraryWorkspaceSurface {
-            if (state.isLoading && state.book == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = colors.accent)
-                }
-                return@LibraryWorkspaceSurface
-            }
-
-            WorkspaceExitButton(label = "Exit book details", onClick = onBack)
-
+    MiyoNovelDetailsScaffold(
+        coverModel = state.book?.coverUri,
+        onBack = onBack,
+        bottomBar = {
             state.book?.let { book ->
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
-                ) {
-                    item {
+                MiyoNovelDetailsBottomDock(
+                    onOpenChapters = { showChapterSheet = true },
+                    primaryLabel = "Continue",
+                    onPrimaryAction = { onOpenReader(book.id, null) },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    primaryEnabled = !state.isLoading,
+                )
+            }
+        },
+    ) {
+        if (state.isLoading && state.book == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = colors.accent)
+            }
+            return@MiyoNovelDetailsScaffold
+        }
+
+        state.book?.let { book ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 4.dp, bottom = 124.dp),
+                verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+            ) {
+                item {
+                    Box(modifier = Modifier.padding(horizontal = MiyoSpacing.medium)) {
                         BookHeroCard(
                             book = book,
                             fileSizeBytes = state.fileSizeBytes,
                             language = state.language,
-                            onRead = { onOpenReader(book.id, null) },
                             onChangeCover = { coverPickerLauncher.launch(arrayOf("image/*")) },
                             onDelete = {
                                 viewModel.deleteBook()
@@ -153,105 +140,97 @@ fun BookDetailsScreen(
                             },
                         )
                     }
+                }
+                item {
+                    ReadingStatusRow(
+                        activeStatus = book.readingStatus,
+                        onSelect = viewModel::setReadingStatus,
+                    )
+                }
+                item {
+                    DetailSectionCard(title = "Overview") {
+                        val description = state.description.ifBlank {
+                            "No publisher description was embedded in this EPUB."
+                        }
+                        Text(
+                            description,
+                            color = colors.onBackground,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        MetadataLine("Publisher", state.publisher ?: "Unknown")
+                        MetadataLine("Published", state.publishDate ?: "Unknown")
+                        MetadataLine("Storage", File(book.filePath).parentFile?.name ?: "Miyo")
+                        MetadataLine("Progress", "${book.progress.toInt()}% · Chapter ${book.currentChapter + 1}")
+                    }
+                }
+                if (state.subjects.isNotEmpty()) {
                     item {
-                        ReadingStatusRow(
-                            activeStatus = book.readingStatus,
-                            onSelect = viewModel::setReadingStatus,
+                        DetailSectionCard(title = "Subjects") {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                state.subjects.take(6).forEach { subject ->
+                                    AssistChip(onClick = {}, label = { Text(subject) }, enabled = false)
+                                }
+                            }
+                        }
+                    }
+                }
+                item {
+                    DetailSectionCard(title = "Table of Contents") {
+                        Text(
+                            if (state.chapters.isEmpty()) {
+                                "No table of contents could be extracted from this EPUB."
+                            } else {
+                                "${state.chapters.size} chapters available."
+                            },
+                            color = colors.secondaryText,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+                }
+                state.errorMessage?.let { message ->
                     item {
-                        DetailSectionCard(title = "Overview") {
-                            val description = state.description.ifBlank {
-                                "No publisher description was embedded in this EPUB."
-                            }
+                        DetailSectionCard(title = "Issue") {
                             Text(
-                                description,
-                                color = colors.onBackground,
+                                message,
+                                color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
-                            MetadataLine("Publisher", state.publisher ?: "Unknown")
-                            MetadataLine("Published", state.publishDate ?: "Unknown")
-                            MetadataLine("Storage", File(book.filePath).parentFile?.name ?: "Miyo")
-                            MetadataLine("Progress", "${book.progress.toInt()}% · Chapter ${book.currentChapter + 1}")
-                        }
-                    }
-                    if (state.subjects.isNotEmpty()) {
-                        item {
-                            DetailSectionCard(title = "Subjects") {
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    state.subjects.take(6).forEach { subject ->
-                                        AssistChip(onClick = {}, label = { Text(subject) }, enabled = false)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item {
-                        DetailSectionCard(title = "Table of Contents") {
-                            if (state.chapters.isEmpty()) {
-                                Text(
-                                    "No table of contents could be extracted from this EPUB.",
-                                    color = colors.secondaryText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (selectedChapterIndexes.isNotEmpty()) {
-                                        ChapterSelectionToolbar(
-                                            selectedCount = selectedChapterIndexes.size,
-                                            onMarkRead = {
-                                                viewModel.markChaptersRead(selectedChapterIndexes)
-                                                selectedChapterIndexes = emptySet()
-                                            },
-                                            onMarkUnread = {
-                                                viewModel.markChaptersUnread(selectedChapterIndexes)
-                                                selectedChapterIndexes = emptySet()
-                                            },
-                                            onSelectRange = {
-                                                selectedChapterIndexes = expandChapterRange(state.chapters, selectedChapterIndexes)
-                                            },
-                                            onClear = { selectedChapterIndexes = emptySet() },
-                                        )
-                                    }
-                                    state.chapters.forEach { chapter ->
-                                        TocRow(
-                                            chapter = chapter,
-                                            selected = chapter.index in selectedChapterIndexes,
-                                            progressPercent = chapterProgressPercent(book, chapter.index),
-                                            onClick = {
-                                                if (selectedChapterIndexes.isEmpty()) {
-                                                    onOpenReader(book.id, chapter.index)
-                                                } else {
-                                                    selectedChapterIndexes = selectedChapterIndexes.toggle(chapter.index)
-                                                }
-                                            },
-                                            onLongClick = {
-                                                selectedChapterIndexes = selectedChapterIndexes.toggle(chapter.index)
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    state.errorMessage?.let { message ->
-                        item {
-                            DetailSectionCard(title = "Issue") {
-                                Text(
-                                    message,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    state.book?.takeIf { showChapterSheet }?.let { book ->
+        BookChapterSheet(
+            chapters = state.chapters,
+            currentBook = book,
+            selectedChapterIndexes = selectedChapterIndexes,
+            onDismiss = { showChapterSheet = false },
+            onToggleSelection = { index -> selectedChapterIndexes = selectedChapterIndexes.toggle(index) },
+            onOpenChapter = { chapterIndex ->
+                showChapterSheet = false
+                selectedChapterIndexes = emptySet()
+                onOpenReader(book.id, chapterIndex)
+            },
+            onMarkRead = {
+                viewModel.markChaptersRead(selectedChapterIndexes)
+                selectedChapterIndexes = emptySet()
+            },
+            onMarkUnread = {
+                viewModel.markChaptersUnread(selectedChapterIndexes)
+                selectedChapterIndexes = emptySet()
+            },
+            onSelectRange = {
+                selectedChapterIndexes = expandChapterRange(state.chapters, selectedChapterIndexes)
+            },
+            onClearSelection = { selectedChapterIndexes = emptySet() },
+        )
     }
 }
 
@@ -299,12 +278,88 @@ private fun ChapterSelectionToolbar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookChapterSheet(
+    chapters: List<BookDetailsChapter>,
+    currentBook: Book,
+    selectedChapterIndexes: Set<Int>,
+    onDismiss: () -> Unit,
+    onToggleSelection: (Int) -> Unit,
+    onOpenChapter: (Int) -> Unit,
+    onMarkRead: () -> Unit,
+    onMarkUnread: () -> Unit,
+    onSelectRange: () -> Unit,
+    onClearSelection: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = colors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                "Table of contents",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                color = colors.onBackground,
+            )
+            Text(
+                if (chapters.isEmpty()) {
+                    "No table of contents could be extracted from this EPUB."
+                } else {
+                    "Tap a chapter to open it. Long-press to select multiple chapters."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+            )
+            if (selectedChapterIndexes.isNotEmpty()) {
+                ChapterSelectionToolbar(
+                    selectedCount = selectedChapterIndexes.size,
+                    onMarkRead = onMarkRead,
+                    onMarkUnread = onMarkUnread,
+                    onSelectRange = onSelectRange,
+                    onClear = onClearSelection,
+                )
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
+            ) {
+                chapters.forEach { chapter ->
+                    item(key = chapter.index) {
+                        TocRow(
+                            chapter = chapter,
+                            selected = chapter.index in selectedChapterIndexes,
+                            progressPercent = chapterProgressPercent(currentBook, chapter.index),
+                            onClick = {
+                                if (selectedChapterIndexes.isEmpty()) {
+                                    onOpenChapter(chapter.index)
+                                } else {
+                                    onToggleSelection(chapter.index)
+                                }
+                            },
+                            onLongClick = { onToggleSelection(chapter.index) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BookHeroCard(
     book: Book,
     fileSizeBytes: Long,
     language: String?,
-    onRead: () -> Unit,
     onChangeCover: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -356,18 +411,6 @@ private fun BookHeroCard(
             Spacer(Modifier.height(MiyoSpacing.medium))
             BookProgressSnapshot(book = book)
             Spacer(Modifier.height(MiyoSpacing.medium))
-            Button(
-                onClick = onRead,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-                shape = RoundedCornerShape(18.dp),
-            ) {
-                Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                Spacer(Modifier.size(MiyoSpacing.small))
-                Text("Continue", maxLines = 1, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(MiyoSpacing.small))
             OutlinedButton(
                 onClick = onChangeCover,
                 modifier = Modifier

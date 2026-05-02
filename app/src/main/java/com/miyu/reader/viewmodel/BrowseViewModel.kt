@@ -8,6 +8,8 @@ import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
+import com.miyu.reader.domain.model.OnlineChapterContent
+import com.miyu.reader.domain.model.OnlineChapterSummary
 import com.miyu.reader.domain.model.OnlineNovelDetails
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
@@ -78,6 +80,10 @@ data class BrowseUiState(
     val generatedEpub: GeneratedOnlineNovelEpub? = null,
     val selectedNovelSummary: OnlineNovelSummary? = null,
     val selectedNovelDetails: OnlineNovelDetails? = null,
+    val selectedChapterPreview: OnlineChapterContent? = null,
+    val selectedChapterSummary: OnlineChapterSummary? = null,
+    val chapterPreviewLoading: Boolean = false,
+    val chapterPreviewError: String? = null,
     val error: String? = null,
 ) {
     val visibleSources: List<NovelSourcePluginItem>
@@ -425,6 +431,10 @@ class BrowseViewModel @Inject constructor(
                     detailsLoading = true,
                     selectedNovelSummary = summary,
                     selectedNovelDetails = null,
+                    selectedChapterPreview = null,
+                    selectedChapterSummary = null,
+                    chapterPreviewLoading = false,
+                    chapterPreviewError = null,
                     generatedEpub = null,
                     error = null,
                 )
@@ -449,6 +459,66 @@ class BrowseViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun loadChapterPreview(details: OnlineNovelDetails, chapter: OnlineChapterSummary) {
+        val sourceId = sourceRegistry.sourceIdForProvider(details.providerId)
+        val source = sourceRegistry.source(sourceId)
+        if (source == null) {
+            _uiState.update { it.copy(chapterPreviewError = "Source not found.", chapterPreviewLoading = false) }
+            return
+        }
+        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
+            _uiState.update {
+                it.copy(
+                    selectedChapterSummary = chapter,
+                    selectedChapterPreview = null,
+                    chapterPreviewLoading = false,
+                    chapterPreviewError = "${source.name} cannot open chapter previews until its runtime is ready.",
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    selectedChapterSummary = chapter,
+                    selectedChapterPreview = null,
+                    chapterPreviewLoading = true,
+                    chapterPreviewError = null,
+                )
+            }
+            runCatching {
+                sourceRegistry.chapterContent(sourceId, details, chapter)
+            }.onSuccess { preview ->
+                _uiState.update {
+                    it.copy(
+                        selectedChapterPreview = preview,
+                        chapterPreviewLoading = false,
+                        chapterPreviewError = null,
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        selectedChapterPreview = null,
+                        chapterPreviewLoading = false,
+                        chapterPreviewError = error.message ?: "Could not open that chapter.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearChapterPreview() {
+        _uiState.update {
+            it.copy(
+                selectedChapterPreview = null,
+                selectedChapterSummary = null,
+                chapterPreviewLoading = false,
+                chapterPreviewError = null,
+            )
         }
     }
 

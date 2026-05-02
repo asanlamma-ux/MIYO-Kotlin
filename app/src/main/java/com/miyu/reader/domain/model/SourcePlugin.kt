@@ -48,6 +48,11 @@ interface NovelSourcePlugin {
 
     suspend fun parseNovel(summary: OnlineNovelSummary): OnlineNovelDetails
 
+    suspend fun fetchChapterContent(
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent
+
     suspend fun downloadAsEpub(
         novel: OnlineNovelDetails,
         startChapter: Int,

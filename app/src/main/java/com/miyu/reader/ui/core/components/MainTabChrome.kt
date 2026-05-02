@@ -75,7 +75,6 @@ fun MiyoMainOverflowMenu(
     onOpenSettings: () -> Unit,
     onOpenThemePicker: () -> Unit,
     onExportData: () -> Unit,
-    onImportData: () -> Unit,
     onAbout: () -> Unit,
     modifier: Modifier = Modifier,
     extraItems: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null,
@@ -123,17 +122,6 @@ fun MiyoMainOverflowMenu(
                     onAbout()
                 },
                 leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-            )
-            if (extraItems != null) {
-                Spacer(Modifier.height(2.dp))
-            }
-            DropdownMenuItem(
-                text = { Text("Import Data") },
-                onClick = {
-                    dismiss()
-                    onImportData()
-                },
-                leadingIcon = { Icon(Icons.Outlined.Backup, contentDescription = null) },
             )
         }
     }

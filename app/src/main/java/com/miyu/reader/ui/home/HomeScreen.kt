@@ -65,7 +65,6 @@ fun HomeScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenThemePicker = onOpenThemePicker,
                         onExportData = onSaveAndExport,
-                        onImportData = onSaveAndExport,
                         onAbout = onAbout,
                     )
                 },

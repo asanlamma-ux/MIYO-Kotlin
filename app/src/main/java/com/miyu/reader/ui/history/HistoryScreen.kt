@@ -88,7 +88,6 @@ fun HistoryScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenThemePicker = onOpenThemePicker,
                         onExportData = onSaveAndExport,
-                        onImportData = onSaveAndExport,
                         onAbout = onAbout,
                     )
                 }

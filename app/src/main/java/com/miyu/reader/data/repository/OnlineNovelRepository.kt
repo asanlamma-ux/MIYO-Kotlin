@@ -128,6 +128,13 @@ class OnlineNovelRepository @Inject constructor(
         }
     }
 
+    suspend fun getChapterContent(
+        novel: OnlineNovelDetails,
+        chapter: OnlineChapterSummary,
+    ): OnlineChapterContent = withContext(Dispatchers.IO) {
+        fetchChapterWithRetry(provider(novel.providerId), novel, chapter)
+    }
+
     suspend fun downloadAsEpub(
         novel: OnlineNovelDetails,
         startChapter: Int,

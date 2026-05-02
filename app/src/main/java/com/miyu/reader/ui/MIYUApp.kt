@@ -61,7 +61,6 @@ import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.ui.theme.MIYUTheme
 import com.miyu.reader.ui.theme.SpecialThemeBackdrop
 import com.miyu.reader.viewmodel.AppPermissionViewModel
-import com.miyu.reader.viewmodel.LibraryViewModel
 import com.miyu.reader.viewmodel.ThemeViewModel
 import kotlinx.coroutines.launch
 
@@ -355,27 +354,12 @@ fun MIYUApp() {
                         arguments = listOf(navArgument("sourceId") { type = NavType.StringType }),
                     ) { backStackEntry ->
                         val sourceId = backStackEntry.arguments?.getString("sourceId").orEmpty()
-                        val libraryEntry = remember(backStackEntry) {
-                            runCatching { navController.getBackStackEntry(Screen.Library.route) }.getOrNull()
-                        }
-                        val libraryViewModel: LibraryViewModel = if (libraryEntry != null) {
-                            hiltViewModel(libraryEntry)
-                        } else {
-                            hiltViewModel()
-                        }
                         SourceWorkflowDetailScreen(
                             sourceId = sourceId,
                             onBack = { navController.popBackStack() },
                             onOpenDownloads = { navController.navigate(Screen.DownloadQueue.route) },
                             onOpenVerifier = { navController.navigate("browse/source/$sourceId/verify") },
                             onOpenNovel = openOnlineNovelDetails,
-                            onImportGeneratedEpub = { generated ->
-                                libraryViewModel.importGeneratedOnlineNovelEpub(
-                                    filePath = generated.filePath,
-                                    fileName = generated.fileName,
-                                    suggestedTitle = generated.title,
-                                )
-                            },
                         )
                     }
                     composable(
@@ -396,26 +380,11 @@ fun MIYUApp() {
                             },
                         ),
                     ) { backStackEntry ->
-                        val libraryEntry = remember(backStackEntry) {
-                            runCatching { navController.getBackStackEntry(Screen.Library.route) }.getOrNull()
-                        }
-                        val libraryViewModel: LibraryViewModel = if (libraryEntry != null) {
-                            hiltViewModel(libraryEntry)
-                        } else {
-                            hiltViewModel()
-                        }
                         OnlineNovelDetailsScreen(
                             providerId = backStackEntry.arguments?.getString("providerId").orEmpty(),
                             path = Uri.decode(backStackEntry.arguments?.getString("path").orEmpty()),
                             fallbackTitle = backStackEntry.arguments?.getString("title")?.let(Uri::decode),
                             onBack = { navController.popBackStack() },
-                            onImportGeneratedEpub = { generated ->
-                                libraryViewModel.importGeneratedOnlineNovelEpub(
-                                    filePath = generated.filePath,
-                                    fileName = generated.fileName,
-                                    suggestedTitle = generated.title,
-                                )
-                            },
                         )
                     }
                     composable(
