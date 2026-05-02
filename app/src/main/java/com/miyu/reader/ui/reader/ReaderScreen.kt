@@ -9,6 +9,8 @@ import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -1060,12 +1062,22 @@ private fun readerBridgeScript(
     val safeTotalChapters = totalChapters.coerceAtLeast(0)
     return """
 <script>
-document.addEventListener('click', function(event) {
-    if (event.target && event.target.closest && event.target.closest('a, button, input, textarea, select')) return;
-    if (window.__miyuSelectionActiveUntil && Date.now() < window.__miyuSelectionActiveUntil) return;
-    var term = event.target && event.target.closest ? event.target.closest('.miyu-term') : null;
+var __miyuTapStartX = 0;
+var __miyuTapStartY = 0;
+var __miyuTapStartAt = 0;
+var __miyuTapMoved = false;
+window.__miyuLastTouchTapAt = 0;
+
+function hasReadableSelection() {
+    var selection = window.getSelection ? window.getSelection() : null;
+    return !!(selection && !selection.isCollapsed && normalizeSelectionText(selection.toString()).length > 0);
+}
+
+function handleReaderInteraction(clientX, clientY, target) {
+    if (target && target.closest && target.closest('a, button, input, textarea, select')) return false;
+    if (window.__miyuSelectionActiveUntil && Date.now() < window.__miyuSelectionActiveUntil) return false;
+    var term = target && target.closest ? target.closest('.miyu-term') : null;
     if (term) {
-        event.preventDefault();
         var detail = {
             originalText: term.getAttribute('data-original') || '',
             correctedText: term.getAttribute('data-corrected') || term.textContent || '',
@@ -1075,13 +1087,13 @@ document.addEventListener('click', function(event) {
             groupName: term.getAttribute('data-group') || ''
         };
         if (window.AndroidBridge) window.AndroidBridge.onTermTapped(JSON.stringify(detail));
-        return;
+        return true;
     }
     var tapZonesEnabled = $tapZones;
     var navigationLocked = $navLocked;
     var navMode = "$navMode";
     if (tapZonesEnabled && !navigationLocked) {
-        var x = event.clientX || 0;
+        var x = clientX || 0;
         var width = window.innerWidth || document.documentElement.clientWidth || 1;
         if (x < width * 0.24 || x > width * 0.76) {
             var delta = x < width * 0.24 ? -1 : 1;
@@ -1090,13 +1102,20 @@ document.addEventListener('click', function(event) {
             } else {
                 window.scrollBy({ top: delta * window.innerHeight * $scrollRatio, behavior: "${if (tapZoneNavMode == TapZoneNavMode.SCROLL) "smooth" else "auto"}" });
             }
-            return;
+            return true;
         }
     }
-    var selection = window.getSelection ? window.getSelection() : null;
-    var hasSelection = !!(selection && !selection.isCollapsed && normalizeSelectionText(selection.toString()).length > 0);
-    if (!hasSelection && window.AndroidBridge) {
+    if (!hasReadableSelection() && window.AndroidBridge) {
         window.AndroidBridge.onReaderTap();
+        return true;
+    }
+    return false;
+}
+
+document.addEventListener('click', function(event) {
+    if (Date.now() - window.__miyuLastTouchTapAt < 420) return;
+    if (handleReaderInteraction(event.clientX || 0, event.clientY || 0, event.target)) {
+        event.preventDefault();
     }
 });
 
@@ -1165,6 +1184,30 @@ document.addEventListener('selectionchange', function() {
         } catch (e) {}
     }, 280);
 });
+
+document.addEventListener('touchstart', function(event) {
+    if (!event.touches || event.touches.length !== 1) return;
+    __miyuTapStartX = event.touches[0].clientX;
+    __miyuTapStartY = event.touches[0].clientY;
+    __miyuTapStartAt = Date.now();
+    __miyuTapMoved = false;
+}, { passive: true });
+
+document.addEventListener('touchmove', function(event) {
+    if (!event.touches || event.touches.length !== 1) return;
+    var dx = Math.abs(event.touches[0].clientX - __miyuTapStartX);
+    var dy = Math.abs(event.touches[0].clientY - __miyuTapStartY);
+    if (dx > 10 || dy > 10) __miyuTapMoved = true;
+}, { passive: true });
+
+document.addEventListener('touchend', function(event) {
+    var duration = Date.now() - __miyuTapStartAt;
+    if (__miyuTapMoved || duration > 420 || hasReadableSelection()) return;
+    var target = document.elementFromPoint(__miyuTapStartX, __miyuTapStartY) || event.target;
+    if (handleReaderInteraction(__miyuTapStartX, __miyuTapStartY, target)) {
+        window.__miyuLastTouchTapAt = Date.now();
+    }
+}, { passive: true });
 	(function() {
 	    var lastProgressPost = 0;
 	    var loadedThroughChapterIndex = $initialChapterIndex;
@@ -1419,13 +1462,31 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 private class ReaderWebView(context: Context) : WebView(context) {
     var volumeNavigationEnabled: Boolean = false
     var suppressSystemSelectionToolbar: Boolean = true
+        set(value) {
+            field = value
+            setCustomSelectionActionModeCallback(if (value) hiddenSelectionActionModeCallback else null)
+        }
     var onVolumeNavigation: ((Int) -> Unit)? = null
 
-    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
-        if (suppressSystemSelectionToolbar) null else super.startActionMode(callback)
+    private val hiddenSelectionActionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+            menu?.clear()
+            return true
+        }
 
-    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? =
-        if (suppressSystemSelectionToolbar) null else super.startActionMode(callback, type)
+        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+            menu?.clear()
+            return false
+        }
+
+        override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean = false
+
+        override fun onDestroyActionMode(mode: ActionMode?) = Unit
+    }
+
+    init {
+        setCustomSelectionActionModeCallback(hiddenSelectionActionModeCallback)
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (volumeNavigationEnabled && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {

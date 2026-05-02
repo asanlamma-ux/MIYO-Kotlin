@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -562,6 +564,7 @@ fun GlobalSourceSearchScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .background(colors.background),
         ) {
             Row(
@@ -629,7 +632,9 @@ fun GlobalSourceSearchScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding(),
             contentPadding = PaddingValues(bottom = 44.dp),
             verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
         ) {
@@ -799,7 +804,7 @@ private fun GlobalSearchSourceResultBlock(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onOpenSource)
-                .padding(start = MiyoSpacing.large, end = MiyoSpacing.extraSmall, top = 10.dp, bottom = 6.dp),
+                .padding(start = MiyoSpacing.large, end = MiyoSpacing.large, top = 18.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -819,8 +824,8 @@ private fun GlobalSearchSourceResultBlock(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = onOpenSource) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null)
+            TextButton(onClick = onOpenSource) {
+                Text("Show all", color = LocalMIYUColors.current.accent, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -833,13 +838,12 @@ private fun GlobalSearchSourceResultBlock(
                 color = LocalMIYUColors.current.secondaryText,
             )
             else -> LazyRow(
-                contentPadding = PaddingValues(horizontal = MiyoSpacing.small, vertical = MiyoSpacing.small),
-                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
+                contentPadding = PaddingValues(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
             ) {
                 items(result.novels, key = { "${result.source.id}:${it.path}" }) { novel ->
-                    NovelCoverTile(
+                    GlobalNovelCoverTile(
                         novel = novel,
-                        width = 96.dp,
                         downloading = downloadingKey == "${novel.providerId}:${novel.path}",
                         onDownload = { onDownload(novel) },
                     )
@@ -866,12 +870,12 @@ private fun GlobalSearchErrorResultItem(message: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.small),
+            .padding(horizontal = MiyoSpacing.large, vertical = MiyoSpacing.medium),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-        Spacer(Modifier.width(MiyoSpacing.small))
-        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(30.dp))
+        Spacer(Modifier.width(MiyoSpacing.large))
+        Text(message, color = LocalMIYUColors.current.secondaryText, style = MaterialTheme.typography.titleMedium)
     }
 }
 
@@ -1517,6 +1521,85 @@ private fun GeneratedEpubCard(
                 Text("Import into library", fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+@Composable
+private fun GlobalNovelCoverTile(
+    novel: OnlineNovelSummary,
+    downloading: Boolean,
+    onDownload: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Column(
+        modifier = Modifier
+            .width(128.dp)
+            .clickable(enabled = !downloading, onClick = onDownload),
+    ) {
+        Box {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = colors.secondaryText.copy(alpha = 0.12f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(3f / 4f),
+            ) {
+                if (novel.coverUrl != null) {
+                    AsyncImage(
+                        model = novel.coverUrl,
+                        contentDescription = novel.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.MenuBook, contentDescription = null, tint = colors.accent)
+                    }
+                }
+            }
+            Surface(
+                color = colors.accent,
+                shape = RoundedCornerShape(7.dp),
+                modifier = Modifier
+                    .padding(8.dp)
+                    .align(Alignment.TopStart),
+            ) {
+                Text(
+                    novel.providerLabel,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (downloading) {
+                Surface(
+                    color = colors.accent.copy(alpha = 0.92f),
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(44.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 3.dp,
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            novel.title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = colors.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

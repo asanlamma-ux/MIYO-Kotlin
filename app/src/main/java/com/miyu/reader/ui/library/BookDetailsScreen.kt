@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,6 +68,7 @@ import com.miyu.reader.viewmodel.BookDetailsChapter
 import com.miyu.reader.viewmodel.BookDetailsViewModel
 import java.io.File
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BookDetailsScreen(
     onBack: () -> Unit,
@@ -163,9 +166,10 @@ fun BookDetailsScreen(
                     if (state.subjects.isNotEmpty()) {
                         item {
                             DetailSectionCard(title = "Subjects") {
-                                Row(
+                                FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     state.subjects.take(6).forEach { subject ->
                                         AssistChip(onClick = {}, label = { Text(subject) }, enabled = false)

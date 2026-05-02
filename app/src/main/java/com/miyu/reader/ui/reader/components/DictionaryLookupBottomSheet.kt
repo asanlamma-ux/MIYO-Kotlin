@@ -38,7 +38,8 @@ fun DictionaryLookupBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 32.dp)
         ) {
             // Drag handle
             Box(
@@ -79,6 +80,7 @@ fun DictionaryLookupBottomSheet(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
+                    .padding(bottom = 72.dp)
             ) {
                 Text(
                     word,
@@ -107,29 +109,29 @@ fun DictionaryLookupBottomSheet(
                     result.entries.forEachIndexed { index, entry ->
                         if (index > 0) Spacer(Modifier.height(12.dp))
                         Surface(
-                            color = readerTheme.background,
-                            shape = RoundedCornerShape(16.dp),
+                            color = readerTheme.background.copy(alpha = 0.62f),
+                            shape = RoundedCornerShape(22.dp),
                         ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Text(entry.term, color = readerTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Text(entry.term, color = readerTheme.text, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                 entry.partOfSpeech?.let {
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(it, color = readerTheme.accent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(it, color = readerTheme.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.height(16.dp))
                                 Text(
                                     entry.definition,
                                     color = readerTheme.text,
-                                    fontSize = 15.sp,
-                                    lineHeight = 24.sp,
+                                    fontSize = 18.sp,
+                                    lineHeight = 28.sp,
                                 )
                                 entry.example?.let {
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(14.dp))
                                     Text(
                                         "Example: $it",
                                         color = readerTheme.secondaryText,
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp,
+                                        fontSize = 14.sp,
+                                        lineHeight = 21.sp,
                                     )
                                 }
                             }
@@ -159,7 +161,6 @@ fun DictionaryLookupBottomSheet(
                         )
                     }
                 }
-                Spacer(Modifier.height(32.dp))
             }
         }
     }
