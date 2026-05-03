@@ -6,6 +6,9 @@ keystore_b64.txt
 node_modules/
 source-plugins/.dist/
 .git-push.env
+.git-env-push
+.git-push.env.example
+/scripts/git-push-with-pat.sh
 
 # Beads / Dolt files (added by bd init)
 .dolt/

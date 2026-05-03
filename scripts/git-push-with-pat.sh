@@ -2,7 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${MIYU_GIT_PUSH_ENV:-"$ROOT_DIR/.git-push.env"}"
+if [[ -n "${MIYU_GIT_PUSH_ENV:-}" ]]; then
+  ENV_FILE="$MIYU_GIT_PUSH_ENV"
+elif [[ -s "$ROOT_DIR/.git-env-push" ]]; then
+  ENV_FILE="$ROOT_DIR/.git-env-push"
+else
+  ENV_FILE="$ROOT_DIR/.git-push.env"
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   cat >&2 <<MSG
@@ -12,6 +18,7 @@ Create it from the template:
   cp .git-push.env.example .git-push.env
 
 Then fill in GITHUB_USERNAME, GITHUB_PAT, and GMAIL.
+The alternate local filename .git-env-push is also supported.
 MSG
   exit 1
 fi
