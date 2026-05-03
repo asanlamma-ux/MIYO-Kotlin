@@ -1,12 +1,14 @@
 package com.miyu.reader.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.NovelSourcePluginRegistry
 import com.miyu.reader.downloads.OnlineDownloadCoordinator
 import com.miyu.reader.downloads.OnlineDownloadService
+import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
@@ -59,6 +61,7 @@ data class BrowseDownloadProgress(
 data class BrowseUiState(
     val installedSources: List<NovelSourcePluginItem> = emptyList(),
     val availableSources: List<NovelSourcePluginItem> = emptyList(),
+    val installedExternalPackages: List<ExternalSourcePackageDescriptor> = emptyList(),
     val selectedTab: BrowseSourceTab = BrowseSourceTab.INSTALLED,
     val sourceQuery: String = "",
     val novelQuery: String = "",
@@ -164,14 +167,12 @@ class BrowseViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
-        BrowseUiState(
-            installedSources = sourceRegistry.installedSources,
-            availableSources = sourceRegistry.availableSources,
-        ),
+        BrowseUiState(),
     )
     val uiState: StateFlow<BrowseUiState> = _uiState.asStateFlow()
 
     init {
+        refreshSourceCatalog()
         viewModelScope.launch {
             preferences.sourcePinnedIds.collect { pinned ->
                 _uiState.update { it.copy(pinnedSourceIds = pinned) }
@@ -261,6 +262,42 @@ class BrowseViewModel @Inject constructor(
 
     fun source(sourceId: String): NovelSourcePluginItem? =
         sourceRegistry.source(sourceId)
+
+    fun importExternalPackage(uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loading = true, error = null) }
+            runCatching { sourceRegistry.installExternalPackage(uri) }
+                .onSuccess {
+                    refreshSourceCatalog()
+                    _uiState.update { state ->
+                        state.copy(
+                            loading = false,
+                            error = null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            loading = false,
+                            error = error.message ?: "Source package import failed.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun removeExternalPackage(packageId: String) {
+        viewModelScope.launch {
+            runCatching { sourceRegistry.removeExternalPackage(packageId) }
+                .onSuccess {
+                    refreshSourceCatalog()
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(error = error.message ?: "Source package removal failed.") }
+                }
+        }
+    }
 
     fun recordSourceOpened(sourceId: String) {
         viewModelScope.launch {
@@ -656,6 +693,22 @@ class BrowseViewModel @Inject constructor(
             )
         }
         OnlineDownloadService.start(context, request)
+    }
+
+    private fun refreshSourceCatalog() {
+        _uiState.update { current ->
+            val nextAvailable = sourceRegistry.availableSources
+            current.copy(
+                installedSources = sourceRegistry.installedSources,
+                availableSources = nextAvailable,
+                installedExternalPackages = sourceRegistry.installedExternalPackages,
+                selectedTab = if (current.selectedTab == BrowseSourceTab.AVAILABLE && nextAvailable.isEmpty()) {
+                    BrowseSourceTab.INSTALLED
+                } else {
+                    current.selectedTab
+                },
+            )
+        }
     }
 
     private fun OnlineNovelDetails.toSummary(): OnlineNovelSummary =

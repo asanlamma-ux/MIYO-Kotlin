@@ -3,6 +3,8 @@ keystore_b64.txt
 *.keystore
 *.jks
 *.b64
+node_modules/
+source-plugins/.dist/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

@@ -1,6 +1,7 @@
 package com.miyu.reader.data.repository
 
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
+import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePlugin
@@ -18,62 +19,30 @@ import javax.inject.Singleton
 @Singleton
 class NovelSourcePluginRegistry @Inject constructor(
     private val onlineNovelRepository: OnlineNovelRepository,
+    private val externalPackageManager: ExternalSourcePackageManager,
     private val externalRuntime: ExternalJsPluginRuntime,
 ) {
-    // Providers listed here intentionally bypass the plain HTTP repository path
-    // and run through the browser-backed plugin runtime instead.
-    private val externalizedProviders = setOf(OnlineNovelProviderId.WTR_LAB)
+    private val builtInPlugins: Map<String, NovelSourcePlugin>
+        get() {
+            val externalizedProviders = externalPackageManager.installedPackages()
+                .map { it.providerId }
+                .toSet()
+            return onlineNovelRepository.providers
+                .filterNot { it.id in externalizedProviders }
+                .associate { provider ->
+                    provider.toSourcePluginId() to BuiltInNovelSourcePlugin(provider, onlineNovelRepository)
+                }
+        }
 
-    private val builtInPlugins: Map<String, NovelSourcePlugin> =
-        onlineNovelRepository.providers
-            .filterNot { it.id in externalizedProviders }
-            .associate { provider ->
-                provider.toSourcePluginId() to BuiltInNovelSourcePlugin(provider, onlineNovelRepository)
-            }
-
-    private val externalPlugins: Map<String, NovelSourcePlugin> =
-        onlineNovelRepository.providers
-            .filter { it.id in externalizedProviders }
-            .associate { provider ->
-                provider.toSourcePluginId() to WtrExternalNovelSourcePlugin(
-                    provider = provider,
+    private val externalPlugins: Map<String, NovelSourcePlugin>
+        get() = externalPackageManager.installedPackages()
+            .associate { externalPackage ->
+                externalPackage.sourceId to ExternalPackageNovelSourcePlugin(
+                    externalPackage = externalPackage,
                     repository = onlineNovelRepository,
                     runtime = externalRuntime,
                 )
             }
-
-    private val availablePlugins = listOf(
-        NovelSourcePluginItem(
-            id = "external:ao3",
-            name = "Archive of Our Own",
-            site = "archiveofourown.org",
-            language = "Fanfiction",
-            version = "repository",
-            kind = NovelSourceKind.EXTERNAL_JS,
-            installState = NovelSourceInstallState.AVAILABLE,
-            description = "Available external source slot for fanfiction browsing.",
-        ),
-        NovelSourcePluginItem(
-            id = "external:royalroad",
-            name = "Royal Road",
-            site = "royalroad.com",
-            language = "EN",
-            version = "repository",
-            kind = NovelSourceKind.EXTERNAL_JS,
-            installState = NovelSourceInstallState.AVAILABLE,
-            description = "Available external source slot for web serial browsing.",
-        ),
-        NovelSourcePluginItem(
-            id = "external:scribblehub",
-            name = "Scribble Hub",
-            site = "scribblehub.com",
-            language = "EN",
-            version = "repository",
-            kind = NovelSourceKind.EXTERNAL_JS,
-            installState = NovelSourceInstallState.AVAILABLE,
-            description = "Available external source slot for light novel browsing.",
-        ),
-    )
 
     val installedSources: List<NovelSourcePluginItem>
         get() = (builtInPlugins.values + externalPlugins.values)
@@ -81,7 +50,10 @@ class NovelSourcePluginRegistry @Inject constructor(
             .sortedBy { it.name.lowercase() }
 
     val availableSources: List<NovelSourcePluginItem>
-        get() = availablePlugins
+        get() = emptyList()
+
+    val installedExternalPackages: List<ExternalSourcePackageDescriptor>
+        get() = externalPackageManager.installedPackageDescriptors()
 
     val allSources: List<NovelSourcePluginItem>
         get() = installedSources + availableSources
@@ -90,7 +62,14 @@ class NovelSourcePluginRegistry @Inject constructor(
         allSources.firstOrNull { it.id == sourceId }
 
     fun sourceIdForProvider(providerId: OnlineNovelProviderId): String =
-        providerId.toSourcePluginId()
+        externalPackageManager.packageForProvider(providerId)?.sourceId ?: providerId.toSourcePluginId()
+
+    suspend fun installExternalPackage(uri: android.net.Uri): ExternalSourcePackageDescriptor =
+        externalPackageManager.importPackage(uri)
+
+    suspend fun removeExternalPackage(packageId: String) {
+        externalPackageManager.removePackage(packageId)
+    }
 
     suspend fun search(sourceId: String, query: String, page: Int): OnlineNovelSearchResult =
         plugin(sourceId).searchNovels(query, page.coerceAtLeast(1))
@@ -99,7 +78,7 @@ class NovelSourcePluginRegistry @Inject constructor(
         plugin(sourceId).popularNovels(page.coerceAtLeast(1))
 
     suspend fun details(summary: OnlineNovelSummary): OnlineNovelDetails =
-        plugin(summary.providerId.toSourcePluginId()).parseNovel(summary)
+        plugin(sourceIdForProvider(summary.providerId)).parseNovel(summary)
 
     suspend fun chapterContent(
         sourceId: String,

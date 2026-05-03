@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -108,6 +110,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
+import com.miyu.reader.domain.model.ExternalSourcePackageOrigin
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
@@ -228,11 +231,14 @@ fun BrowseWorkflowScreen(
             verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
         ) {
             item {
+                val browseTabs = BrowseSourceTab.entries.filter {
+                    it != BrowseSourceTab.AVAILABLE || state.availableSources.isNotEmpty()
+                }
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = MiyoSpacing.large),
                     horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
                 ) {
-                    items(BrowseSourceTab.entries) { option ->
+                    items(browseTabs) { option ->
                         FilterChip(
                             selected = state.selectedTab == option,
                             onClick = { viewModel.setTab(option) },
@@ -348,8 +354,8 @@ fun BrowseWorkflowScreen(
                     MiyoEmptyScreen(
                         icon = Icons.Outlined.Extension,
                         title = "No sources found",
-                        message = "Change the filter or add a plugin repository.",
-                        actionLabel = "Repositories",
+                        message = "Change the filter or import a source package.",
+                        actionLabel = "Source packages",
                         onAction = onOpenRepositories,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1611,9 +1617,13 @@ fun ProviderRepositoriesScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
     var repositoryUrl by remember { mutableStateOf("") }
+    val packageImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        viewModel.importExternalPackage(uri)
+    }
 
     MiyoWorkspaceSurface {
-        MiyoWorkspaceExitButton(label = "Exit repositories", onClick = onBack)
+        MiyoWorkspaceExitButton(label = "Exit source packages", onClick = onBack)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 44.dp),
@@ -1631,19 +1641,91 @@ fun ProviderRepositoriesScreen(
                     ) {
                         SourceIconHeader(icon = Icons.Outlined.Extension)
                         Text(
-                            "Plugin Repositories",
+                            "Source Packages",
                             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
                             color = colors.onBackground,
                         )
                         Text(
-                            "Source repositories are stored as HTTPS manifest URLs. Built-in parsers ship locally, while external source code stays isolated behind repository plugins.",
+                            "Import release packages built for Miyo. Each package contains a signed manifest and a browser-backed parser script that the app can install or replace.",
                             style = MaterialTheme.typography.bodyLarge,
+                            color = colors.secondaryText,
+                        )
+                        Button(
+                            onClick = { packageImporter.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Import package", fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            "Accepted format: .miyuplugin.zip",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText,
+                        )
+                    }
+                }
+            }
+
+            item {
+                SourceSectionHeader("Installed packages")
+            }
+
+            if (state.installedExternalPackages.isEmpty()) {
+                item {
+                    MiyoEmptyScreen(
+                        icon = Icons.Outlined.Extension,
+                        title = "No external packages installed",
+                        message = "Import a release package to add or replace an external source.",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp),
+                    )
+                }
+            } else {
+                items(state.installedExternalPackages, key = { it.packageId }) { externalPackage ->
+                    ExternalPackageCard(
+                        packageName = externalPackage.name,
+                        version = externalPackage.version,
+                        site = externalPackage.site,
+                        language = externalPackage.language,
+                        providerName = externalPackage.providerId.name.replace('_', ' '),
+                        description = externalPackage.description,
+                        bundled = externalPackage.origin == ExternalSourcePackageOrigin.BUNDLED,
+                        onRemove = if (externalPackage.origin == ExternalSourcePackageOrigin.IMPORTED) {
+                            { viewModel.removeExternalPackage(externalPackage.packageId) }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+                    shape = RoundedCornerShape(28.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(MiyoSpacing.large),
+                        verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+                    ) {
+                        SourceIconHeader(icon = Icons.Outlined.Public)
+                        Text(
+                            "Package Feeds",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                            color = colors.onBackground,
+                        )
+                        Text(
+                            "Feed URLs are optional. Keep them here if you want a list of release endpoints to check later, but package import is the primary install path.",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = colors.secondaryText,
                         )
                         OutlinedTextField(
                             value = repositoryUrl,
                             onValueChange = { repositoryUrl = it },
-                            placeholder = { Text("https://example.com/plugins.json") },
+                            placeholder = { Text("https://example.com/miyu-packages.json") },
                             leadingIcon = { Icon(Icons.Outlined.Public, contentDescription = null) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
@@ -1659,7 +1741,7 @@ fun ProviderRepositoriesScreen(
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Add repository", fontWeight = FontWeight.Bold)
+                            Text("Save feed URL", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1669,7 +1751,7 @@ fun ProviderRepositoriesScreen(
                 item {
                     SourceNoticeCard(
                         icon = Icons.Outlined.ErrorOutline,
-                        title = "Repository error",
+                        title = "Source package error",
                         message = error,
                         isError = true,
                     )
@@ -1677,15 +1759,15 @@ fun ProviderRepositoriesScreen(
             }
 
             item {
-                SourceSectionHeader("Saved repositories")
+                SourceSectionHeader("Saved feeds")
             }
 
             if (state.repositoryUrls.isEmpty()) {
                 item {
                     MiyoEmptyScreen(
                         icon = Icons.Outlined.Extension,
-                        title = "No repositories added",
-                        message = "Add an HTTPS source manifest URL when you are ready to install third-party source plugins.",
+                        title = "No feed URLs saved",
+                        message = "You can use packages without feeds. Save a feed only if you want a remembered release endpoint.",
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 24.dp),
@@ -1722,7 +1804,7 @@ private fun RepositoryUrlCard(
             Spacer(Modifier.width(MiyoSpacing.medium))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Repository manifest",
+                    "Package feed",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                     color = colors.onBackground,
                 )
@@ -1736,10 +1818,77 @@ private fun RepositoryUrlCard(
             }
             MiyoIconActionButton(
                 icon = Icons.Outlined.Delete,
-                contentDescription = "Remove repository",
+                contentDescription = "Remove feed",
                 onClick = onRemove,
                 modifier = Modifier.size(46.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun ExternalPackageCard(
+    packageName: String,
+    version: String,
+    site: String,
+    language: String,
+    providerName: String,
+    description: String,
+    bundled: Boolean,
+    onRemove: (() -> Unit)?,
+) {
+    val colors = LocalMIYUColors.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SourceIconHeader(icon = Icons.Outlined.Extension)
+                Spacer(Modifier.width(MiyoSpacing.medium))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        packageName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                        color = colors.onBackground,
+                    )
+                    Text(
+                        site,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (onRemove != null) {
+                    MiyoIconActionButton(
+                        icon = Icons.Outlined.Delete,
+                        contentDescription = "Remove source package",
+                        onClick = onRemove,
+                        modifier = Modifier.size(42.dp),
+                    )
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
+                verticalArrangement = Arrangement.spacedBy(MiyoSpacing.extraSmall),
+            ) {
+                SourcePill(version)
+                SourcePill(language)
+                SourcePill(providerName)
+                SourcePill(if (bundled) "Bundled" else "Imported")
+            }
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.secondaryText,
+                )
+            }
         }
     }
 }

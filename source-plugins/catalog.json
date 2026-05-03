@@ -1,0 +1,108 @@
+[
+  {
+    "packageId": "wtr-lab",
+    "providerId": "WTR_LAB",
+    "mode": "wtr",
+    "name": "WTR-LAB",
+    "version": "1.2.0",
+    "site": "wtr-lab.com",
+    "language": "EN MTL",
+    "startUrl": "https://wtr-lab.com/en/novel-finder",
+    "requiresVerification": true,
+    "description": "Browser-backed WTR-LAB source with encrypted chapter and AI translation support.",
+    "config": {
+      "baseUrl": "https://wtr-lab.com",
+      "languagePath": "/en"
+    }
+  },
+  {
+    "packageId": "fanmtl",
+    "providerId": "FANMTL",
+    "mode": "readwn",
+    "name": "FanMTL",
+    "version": "1.0.0",
+    "site": "www.fanmtl.com",
+    "language": "EN MTL",
+    "startUrl": "https://www.fanmtl.com/list/all/all-newstime-0.html",
+    "requiresVerification": false,
+    "description": "Readwn-style FanMTL package tuned for MIYO chapter parsing and EPUB export.",
+    "config": {
+      "baseUrl": "https://www.fanmtl.com"
+    }
+  },
+  {
+    "packageId": "wuxiaspot",
+    "providerId": "WUXIASPOT",
+    "mode": "readwn",
+    "name": "WuxiaSpot",
+    "version": "1.0.0",
+    "site": "www.wuxiaspot.com",
+    "language": "EN MTL",
+    "startUrl": "https://www.wuxiaspot.com/list/all/all-newstime-0.html",
+    "requiresVerification": false,
+    "description": "Readwn-style WuxiaSpot package with the same MIYO chapter/runtime bridge.",
+    "config": {
+      "baseUrl": "https://www.wuxiaspot.com"
+    }
+  },
+  {
+    "packageId": "mcreader",
+    "providerId": "MCREADER",
+    "mode": "readwn",
+    "name": "MCReader",
+    "version": "1.0.0",
+    "site": "www.mcreader.net",
+    "language": "EN MTL",
+    "startUrl": "https://www.mcreader.net/list/all/all-newstime-0.html",
+    "requiresVerification": false,
+    "description": "Readwn-style MCReader package with MIYO-compatible search, details, and chapter export.",
+    "config": {
+      "baseUrl": "https://www.mcreader.net"
+    }
+  },
+  {
+    "packageId": "freewebnovel",
+    "providerId": "FREEWEBNOVEL",
+    "mode": "freewebnovel",
+    "name": "FreeWebNovel",
+    "version": "1.0.0",
+    "site": "freewebnovel.com",
+    "language": "EN",
+    "startUrl": "https://freewebnovel.com/",
+    "requiresVerification": false,
+    "description": "FreeWebNovel HTML package with MIYO search and chapter extraction selectors.",
+    "config": {
+      "baseUrl": "https://freewebnovel.com"
+    }
+  },
+  {
+    "packageId": "lightnovelpub",
+    "providerId": "LIGHTNOVELPUB",
+    "mode": "lightnovelpub",
+    "name": "LightNovelPub",
+    "version": "1.0.0",
+    "site": "lightnovelpub.vip",
+    "language": "EN",
+    "startUrl": "https://lightnovelpub.vip/browse/",
+    "requiresVerification": false,
+    "description": "LightNovelPub package with paged chapter sheet support and MIYO reader bridge output.",
+    "config": {
+      "baseUrl": "https://lightnovelpub.vip"
+    }
+  },
+  {
+    "packageId": "novelcool",
+    "providerId": "NOVELCOOL",
+    "mode": "novelcool",
+    "name": "NovelCool",
+    "version": "1.0.0",
+    "site": "novelcool.com",
+    "language": "EN",
+    "startUrl": "https://novelcool.com/category/page-1/",
+    "requiresVerification": false,
+    "description": "NovelCool HTML package with MIYO-compatible selectors for search, details, and chapters.",
+    "config": {
+      "baseUrl": "https://novelcool.com"
+    }
+  }
+]

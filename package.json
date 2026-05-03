@@ -1,9 +1,11 @@
 {
   "name": "miyu-kotlin",
   "version": "1.0.0",
+  "private": true,
+  "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:source-packages": "node ./scripts/build-source-packages.mjs"
   },
   "repository": {
     "type": "git",
@@ -16,5 +18,8 @@
     "url": "https://github.com/asanlamma-ux/MIYO-Kotlin/issues"
   },
   "homepage": "https://github.com/asanlamma-ux/MIYO-Kotlin#readme",
-  "description": ""
+  "description": "MIYU Android reader and external source package tooling.",
+  "devDependencies": {
+    "jszip": "^3.10.1"
+  }
 }

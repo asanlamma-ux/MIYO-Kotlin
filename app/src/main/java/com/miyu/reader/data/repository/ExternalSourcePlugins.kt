@@ -8,39 +8,39 @@ import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineChapterSummary
 import com.miyu.reader.domain.model.OnlineNovelDetails
-import com.miyu.reader.domain.model.OnlineNovelProvider
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSearchResult
 import com.miyu.reader.domain.model.OnlineNovelSummary
 import org.json.JSONArray
 import org.json.JSONObject
 
-class WtrExternalNovelSourcePlugin(
-    private val provider: OnlineNovelProvider,
+class ExternalPackageNovelSourcePlugin(
+    private val externalPackage: InstalledExternalSourcePackage,
     private val repository: OnlineNovelRepository,
     private val runtime: ExternalJsPluginRuntime,
 ) : NovelSourcePlugin {
     private val definition = ExternalJsPluginDefinition(
-        pluginId = provider.id.toSourcePluginId(),
-        providerScope = "wtr-lab",
-        startUrl = WtrLabBridgeScript.START_URL,
-        bootstrapScript = WtrLabBridgeScript.bootstrap,
-        bridgeObjectName = "__MIYO_WTR_BRIDGE",
-        androidBridgeName = "AndroidWtrBridge",
+        pluginId = externalPackage.sourceId,
+        providerScope = externalPackage.manifest.bridgeScope,
+        startUrl = externalPackage.manifest.startUrl,
+        bootstrapScript = externalPackage.script,
+        bridgeObjectName = "__MIYO_SOURCE_BRIDGE",
+        androidBridgeName = "AndroidExternalSourceBridge",
     )
 
     override val item: NovelSourcePluginItem = NovelSourcePluginItem(
-        id = provider.id.toSourcePluginId(),
-        name = provider.label,
-        site = provider.baseUrl.removePrefix("https://").removePrefix("http://").trimEnd('/'),
-        language = "EN MTL",
-        version = "1.1.0",
+        id = externalPackage.sourceId,
+        name = externalPackage.manifest.name,
+        site = externalPackage.manifest.site,
+        language = externalPackage.manifest.language,
+        version = externalPackage.manifest.version,
+        customJsUrl = externalPackage.installPath?.let { "file://$it/${externalPackage.manifest.entry}" }
+            ?: "asset://source-packages/${externalPackage.manifest.packageId}/${externalPackage.manifest.entry}",
+        verificationUrl = externalPackage.manifest.startUrl,
         kind = NovelSourceKind.EXTERNAL_JS,
         installState = NovelSourceInstallState.INSTALLED,
-        customJsUrl = "embedded://source/wtr-lab.js",
-        verificationUrl = provider.startUrl,
-        requiresVerification = true,
-        description = "Browser-backed external source with challenge-aware chapter parsing.",
+        requiresVerification = externalPackage.manifest.requiresVerification,
+        description = externalPackage.manifest.description,
     )
 
     override suspend fun popularNovels(page: Int): OnlineNovelSearchResult =
@@ -50,7 +50,7 @@ class WtrExternalNovelSourcePlugin(
             payload = JSONObject()
                 .put("page", page.coerceAtLeast(1))
                 .put("latestOnly", true),
-        ).toSearchResult(provider.id, provider.label)
+        ).toSearchResult(externalPackage.providerId, item.name)
 
     override suspend fun searchNovels(query: String, page: Int): OnlineNovelSearchResult =
         runtime.execute(
@@ -60,7 +60,7 @@ class WtrExternalNovelSourcePlugin(
                 .put("page", page.coerceAtLeast(1))
                 .put("query", query.trim())
                 .put("latestOnly", false),
-        ).toSearchResult(provider.id, provider.label)
+        ).toSearchResult(externalPackage.providerId, item.name)
 
     override suspend fun parseNovel(summary: OnlineNovelSummary): OnlineNovelDetails =
         runtime.execute(
@@ -68,7 +68,7 @@ class WtrExternalNovelSourcePlugin(
             requestType = "details",
             payload = summary.toBridgePayload(includeChapters = true),
             timeoutMs = 180_000L,
-        ).toNovelDetails(provider.id, provider.label)
+        ).toNovelDetails(externalPackage.providerId, item.name)
 
     override suspend fun fetchChapterContent(
         novel: OnlineNovelDetails,
@@ -109,7 +109,7 @@ class WtrExternalNovelSourcePlugin(
             .sortedBy { it.order }
         if (downloadedChapters.isEmpty()) {
             val failures = response.optJSONArray("failures").toStringList()
-            error(failures.firstOrNull() ?: "The plugin runtime did not return any chapters.")
+            error(failures.firstOrNull() ?: "The external source runtime did not return any chapters.")
         }
         return repository.createGeneratedEpub(novel, downloadedChapters)
     }

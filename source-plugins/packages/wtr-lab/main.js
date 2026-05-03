@@ -1,19 +1,13 @@
-package com.miyu.reader.data.repository
-
-object WtrLabBridgeScript {
-    const val START_URL = "https://wtr-lab.com/en/novel-finder"
-
-    val bootstrap: String = """
 (function () {
-  if (window.__MIYO_WTR_BRIDGE_READY) {
-    window.__MIYO_WTR_BRIDGE.postReady();
+  if (window.__MIYO_SOURCE_BRIDGE_READY) {
+    window.__MIYO_SOURCE_BRIDGE.postReady();
     true;
     return;
   }
 
   function post(payload) {
-    if (!window.AndroidWtrBridge) return;
-    window.AndroidWtrBridge.postMessage(JSON.stringify(payload));
+    if (!window.AndroidExternalSourceBridge) return;
+    window.AndroidExternalSourceBridge.postMessage(JSON.stringify(payload));
   }
 
   function pageTextSample() {
@@ -33,7 +27,7 @@ object WtrLabBridgeScript {
 
   function cleanText(value) {
     return String(value || '')
-      .replace(/Auto generated hidden content[\s\S]*${'$'}/i, '')
+      .replace(/Auto generated hidden content[\s\S]*$/i, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -53,9 +47,9 @@ object WtrLabBridgeScript {
       .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
       .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '')
       .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
-      .replace(/\s(href|src)\s*=\s*"javascript:[^"]*"/gi, ' ${'$'}1="#"')
-      .replace(/\s(href|src)\s*=\s*'javascript:[^']*'/gi, " ${'$'}1='#'")
-      .replace(/Auto generated hidden content[\s\S]*${'$'}/i, '');
+      .replace(/\s(href|src)\s*=\s*"javascript:[^"]*"/gi, ' $1="#"')
+      .replace(/\s(href|src)\s*=\s*'javascript:[^']*'/gi, " $1='#'")
+      .replace(/Auto generated hidden content[\s\S]*$/i, '');
   }
 
   function escapeHtml(value) {
@@ -674,7 +668,7 @@ object WtrLabBridgeScript {
     throw new Error('Unsupported WTR-LAB bridge request.');
   }
 
-  window.__MIYO_WTR_BRIDGE = {
+  window.__MIYO_SOURCE_BRIDGE = {
     postReady: function () {
       if (isChallengePage()) {
         post({ scope: 'wtr-lab', type: 'challenge', providerId: 'wtr-lab', title: document.title || 'Verification required', body: pageTextSample() });
@@ -691,9 +685,7 @@ object WtrLabBridgeScript {
       }
     }
   };
-  window.__MIYO_WTR_BRIDGE_READY = true;
-  window.__MIYO_WTR_BRIDGE.postReady();
+  window.__MIYO_SOURCE_BRIDGE_READY = true;
+  window.__MIYO_SOURCE_BRIDGE.postReady();
 })();
 true;
-""".trimIndent()
-}
