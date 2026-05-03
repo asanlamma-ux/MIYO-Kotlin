@@ -316,6 +316,19 @@ class UserPreferences @Inject constructor(
         }
     }
 
+    val onlineDownloadHistory: Flow<List<OnlineDownloadHistoryEntry>> = context.dataStore.data.map { prefs ->
+        decodeOnlineDownloadHistory(prefs[KEY_ONLINE_DOWNLOAD_HISTORY])
+    }
+
+    suspend fun recordOnlineDownload(entry: OnlineDownloadHistoryEntry) {
+        context.dataStore.edit { prefs ->
+            val next = (listOf(entry) + decodeOnlineDownloadHistory(prefs[KEY_ONLINE_DOWNLOAD_HISTORY]))
+                .sortedByDescending { it.completedAt }
+                .take(MAX_ONLINE_DOWNLOAD_HISTORY)
+            prefs[KEY_ONLINE_DOWNLOAD_HISTORY] = json.encodeToString(ListSerializer(OnlineDownloadHistoryEntry.serializer()), next)
+        }
+    }
+
     companion object {
         private val json = Json {
             ignoreUnknownKeys = true
@@ -372,10 +385,12 @@ class UserPreferences @Inject constructor(
         private val KEY_SOURCE_REPOSITORY_URLS = stringSetPreferencesKey("source_repository_urls")
         private val KEY_BROWSE_SEARCH_HISTORY = stringPreferencesKey("browse_search_history_v1")
         private val KEY_ONLINE_READING_HISTORY = stringPreferencesKey("online_reading_history_v1")
+        private val KEY_ONLINE_DOWNLOAD_HISTORY = stringPreferencesKey("online_download_history_v1")
         private val KEY_DOWNLOAD_CONCURRENCY = intPreferencesKey("download_concurrency_v1")
         private const val HISTORY_SEPARATOR = "\u001F"
         private const val MAX_SEARCH_HISTORY = 12
         private const val MAX_ONLINE_HISTORY = 120
+        private const val MAX_ONLINE_DOWNLOAD_HISTORY = 200
         const val MIN_DOWNLOAD_CONCURRENCY = 2
         const val MAX_DOWNLOAD_CONCURRENCY = 10
         const val DEFAULT_DOWNLOAD_CONCURRENCY = 4
@@ -408,6 +423,13 @@ class UserPreferences @Inject constructor(
             raw?.takeIf { it.isNotBlank() }?.let {
                 runCatching {
                     json.decodeFromString(ListSerializer(OnlineReadingHistoryEntry.serializer()), it)
+                }.getOrDefault(emptyList())
+            }.orEmpty()
+
+        private fun decodeOnlineDownloadHistory(raw: String?): List<OnlineDownloadHistoryEntry> =
+            raw?.takeIf { it.isNotBlank() }?.let {
+                runCatching {
+                    json.decodeFromString(ListSerializer(OnlineDownloadHistoryEntry.serializer()), it)
                 }.getOrDefault(emptyList())
             }.orEmpty()
     }

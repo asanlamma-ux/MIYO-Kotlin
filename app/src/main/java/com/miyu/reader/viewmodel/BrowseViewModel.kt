@@ -82,6 +82,7 @@ data class BrowseUiState(
     val detailsLoading: Boolean = false,
     val downloadingKey: String? = null,
     val downloadProgress: BrowseDownloadProgress? = null,
+    val queuedDownloadCount: Int = 0,
     val generatedEpub: GeneratedOnlineNovelEpub? = null,
     val selectedNovelSummary: OnlineNovelSummary? = null,
     val selectedNovelDetails: OnlineNovelDetails? = null,
@@ -206,12 +207,14 @@ class BrowseViewModel @Inject constructor(
                 val active = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.RUNNING || it.status == OnlineDownloadStatus.PAUSED }
                 val completed = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.COMPLETED }?.generatedEpub
                 val latestError = tasks.values.firstOrNull { it.status == OnlineDownloadStatus.ERROR }?.error
+                val queuedCount = tasks.values.count { it.status == OnlineDownloadStatus.RUNNING || it.status == OnlineDownloadStatus.PAUSED }
                 _uiState.update {
                     it.copy(
                         downloadingKey = active?.key,
                         downloadProgress = active?.let { task ->
                             BrowseDownloadProgress(task.key, task.title, task.completed, task.total)
                         },
+                        queuedDownloadCount = queuedCount,
                         generatedEpub = completed ?: it.generatedEpub,
                         error = latestError ?: it.error,
                     )

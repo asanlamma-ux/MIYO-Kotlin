@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
@@ -213,7 +213,7 @@ fun MiyoWorkspaceExitButton(
         contentPadding = PaddingValues(horizontal = 0.dp, vertical = MiyoSpacing.small),
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
             contentDescription = null,
             tint = colors.secondaryText,
             modifier = Modifier.size(18.dp),

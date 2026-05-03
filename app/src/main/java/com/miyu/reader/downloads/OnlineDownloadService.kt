@@ -8,6 +8,7 @@ import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.OnlineNovelRepository
+import com.miyu.reader.domain.model.OnlineDownloadHistoryEntry
 import com.miyu.reader.domain.model.OnlineDownloadRequest
 import com.miyu.reader.domain.model.OnlineDownloadStatus
 import com.miyu.reader.notifications.OnlineDownloadNotifier
@@ -23,6 +24,10 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
 import java.util.Collections
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -125,6 +130,17 @@ class OnlineDownloadService : Service() {
                     )
                 }
                 val generated = repository.createGeneratedEpub(details, contents.sortedBy { it.order })
+                val completedAt = Instant.now().toString()
+                preferences.recordOnlineDownload(
+                    OnlineDownloadHistoryEntry(
+                        id = UUID.randomUUID().toString(),
+                        key = request.key,
+                        title = details.title,
+                        chapterCount = chapters.size,
+                        completedAt = completedAt,
+                        dayKey = LocalDate.now(ZoneId.systemDefault()).toString(),
+                    ),
+                )
                 coordinator.complete(request.key, details.title, chapters.size, generated)
                 notifier.showComplete(request.key, details.title, generated.fileName)
             } catch (cancelledError: CancellationException) {
@@ -219,5 +235,17 @@ class OnlineDownloadService : Service() {
 
         fun cancelIntent(context: Context): Intent =
             Intent(context, OnlineDownloadService::class.java).apply { action = ACTION_CANCEL }
+
+        fun pause(context: Context) {
+            ContextCompat.startForegroundService(context, pauseIntent(context))
+        }
+
+        fun resume(context: Context) {
+            ContextCompat.startForegroundService(context, resumeIntent(context))
+        }
+
+        fun cancel(context: Context) {
+            ContextCompat.startForegroundService(context, cancelIntent(context))
+        }
     }
 }

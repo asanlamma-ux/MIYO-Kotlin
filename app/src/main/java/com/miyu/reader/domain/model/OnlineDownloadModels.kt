@@ -41,3 +41,13 @@ data class OnlineReadingHistoryEntry(
     val lastChapterTitle: String? = null,
     val lastReadAt: String,
 )
+
+@Serializable
+data class OnlineDownloadHistoryEntry(
+    val id: String,
+    val key: String,
+    val title: String,
+    val chapterCount: Int,
+    val completedAt: String,
+    val dayKey: String,
+)

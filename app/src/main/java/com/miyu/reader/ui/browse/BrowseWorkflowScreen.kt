@@ -5,6 +5,12 @@ import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -19,10 +25,12 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,6 +55,8 @@ import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -88,6 +98,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -102,6 +113,9 @@ import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineChapterSummary
+import com.miyu.reader.domain.model.OnlineDownloadHistoryEntry
+import com.miyu.reader.domain.model.OnlineDownloadStatus
+import com.miyu.reader.domain.model.OnlineDownloadTaskState
 import com.miyu.reader.domain.model.OnlineNovelDetails
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSummary
@@ -118,6 +132,7 @@ import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.BrowseDownloadProgress
 import com.miyu.reader.viewmodel.BrowseSourceTab
 import com.miyu.reader.viewmodel.BrowseViewModel
+import com.miyu.reader.viewmodel.DownloadsViewModel
 import com.miyu.reader.viewmodel.GlobalSearchSourceResult
 import com.miyu.reader.viewmodel.GlobalSourceFilter
 
@@ -262,6 +277,7 @@ fun BrowseWorkflowScreen(
 
             item {
                 BrowseStatusStrip(
+                    queuedDownloadCount = state.queuedDownloadCount,
                     onOpenDownloads = onOpenDownloads,
                     onOpenUpdates = onOpenUpdates,
                 )
@@ -553,6 +569,8 @@ fun GlobalSourceSearchScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val protectedSources = state.installedSources.filter { it.requiresVerification }
     val progress = if (state.globalSearchTotal > 0) {
         state.globalSearchProgress / state.globalSearchTotal.toFloat()
@@ -574,11 +592,19 @@ fun GlobalSourceSearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateContentSize()
                     .padding(horizontal = MiyoSpacing.small, vertical = MiyoSpacing.small),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = colors.onBackground)
+                AnimatedVisibility(
+                    visible = !imeVisible,
+                    enter = fadeIn() + expandHorizontally(),
+                    exit = fadeOut() + shrinkHorizontally(),
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = colors.onBackground)
+                    }
                 }
                 OutlinedTextField(
                     value = state.globalSearchQuery,
@@ -1732,20 +1758,304 @@ fun MigrationWorkflowScreen(
 @Composable
 fun DownloadsWorkflowScreen(
     onBack: () -> Unit,
+    viewModel: DownloadsViewModel = hiltViewModel(),
 ) {
-    WorkflowWorkspaceScreen(
-        exitLabel = "Exit downloads",
-        title = "Downloads",
-        subtitle = "Queued chapter downloads, EPUB export, retry state, and Android notifications.",
-        icon = Icons.Outlined.CloudDownload,
-        onBack = onBack,
-        steps = listOf(
-            "Pending, running, completed, and failed tasks stay separated.",
-            "Each task owns chapter progress and EPUB export progress.",
-            "Provider retry/backoff will be connected through the source registry.",
-            "Completed EPUBs flow into the local library import pipeline.",
-        ),
-    )
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = LocalMIYUColors.current
+
+    MiyoWorkspaceSurface {
+        MiyoWorkspaceExitButton(label = "Exit downloads", onClick = onBack)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.large),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Downloads",
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
+                        color = colors.onBackground,
+                    )
+                    Text(
+                        "Foreground exports stay visible here while today’s completed downloads remain grouped until the next midnight reset.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.secondaryText,
+                    )
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                ) {
+                    QueueMetric(
+                        icon = Icons.Outlined.CloudDownload,
+                        title = "Queue",
+                        value = "${state.activeDownloads} active",
+                        modifier = Modifier.weight(1f),
+                    )
+                    QueueMetric(
+                        icon = Icons.Outlined.DoneAll,
+                        title = "Today",
+                        value = "${state.todayTotalChapters} chapters",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            item {
+                DownloadsSectionHeader(
+                    title = "Queue",
+                    subtitle = if (state.queueItems.isEmpty()) "Nothing is waiting right now." else "${state.queueItems.size} task(s) visible.",
+                )
+            }
+            if (state.queueItems.isEmpty()) {
+                item {
+                    EmptyDownloadsShell(
+                        icon = Icons.Outlined.CloudDownload,
+                        title = "No queued downloads",
+                        message = "Start an EPUB export from a source result or chapter selection sheet and it will appear here immediately.",
+                    )
+                }
+            } else {
+                items(state.queueItems, key = { it.key }) { task ->
+                    DownloadQueueRow(
+                        task = task,
+                        onPause = { viewModel.pause(task) },
+                        onResume = { viewModel.resume(task) },
+                        onCancel = { viewModel.cancel(task) },
+                    )
+                }
+            }
+            item {
+                DownloadsSectionHeader(
+                    title = "Today",
+                    subtitle = if (state.todayHistory.isEmpty()) "No downloads in the last reset window." else "${state.todayHistory.size} completed export(s).",
+                )
+            }
+            if (state.todayHistory.isEmpty()) {
+                item {
+                    EmptyDownloadsShell(
+                        icon = Icons.Outlined.History,
+                        title = "No downloads today",
+                        message = "Completed exports will stay here until the list resets at midnight.",
+                    )
+                }
+            } else {
+                items(state.todayHistory, key = { it.id }) { entry ->
+                    DownloadHistoryRow(entry = entry)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadsSectionHeader(
+    title: String,
+    subtitle: String,
+) {
+    val colors = LocalMIYUColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+            color = colors.onBackground,
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.secondaryText,
+        )
+    }
+}
+
+@Composable
+private fun EmptyDownloadsShell(
+    icon: ImageVector,
+    title: String,
+    message: String,
+) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = colors.cardBackground.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.18f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.large),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+            horizontalAlignment = Alignment.Start,
+        ) {
+            SourceIconHeader(icon = icon)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                color = colors.onBackground,
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadQueueRow(
+    task: OnlineDownloadTaskState,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = colors.cardBackground.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.14f)),
+    ) {
+        Column(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = colors.accent.copy(alpha = 0.14f),
+                    modifier = Modifier.size(52.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.CloudDownload, contentDescription = null, tint = colors.accent)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        task.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                        color = colors.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        when (task.status) {
+                            OnlineDownloadStatus.RUNNING -> "Downloading"
+                            OnlineDownloadStatus.PAUSED -> "Paused"
+                            OnlineDownloadStatus.ERROR -> "Failed"
+                            OnlineDownloadStatus.COMPLETED -> "Completed"
+                            OnlineDownloadStatus.CANCELED -> "Canceled"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (task.status == OnlineDownloadStatus.ERROR) MaterialTheme.colorScheme.error else colors.secondaryText,
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                progress = { task.percent / 100f },
+                color = colors.accent,
+                trackColor = colors.secondaryText.copy(alpha = 0.16f),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "${task.completed}/${task.total} chapters · ${task.percent}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.secondaryText,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (task.status == OnlineDownloadStatus.RUNNING) {
+                        MiyoIconActionButton(
+                            icon = Icons.Outlined.Pause,
+                            contentDescription = "Pause download",
+                            onClick = onPause,
+                            modifier = Modifier.size(42.dp),
+                        )
+                    }
+                    if (task.status == OnlineDownloadStatus.PAUSED) {
+                        MiyoIconActionButton(
+                            icon = Icons.Outlined.PlayArrow,
+                            contentDescription = "Resume download",
+                            onClick = onResume,
+                            modifier = Modifier.size(42.dp),
+                        )
+                    }
+                    if (task.status == OnlineDownloadStatus.RUNNING || task.status == OnlineDownloadStatus.PAUSED) {
+                        MiyoIconActionButton(
+                            icon = Icons.Outlined.Close,
+                            contentDescription = "Cancel download",
+                            onClick = onCancel,
+                            modifier = Modifier.size(42.dp),
+                        )
+                    }
+                }
+            }
+            task.error?.takeIf { it.isNotBlank() }?.let { error ->
+                Text(
+                    error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadHistoryRow(entry: OnlineDownloadHistoryEntry) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = colors.cardBackground.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, colors.secondaryText.copy(alpha = 0.14f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(MiyoSpacing.medium),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = colors.accent.copy(alpha = 0.14f),
+                modifier = Modifier.size(52.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.History, contentDescription = null, tint = colors.accent)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    entry.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                    color = colors.onBackground,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "${entry.chapterCount} chapters",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.secondaryText,
+                )
+            }
+            Text(
+                formatDownloadTime(entry.completedAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.secondaryText,
+            )
+        }
+    }
 }
 
 @Composable
@@ -1769,6 +2079,7 @@ fun SourceUpdatesWorkflowScreen(
 
 @Composable
 private fun BrowseStatusStrip(
+    queuedDownloadCount: Int,
     onOpenDownloads: () -> Unit,
     onOpenUpdates: () -> Unit,
 ) {
@@ -1797,7 +2108,7 @@ private fun BrowseStatusStrip(
             QueueMetric(
                 icon = Icons.Outlined.CloudDownload,
                 title = "Downloads",
-                value = "0 queued",
+                value = "$queuedDownloadCount queued",
                 modifier = Modifier
                     .weight(1f)
                     .clickable(onClick = onOpenDownloads),
@@ -2363,6 +2674,14 @@ private fun WorkflowWorkspaceScreen(
         }
     }
 }
+
+private fun formatDownloadTime(isoString: String): String =
+    runCatching {
+        val instant = java.time.Instant.parse(isoString)
+        java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+            .withZone(java.time.ZoneId.systemDefault())
+            .format(instant)
+    }.getOrDefault("")
 
 @Composable
 private fun SourceIconHeader(icon: ImageVector) {

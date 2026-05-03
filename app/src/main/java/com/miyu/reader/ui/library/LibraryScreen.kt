@@ -32,8 +32,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdded
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
@@ -1247,7 +1247,7 @@ private fun CategoryManagerScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 HeaderActionButton(
-                    icon = if (selectedIds.isEmpty()) Icons.Filled.ArrowBack else Icons.Filled.Clear,
+                    icon = if (selectedIds.isEmpty()) Icons.AutoMirrored.Outlined.ArrowBack else Icons.Filled.Clear,
                     contentDescription = if (selectedIds.isEmpty()) "Back" else "Cancel selection",
                     onClick = {
                         if (selectedIds.isEmpty()) onBack() else selectedIds = emptySet()
