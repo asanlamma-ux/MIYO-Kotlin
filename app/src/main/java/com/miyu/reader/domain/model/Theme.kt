@@ -97,5 +97,14 @@ data class ReadingSettings(
     val overwriteTextStyle: Boolean = true,
 )
 
+fun ReadingSettings.normalizedReaderChrome(preferHeaderVisible: Boolean = true): ReadingSettings {
+    if (!hideReaderHeader || !hideReaderFooter) return this
+    return if (preferHeaderVisible) {
+        copy(hideReaderHeader = false)
+    } else {
+        copy(hideReaderFooter = false)
+    }
+}
+
 @Keep
 enum class PageAnimation { NONE, SLIDE, FADE, CURL }

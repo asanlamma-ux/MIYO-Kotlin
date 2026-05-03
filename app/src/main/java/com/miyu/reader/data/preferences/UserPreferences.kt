@@ -103,39 +103,40 @@ class UserPreferences @Inject constructor(
             showPageBorder = prefs[KEY_SHOW_PAGE_BORDER] ?: defaults.showPageBorder,
             overwriteLinkStyle = prefs[KEY_OVERWRITE_LINK_STYLE] ?: defaults.overwriteLinkStyle,
             overwriteTextStyle = prefs[KEY_OVERWRITE_TEXT_STYLE] ?: defaults.overwriteTextStyle,
-        )
+        ).normalizedReaderChrome(preferHeaderVisible = true)
     }
 
     suspend fun setReadingSettings(settings: ReadingSettings) {
+        val normalized = settings.normalizedReaderChrome(preferHeaderVisible = true)
         context.dataStore.edit {
-            it[KEY_READER_MODE] = settings.readerMode.name
-            it[KEY_PAGE_ANIMATION] = settings.pageAnimation.name
-            it[KEY_TAP_ZONES_ENABLED] = settings.tapZonesEnabled
-            it[KEY_TAP_SCROLL_RATIO] = settings.tapScrollPageRatio
-            it[KEY_TAP_ZONE_MODE] = settings.tapZoneNavMode.name
-            it[KEY_VOLUME_TURN] = settings.volumeButtonPageTurn
-            it[KEY_AUTO_SCROLL] = settings.autoScrollSpeed
-            it[KEY_IMMERSIVE] = settings.immersiveMode
-            if (settings.brightnessOverride != null) it[KEY_BRIGHTNESS] = settings.brightnessOverride
+            it[KEY_READER_MODE] = normalized.readerMode.name
+            it[KEY_PAGE_ANIMATION] = normalized.pageAnimation.name
+            it[KEY_TAP_ZONES_ENABLED] = normalized.tapZonesEnabled
+            it[KEY_TAP_SCROLL_RATIO] = normalized.tapScrollPageRatio
+            it[KEY_TAP_ZONE_MODE] = normalized.tapZoneNavMode.name
+            it[KEY_VOLUME_TURN] = normalized.volumeButtonPageTurn
+            it[KEY_AUTO_SCROLL] = normalized.autoScrollSpeed
+            it[KEY_IMMERSIVE] = normalized.immersiveMode
+            if (normalized.brightnessOverride != null) it[KEY_BRIGHTNESS] = normalized.brightnessOverride
             else it.remove(KEY_BRIGHTNESS)
-            it[KEY_BLUE_LIGHT] = settings.blueLightFilter
-            it[KEY_REDUCED_MOTION] = settings.reducedMotion
-            it[KEY_KEEP_SCREEN_ON] = settings.keepScreenOn
-            it[KEY_BIONIC_READING] = settings.bionicReading
-            it[KEY_AUTO_ADVANCE_CHAPTER] = settings.autoAdvanceChapter
-            it[KEY_SLEEP_TIMER_MINUTES] = settings.sleepTimerMinutes
-            it[KEY_READING_FLOW_MODE] = settings.readingFlowMode.name
-            it[KEY_MARGIN_PRESET] = settings.marginPreset.name
-            if (settings.contentColumnWidth != null) it[KEY_COLUMN_WIDTH] = settings.contentColumnWidth
+            it[KEY_BLUE_LIGHT] = normalized.blueLightFilter
+            it[KEY_REDUCED_MOTION] = normalized.reducedMotion
+            it[KEY_KEEP_SCREEN_ON] = normalized.keepScreenOn
+            it[KEY_BIONIC_READING] = normalized.bionicReading
+            it[KEY_AUTO_ADVANCE_CHAPTER] = normalized.autoAdvanceChapter
+            it[KEY_SLEEP_TIMER_MINUTES] = normalized.sleepTimerMinutes
+            it[KEY_READING_FLOW_MODE] = normalized.readingFlowMode.name
+            it[KEY_MARGIN_PRESET] = normalized.marginPreset.name
+            if (normalized.contentColumnWidth != null) it[KEY_COLUMN_WIDTH] = normalized.contentColumnWidth
             else it.remove(KEY_COLUMN_WIDTH)
-            it[KEY_COLUMN_LAYOUT] = settings.readerColumnLayout.name
-            it[KEY_HIDE_READER_HEADER] = settings.hideReaderHeader
-            it[KEY_HIDE_READER_FOOTER] = settings.hideReaderFooter
-            it[KEY_READER_NAV_LOCKED] = settings.readerNavLocked
-            it[KEY_SELECTION_POPUP_ENABLED] = settings.selectionPopupEnabled
-            it[KEY_SHOW_PAGE_BORDER] = settings.showPageBorder
-            it[KEY_OVERWRITE_LINK_STYLE] = settings.overwriteLinkStyle
-            it[KEY_OVERWRITE_TEXT_STYLE] = settings.overwriteTextStyle
+            it[KEY_COLUMN_LAYOUT] = normalized.readerColumnLayout.name
+            it[KEY_HIDE_READER_HEADER] = normalized.hideReaderHeader
+            it[KEY_HIDE_READER_FOOTER] = normalized.hideReaderFooter
+            it[KEY_READER_NAV_LOCKED] = normalized.readerNavLocked
+            it[KEY_SELECTION_POPUP_ENABLED] = normalized.selectionPopupEnabled
+            it[KEY_SHOW_PAGE_BORDER] = normalized.showPageBorder
+            it[KEY_OVERWRITE_LINK_STYLE] = normalized.overwriteLinkStyle
+            it[KEY_OVERWRITE_TEXT_STYLE] = normalized.overwriteTextStyle
         }
     }
 

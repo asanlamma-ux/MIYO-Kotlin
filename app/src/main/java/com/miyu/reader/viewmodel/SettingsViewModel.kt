@@ -234,14 +234,24 @@ class SettingsViewModel @Inject constructor(
     fun setHideReaderHeader(enabled: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.readingSettings
-            preferences.setReadingSettings(current.copy(hideReaderHeader = enabled))
+            preferences.setReadingSettings(
+                current.copy(
+                    hideReaderHeader = enabled,
+                    hideReaderFooter = if (enabled) false else current.hideReaderFooter,
+                ),
+            )
         }
     }
 
     fun setHideReaderFooter(enabled: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.readingSettings
-            preferences.setReadingSettings(current.copy(hideReaderFooter = enabled))
+            preferences.setReadingSettings(
+                current.copy(
+                    hideReaderFooter = enabled,
+                    hideReaderHeader = if (enabled) false else current.hideReaderHeader,
+                ),
+            )
         }
     }
 
@@ -412,7 +422,7 @@ class SettingsViewModel @Inject constructor(
             showPageBorder = readingJson.optBoolean("showPageBorder", defaultReading.showPageBorder),
             overwriteLinkStyle = readingJson.optBoolean("overwriteLinkStyle", defaultReading.overwriteLinkStyle),
             overwriteTextStyle = readingJson.optBoolean("overwriteTextStyle", defaultReading.overwriteTextStyle),
-        )
+        ).normalizedReaderChrome(preferHeaderVisible = true)
 
         preferences.setThemeMode(enumOrDefault(snapshot.optString("themeMode"), ThemeMode.SYSTEM))
         preferences.setReaderThemeId(snapshot.optString("readerThemeId", DefaultReaderThemeId))

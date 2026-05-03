@@ -243,20 +243,36 @@ fun ReaderLayoutPanelBottomSheet(
                 )
                 ToggleRow(
                     title = "Hide top controls",
-                    subtitle = "Keep the chapter header out of the reading space",
+                    subtitle = "Keep the chapter header out of the reading space. At least one control bar stays available.",
                     icon = Icons.Outlined.Fullscreen,
                     active = settings.hideReaderHeader,
                     readerTheme = readerTheme,
-                    onToggle = { onSettingsChanged(settings.copy(hideReaderHeader = !settings.hideReaderHeader)) },
+                    onToggle = {
+                        val enabled = !settings.hideReaderHeader
+                        onSettingsChanged(
+                            settings.copy(
+                                hideReaderHeader = enabled,
+                                hideReaderFooter = if (enabled) false else settings.hideReaderFooter,
+                            ),
+                        )
+                    },
                 )
                 Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
                     title = "Hide bottom controls",
-                    subtitle = "Hide progress and quick reader tools when controls open",
+                    subtitle = "Hide progress and quick reader tools when controls open. At least one control bar stays available.",
                     icon = Icons.Outlined.Fullscreen,
                     active = settings.hideReaderFooter,
                     readerTheme = readerTheme,
-                    onToggle = { onSettingsChanged(settings.copy(hideReaderFooter = !settings.hideReaderFooter)) },
+                    onToggle = {
+                        val enabled = !settings.hideReaderFooter
+                        onSettingsChanged(
+                            settings.copy(
+                                hideReaderFooter = enabled,
+                                hideReaderHeader = if (enabled) false else settings.hideReaderHeader,
+                            ),
+                        )
+                    },
                 )
                 Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
