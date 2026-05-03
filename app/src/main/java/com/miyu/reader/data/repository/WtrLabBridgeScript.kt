@@ -417,6 +417,71 @@ object WtrLabBridgeScript {
     return details;
   }
 
+  async function decryptPayload(encrypted, encKey) {
+    var expectsArray = false;
+    var payload = String(encrypted || '');
+    if (payload.indexOf('arr:') === 0) {
+      expectsArray = true;
+      payload = payload.slice(4);
+    } else if (payload.indexOf('str:') === 0) {
+      payload = payload.slice(4);
+    }
+    var parts = payload.split(':');
+    if (parts.length !== 3) throw new Error('Invalid encrypted data format.');
+    var iv = Uint8Array.from(atob(parts[0]), function (char) { return char.charCodeAt(0); });
+    var tag = Uint8Array.from(atob(parts[1]), function (char) { return char.charCodeAt(0); });
+    var ciphertext = Uint8Array.from(atob(parts[2]), function (char) { return char.charCodeAt(0); });
+    var combined = new Uint8Array(ciphertext.length + tag.length);
+    combined.set(ciphertext);
+    combined.set(tag, ciphertext.length);
+    var keyBytes = new TextEncoder().encode(String(encKey || '').slice(0, 32));
+    var cryptoKey = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+    var plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, combined);
+    var decoded = new TextDecoder().decode(plain);
+    return expectsArray ? JSON.parse(decoded) : decoded;
+  }
+
+  async function fetchEncryptionKey(doc) {
+    var searchKey = 'TextEncoder().encode("';
+    var seen = {};
+    var scripts = Array.prototype.slice.call((doc && doc.querySelectorAll('head script[src]')) || []);
+    for (var index = 0; index < scripts.length; index += 1) {
+      var src = String(scripts[index].getAttribute('src') || '');
+      if (!src || seen[src]) continue;
+      seen[src] = true;
+      try {
+        var raw = await fetchText(absUrl(src));
+        var keyIndex = raw.indexOf(searchKey);
+        if (keyIndex >= 0) {
+          return raw.substring(keyIndex + searchKey.length, keyIndex + searchKey.length + 32);
+        }
+      } catch (_error) {
+        // Ignore script fetch failures and keep scanning.
+      }
+    }
+    throw new Error('Failed to find the chapter encryption key.');
+  }
+
+  async function translateLines(lines) {
+    if (!Array.isArray(lines) || !lines.length) return [];
+    var wrapped = lines.map(function (line, index) {
+      return '<a i="' + index + '">' + escapeHtml(String(line || '')) + '</a>';
+    });
+    var response = await fetch('https://translate-pa.googleapis.com/v1/translateHtml', {
+      credentials: 'omit',
+      headers: {
+        'content-type': 'application/json+protobuf',
+        'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520'
+      },
+      referrer: 'https://wtr-lab.com/',
+      body: '[[' + JSON.stringify(wrapped) + ',"zh-CN","en"],"te_lib"]',
+      method: 'POST'
+    });
+    if (!response.ok) throw new Error('On-device translation fallback failed (' + response.status + ').');
+    var payload = await response.json();
+    return Array.isArray(payload && payload[0]) ? payload[0] : lines;
+  }
+
   function contentToHtml(content, glossary) {
     var replacements = {};
     if (glossary && glossary.terms && Array.isArray(glossary.terms)) {
@@ -443,6 +508,8 @@ object WtrLabBridgeScript {
     var translationTypes = ['web', 'ai'];
     var result = null;
     var readerError = '';
+    var fallbackNote = '';
+    var chapterDoc = null;
     for (var i = 0; i < translationTypes.length; i += 1) {
       var response = await fetch('https://wtr-lab.com/api/reader/get', {
         method: 'POST',
@@ -466,9 +533,28 @@ object WtrLabBridgeScript {
     var content = result.data && result.data.data ? result.data.data.body : null;
     var glossary = result.data && result.data.data ? result.data.data.glossary_data : null;
     if (typeof content === 'string' && (content.indexOf('arr:') === 0 || content.indexOf('str:') === 0)) {
-      content = '<p><em>This WTR-LAB chapter returned an encrypted payload. Complete verification again or try the web translation mode later.</em></p>';
+      try {
+        if (!chapterDoc) {
+          var chapterHtml = await fetchText('https://wtr-lab.com' + path, {
+            headers: { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' }
+          });
+          chapterDoc = new DOMParser().parseFromString(chapterHtml, 'text/html');
+        }
+        var encKey = await fetchEncryptionKey(chapterDoc);
+        var decrypted = await decryptPayload(content, encKey);
+        if (Array.isArray(decrypted)) {
+          content = await translateLines(decrypted);
+          fallbackNote = '<p><small>This chapter was decrypted locally and translated inside the external source runtime.</small></p>';
+        } else {
+          content = decrypted;
+          fallbackNote = '<p><small>This chapter was decrypted locally inside the external source runtime.</small></p>';
+        }
+      } catch (error) {
+        readerError = readerError || (error && error.message ? error.message : String(error));
+        content = '<p><em>This WTR-LAB chapter returned an encrypted payload. Complete verification again or try the web translation mode later.</em></p>';
+      }
     }
-    var html = contentToHtml(content, glossary);
+    var html = fallbackNote + contentToHtml(content, glossary);
     if (readerError) html = '<p><small>' + readerError + '</small></p>' + html;
     return { order: chapterNo, title: title, html: sanitizeHtml(html) };
   }
@@ -519,13 +605,29 @@ object WtrLabBridgeScript {
     return fallbackChapterFromPage(payload, lastError);
   }
 
-  async function fetchWtrChaptersBatch(payload) {
+  async function fetchWtrChaptersBatch(payload, requestId) {
     var chapters = ensureArray(payload && payload.chapters);
     if (!chapters.length) throw new Error('No WTR-LAB chapters were selected.');
     var concurrency = Math.max(2, Math.min(Number(payload && payload.maxConcurrency) || 4, 10));
     var cursor = 0;
+    var completed = 0;
     var results = new Array(chapters.length);
     var failures = [];
+    function postProgress(chapterNo) {
+      completed += 1;
+      if (!requestId) return;
+      post({
+        scope: 'wtr-lab',
+        type: 'progress',
+        id: requestId,
+        providerId: 'wtr-lab',
+        payload: {
+          completed: completed,
+          total: chapters.length,
+          chapterNo: chapterNo
+        }
+      });
+    }
     async function worker() {
       while (cursor < chapters.length) {
         var index = cursor;
@@ -545,6 +647,8 @@ object WtrLabBridgeScript {
             title: request.chapterTitle,
             html: '<p><em>Chapter download failed after retries: ' + escapeHtml(error && error.message ? error.message : String(error)) + '</em></p>'
           };
+        } finally {
+          postProgress(request.chapterNo);
         }
       }
     }
@@ -552,7 +656,6 @@ object WtrLabBridgeScript {
     for (var i = 0; i < Math.min(concurrency, chapters.length); i += 1) workers.push(worker());
     await Promise.all(workers);
     var downloaded = results.filter(Boolean).sort(function (a, b) { return a.order - b.order; });
-    if (failures.length) throw new Error('Download failed before EPUB export. ' + failures.slice(0, 4).join('; '));
     if (!downloaded.length) throw new Error(failures[0] || 'No chapters could be downloaded.');
     return {
       chapters: downloaded,
@@ -567,7 +670,7 @@ object WtrLabBridgeScript {
     if (request.type === 'search') return searchWtr(payload);
     if (request.type === 'details') return fetchWtrNovelDetails(payload);
     if (request.type === 'chapter') return fetchWtrChapterRobust(payload);
-    if (request.type === 'chapters') return fetchWtrChaptersBatch(payload);
+    if (request.type === 'chapters') return fetchWtrChaptersBatch(payload, request && request.id);
     throw new Error('Unsupported WTR-LAB bridge request.');
   }
 

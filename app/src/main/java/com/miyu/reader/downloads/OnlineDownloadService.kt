@@ -7,7 +7,9 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
 import com.miyu.reader.data.preferences.UserPreferences
+import com.miyu.reader.data.repository.NovelSourcePluginRegistry
 import com.miyu.reader.data.repository.OnlineNovelRepository
+import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineDownloadHistoryEntry
 import com.miyu.reader.domain.model.OnlineDownloadRequest
 import com.miyu.reader.domain.model.OnlineDownloadStatus
@@ -36,6 +38,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class OnlineDownloadService : Service() {
+    @Inject lateinit var sourceRegistry: NovelSourcePluginRegistry
     @Inject lateinit var repository: OnlineNovelRepository
     @Inject lateinit var preferences: UserPreferences
     @Inject lateinit var notifier: OnlineDownloadNotifier
@@ -88,7 +91,8 @@ class OnlineDownloadService : Service() {
         startForeground(notifier.notificationId(request.key), notifier.buildProgressNotification(request.key, request.summary.title, 0, 1, paused = false))
         activeJob = serviceScope.launch {
             try {
-                val details = repository.getDetails(request.summary)
+                val sourceId = sourceRegistry.sourceIdForProvider(request.summary.providerId)
+                val details = sourceRegistry.details(request.summary)
                 val selectedOrders = request.selectedChapterOrders.toSet()
                 val chapters = details.chapters
                     .sortedBy { it.order }
@@ -99,8 +103,11 @@ class OnlineDownloadService : Service() {
                 val concurrency = preferences.downloadConcurrency.first()
                 val queue = ConcurrentLinkedQueue(chapters)
                 val failures = Collections.synchronizedList(mutableListOf<String>())
-                val contents = Collections.synchronizedList(mutableListOf<com.miyu.reader.domain.model.OnlineChapterContent>())
+                val contents = Collections.synchronizedList(mutableListOf<OnlineChapterContent>())
                 kotlinx.coroutines.coroutineScope {
+                    // Downloads stay at the service layer so pause/resume, notifications,
+                    // and future queue semantics remain identical for built-in and external
+                    // sources even when the fetch path differs underneath.
                     repeat(concurrency.coerceAtLeast(1)) {
                         launch {
                             while (isActive && !cancelled.get()) {
@@ -108,7 +115,7 @@ class OnlineDownloadService : Service() {
                                 val chapter = queue.poll() ?: break
                                 try {
                                     awaitIfPaused()
-                                    contents += repository.getChapterContent(details, chapter)
+                                    contents += sourceRegistry.chapterContent(sourceId, details, chapter)
                                 } catch (error: Exception) {
                                     failures += "Chapter ${chapter.order}: ${error.message ?: error::class.java.simpleName}"
                                 } finally {

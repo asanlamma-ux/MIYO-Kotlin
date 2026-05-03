@@ -318,18 +318,6 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "${source.name} is not installed yet.") }
             return
         }
-        if (source.requiresVerification) {
-            _uiState.update {
-                it.copy(
-                    error = "${source.name} needs in-app verification before parser requests can run. Open the verifier from the source page.",
-                    searchedSourceId = sourceId,
-                    results = emptyList(),
-                    generatedEpub = null,
-                    hasMore = false,
-                )
-            }
-            return
-        }
 
         val state = _uiState.value
         val nextPage = if (loadMore && state.searchedSourceId == sourceId) state.page + 1 else 1
@@ -378,7 +366,7 @@ class BrowseViewModel @Inject constructor(
         if (cleanQuery.isBlank()) return
         val state = _uiState.value
         val installed = state.installedSources.filter {
-            it.installState == NovelSourceInstallState.INSTALLED && !it.requiresVerification
+            it.installState == NovelSourceInstallState.INSTALLED
         }
         val filtered = when (state.globalSourceFilter) {
             GlobalSourceFilter.PINNED -> installed.filter { it.id in state.pinnedSourceIds }.takeIf { it.isNotEmpty() } ?: installed
@@ -439,10 +427,10 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "Source not found.", detailsLoading = false) }
             return
         }
-        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
+        if (source.installState != NovelSourceInstallState.INSTALLED) {
             _uiState.update {
                 it.copy(
-                    error = "${source.name} cannot load details until its plugin runtime is available.",
+                    error = "${source.name} is not installed yet.",
                     selectedNovelDetails = null,
                     detailsLoading = false,
                 )
@@ -494,13 +482,13 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(chapterPreviewError = "Source not found.", chapterPreviewLoading = false) }
             return
         }
-        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
+        if (source.installState != NovelSourceInstallState.INSTALLED) {
             _uiState.update {
                 it.copy(
                     selectedChapterSummary = chapter,
                     selectedChapterPreview = null,
                     chapterPreviewLoading = false,
-                    chapterPreviewError = "${source.name} cannot open chapter previews until its runtime is ready.",
+                    chapterPreviewError = "${source.name} is not installed yet.",
                 )
             }
             return
@@ -568,8 +556,8 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "Source not found.") }
             return
         }
-        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
-            _uiState.update { it.copy(error = "${source.name} cannot download until its plugin runtime is available.") }
+        if (source.installState != NovelSourceInstallState.INSTALLED) {
+            _uiState.update { it.copy(error = "${source.name} is not installed yet.") }
             return
         }
         val chapters = details.chapters.sortedBy { it.order }
@@ -589,8 +577,8 @@ class BrowseViewModel @Inject constructor(
             _uiState.update { it.copy(error = "Source not found.") }
             return
         }
-        if (source.installState != NovelSourceInstallState.INSTALLED || source.requiresVerification) {
-            _uiState.update { it.copy(error = "${source.name} cannot download until its plugin runtime is available.") }
+        if (source.installState != NovelSourceInstallState.INSTALLED) {
+            _uiState.update { it.copy(error = "${source.name} is not installed yet.") }
             return
         }
         startDownload(summary = summary, selectedChapterOrders = emptyList())

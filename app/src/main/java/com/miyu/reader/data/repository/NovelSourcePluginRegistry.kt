@@ -18,13 +18,28 @@ import javax.inject.Singleton
 @Singleton
 class NovelSourcePluginRegistry @Inject constructor(
     private val onlineNovelRepository: OnlineNovelRepository,
+    private val externalRuntime: ExternalJsPluginRuntime,
 ) {
-    // Built-in providers execute locally. Repository-backed entries below are
-    // metadata slots only until external plugin install/runtime is enabled.
+    // Providers listed here intentionally bypass the plain HTTP repository path
+    // and run through the browser-backed plugin runtime instead.
+    private val externalizedProviders = setOf(OnlineNovelProviderId.WTR_LAB)
+
     private val builtInPlugins: Map<String, NovelSourcePlugin> =
         onlineNovelRepository.providers
+            .filterNot { it.id in externalizedProviders }
             .associate { provider ->
                 provider.toSourcePluginId() to BuiltInNovelSourcePlugin(provider, onlineNovelRepository)
+            }
+
+    private val externalPlugins: Map<String, NovelSourcePlugin> =
+        onlineNovelRepository.providers
+            .filter { it.id in externalizedProviders }
+            .associate { provider ->
+                provider.toSourcePluginId() to WtrExternalNovelSourcePlugin(
+                    provider = provider,
+                    repository = onlineNovelRepository,
+                    runtime = externalRuntime,
+                )
             }
 
     private val availablePlugins = listOf(
@@ -36,7 +51,7 @@ class NovelSourcePluginRegistry @Inject constructor(
             version = "repository",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
-            description = "External-source slot for fanfiction plugin manifests.",
+            description = "Available external source slot for fanfiction browsing.",
         ),
         NovelSourcePluginItem(
             id = "external:royalroad",
@@ -46,7 +61,7 @@ class NovelSourcePluginRegistry @Inject constructor(
             version = "repository",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
-            description = "External-source slot for web serial plugin manifests.",
+            description = "Available external source slot for web serial browsing.",
         ),
         NovelSourcePluginItem(
             id = "external:scribblehub",
@@ -56,12 +71,14 @@ class NovelSourcePluginRegistry @Inject constructor(
             version = "repository",
             kind = NovelSourceKind.EXTERNAL_JS,
             installState = NovelSourceInstallState.AVAILABLE,
-            description = "External-source slot for light novel plugin manifests.",
+            description = "Available external source slot for light novel browsing.",
         ),
     )
 
     val installedSources: List<NovelSourcePluginItem>
-        get() = builtInPlugins.values.map { it.item }
+        get() = (builtInPlugins.values + externalPlugins.values)
+            .map { it.item }
+            .sortedBy { it.name.lowercase() }
 
     val availableSources: List<NovelSourcePluginItem>
         get() = availablePlugins
@@ -102,7 +119,9 @@ class NovelSourcePluginRegistry @Inject constructor(
         plugin(sourceId).downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
 
     private fun plugin(sourceId: String): NovelSourcePlugin =
-        builtInPlugins[sourceId] ?: error("Source plugin is not installed or cannot run yet.")
+        builtInPlugins[sourceId]
+            ?: externalPlugins[sourceId]
+            ?: error("Source plugin is not installed or cannot run yet.")
 }
 
 private class BuiltInNovelSourcePlugin(
@@ -147,10 +166,10 @@ private class BuiltInNovelSourcePlugin(
         repository.downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
 }
 
-private fun OnlineNovelProvider.toSourcePluginId(): String =
+internal fun OnlineNovelProvider.toSourcePluginId(): String =
     id.toSourcePluginId()
 
-private fun OnlineNovelProviderId.toSourcePluginId(): String =
+internal fun OnlineNovelProviderId.toSourcePluginId(): String =
     "builtin:${name.lowercase().replace('_', '-')}"
 
 private fun OnlineNovelProvider.sourceLanguageLabel(): String = when (id) {

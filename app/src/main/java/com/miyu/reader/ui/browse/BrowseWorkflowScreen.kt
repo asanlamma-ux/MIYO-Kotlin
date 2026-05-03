@@ -453,21 +453,37 @@ fun SourceWorkflowDetailScreen(
                 item {
                     SourceNoticeCard(
                         icon = Icons.Outlined.Extension,
-                        title = "Plugin install flow",
-                        message = "This source is an external plugin slot. Repository manifests are modeled now; runtime install/update execution is isolated behind the plugin registry.",
-                    )
-                }
-            } else if (source.requiresVerification) {
-                item {
-                    SourceNoticeCard(
-                        icon = Icons.Outlined.Verified,
-                        title = "Verification required",
-                        message = "${source.name} is protected by Cloudflare. Complete verification in Miyo, then return here before searching or downloading.",
-                        actionLabel = "Open verifier",
-                        onAction = onOpenVerifier,
+                        title = "Source not installed",
+                        message = "This route is reserved for an external source package. Add or enable the package from a repository before using it.",
                     )
                 }
             } else {
+                if (source.kind == NovelSourceKind.EXTERNAL_JS) {
+                    item {
+                        SourceNoticeCard(
+                            icon = if (source.requiresVerification) Icons.Outlined.Verified else Icons.Outlined.Extension,
+                            title = if (source.requiresVerification) "External runtime with verification" else "External runtime",
+                            message = if (source.requiresVerification) {
+                                "${source.name} runs through the external JS source runtime. If search or chapter requests are challenged, open the verifier and retry."
+                            } else {
+                                "${source.name} runs through the isolated external JS source runtime."
+                            },
+                            actionLabel = source.takeIf { it.requiresVerification }?.let { "Open verifier" },
+                            onAction = source.takeIf { it.requiresVerification }?.let { onOpenVerifier },
+                        )
+                    }
+                } else if (source.requiresVerification) {
+                    item {
+                        SourceNoticeCard(
+                            icon = Icons.Outlined.Verified,
+                            title = "Verification required",
+                            message = "${source.name} may require in-app verification before protected requests succeed.",
+                            actionLabel = "Open verifier",
+                            onAction = onOpenVerifier,
+                        )
+                    }
+                }
+
                 item {
                     SourceSearchPanel(
                         query = state.novelQuery,
