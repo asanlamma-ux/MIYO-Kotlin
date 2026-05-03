@@ -765,34 +765,42 @@ class ReaderViewModel @Inject constructor(
             val textNode = document.body()
                 .textNodesDeep()
                 .firstOrNull { node ->
-                    node.parent()?.hasClass("miyu-highlight") != true &&
+                    (node.parent() as? Element)?.containsClassName("miyu-highlight") != true &&
                         node.wholeText.indexOf(selectedText, ignoreCase = true) >= 0
                 } ?: return@runCatching html
             val source = textNode.wholeText
             val start = source.indexOf(selectedText, ignoreCase = true)
             if (start < 0) return@runCatching html
             val end = start + selectedText.length
-            val parent = textNode.parent() ?: return@runCatching html
-            val siblingIndex = textNode.siblingIndex()
+            if (textNode.parent() == null) return@runCatching html
             val highlightSpan = document.createElement("span")
                 .addClass("miyu-highlight")
                 .addClass(highlight.highlightColorClass())
                 .attr("data-highlight-id", highlight.id)
                 .text(source.substring(start, end))
             highlight.highlightTextColorClass()?.let { highlightSpan.addClass(it) }
-            val replacementNodes = buildList {
-                source.substring(0, start).takeIf { it.isNotEmpty() }?.let { add(TextNode(it)) }
-                add(highlightSpan)
-                source.substring(end).takeIf { it.isNotEmpty() }?.let { add(TextNode(it)) }
+            val selectedNode = when {
+                end < source.length -> {
+                    textNode.splitText(end)
+                    if (start > 0) textNode.splitText(start) else textNode
+                }
+
+                start > 0 -> textNode.splitText(start)
+                else -> textNode
             }
-            textNode.remove()
-            parent.insertChildren(siblingIndex, replacementNodes)
+            selectedNode.before(highlightSpan)
+            selectedNode.remove()
             document.body().html()
         }.getOrDefault(html)
     }
 
     private fun Element.textNodesDeep(): List<TextNode> =
         textNodes() + children().flatMap { it.textNodesDeep() }
+
+    private fun Element.containsClassName(className: String): Boolean =
+        attr("class")
+            .split(' ', '\t', '\n', '\r')
+            .any { it == className }
 
     private fun Highlight.highlightColorClass(): String =
         when (color.sanitizedHexColor("#E8D97A").uppercase()) {
