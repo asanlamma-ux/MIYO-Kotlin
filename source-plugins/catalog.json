@@ -108,5 +108,65 @@
     "config": {
       "baseUrl": "https://novelcool.com"
     }
+  },
+  {
+    "packageId": "scribblehub",
+    "providerId": "SCRIBBLEHUB",
+    "mode": "scribblehub",
+    "name": "ScribbleHub",
+    "version": "1.0.0",
+    "site": "www.scribblehub.com",
+    "language": "EN",
+    "startUrl": "https://www.scribblehub.com/series-finder/?sf=1&sort=ratings&order=desc",
+    "requiresVerification": false,
+    "description": "ScribbleHub package with search, details, and AJAX chapter lists.",
+    "config": {
+      "baseUrl": "https://www.scribblehub.com"
+    }
+  },
+  {
+    "packageId": "royalroad",
+    "providerId": "ROYALROAD",
+    "mode": "royalroad",
+    "name": "Royal Road",
+    "version": "1.0.0",
+    "site": "www.royalroad.com",
+    "language": "EN",
+    "startUrl": "https://www.royalroad.com/fictions/search",
+    "requiresVerification": false,
+    "description": "Royal Road package with script-backed chapter table parsing.",
+    "config": {
+      "baseUrl": "https://www.royalroad.com"
+    }
+  },
+  {
+    "packageId": "novelfire",
+    "providerId": "NOVELFIRE",
+    "mode": "novelfire",
+    "name": "NovelFire",
+    "version": "1.0.0",
+    "site": "novelfire.net",
+    "language": "EN",
+    "startUrl": "https://novelfire.net/search-adv",
+    "requiresVerification": false,
+    "description": "NovelFire package with DataTables chapter loading.",
+    "config": {
+      "baseUrl": "https://novelfire.net"
+    }
+  },
+  {
+    "packageId": "archiveofourown",
+    "providerId": "ARCHIVE_OF_OUR_OWN",
+    "mode": "ao3",
+    "name": "Archive of Our Own",
+    "version": "1.0.0",
+    "site": "archiveofourown.org",
+    "language": "EN",
+    "startUrl": "https://archiveofourown.org/works/search",
+    "requiresVerification": false,
+    "description": "Archive of Our Own package for text-only works and chapter navigation.",
+    "config": {
+      "baseUrl": "https://archiveofourown.org"
+    }
   }
 ]

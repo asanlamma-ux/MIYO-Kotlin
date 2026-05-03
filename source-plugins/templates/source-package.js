@@ -561,11 +561,482 @@
     };
   }
 
+  function parseScriptArray(scriptText, variableName) {
+    const source = String(scriptText || '');
+    const variableIndex = source.indexOf(variableName);
+    if (variableIndex === -1) return [];
+    const start = source.indexOf('[', variableIndex);
+    if (start === -1) return [];
+    let depth = 0;
+    let quote = '';
+    let escaped = false;
+    for (let index = start; index < source.length; index += 1) {
+      const char = source[index];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === quote) {
+          quote = '';
+        }
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char === '[') depth += 1;
+      if (char === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            const parsed = JSON.parse(source.slice(start, index + 1));
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (_error) {
+            return [];
+          }
+        }
+      }
+    }
+    return [];
+  }
+
+  function parseScribbleHubItems(doc) {
+    const items = Array.from(doc.querySelectorAll('.search_main_box')).map((node) => {
+      const link = node.querySelector('.search_title > a[href], a[href*="/series/"]');
+      if (!link) return null;
+      const path = pathFrom(link.getAttribute('href'));
+      const coverNode = node.querySelector('.search_img > img, img');
+      const slug = normalizedSlug(path);
+      return {
+        rawId: slug,
+        slug: slug,
+        path: path,
+        title: cleanText(link.textContent || link.getAttribute('title') || 'Untitled'),
+        coverUrl: coverNode ? absoluteUrl(coverNode.getAttribute('data-src') || coverNode.getAttribute('src') || '') : null,
+        author: cleanText((node.querySelector('.search_author, .author') || {}).textContent || '') || 'Unknown Author',
+        summary: cleanText((node.querySelector('.search_body, .search_synopsis, p') || {}).textContent || ''),
+        status: 'Unknown'
+      };
+    }).filter(Boolean);
+    return dedupeByPath(items);
+  }
+
+  function scribbleHubPostId(path) {
+    const parts = String(path || '').split('/').filter(Boolean);
+    if (parts[0] === 'series' && parts[1]) return parts[1];
+    return parts[0] || '';
+  }
+
+  async function searchScribbleHub(payload) {
+    const page = Math.max(1, Number(payload.page || 1));
+    const query = cleanText(payload.query || '');
+    const url = query
+      ? '/?s=' + encodeURIComponent(query) + '&post_type=fictionposts'
+      : '/series-finder/?sf=1&sort=ratings&order=desc&pg=' + page;
+    const doc = await fetchDocument(url);
+    const items = parseScribbleHubItems(doc);
+    return { items: items, page: page, hasMore: items.length >= 20 };
+  }
+
+  async function detailsScribbleHub(payload) {
+    const path = payload.path || '/';
+    const doc = await fetchDocument(path);
+    const postId = scribbleHubPostId(path);
+    let chapters = [];
+    if (postId) {
+      const chapterDoc = await fetchDocument('/wp-admin/admin-ajax.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Referer: absoluteUrl(path),
+          Origin: CONFIG.baseUrl
+        },
+        body: new URLSearchParams({
+          action: 'wi_getreleases_pagination',
+          pagenum: '-1',
+          mypostid: postId
+        }).toString()
+      });
+      chapters = Array.from(chapterDoc.querySelectorAll('.toc_w')).map((node, index) => {
+        const link = node.querySelector('a[href]');
+        if (!link) return null;
+        const chapterPath = pathFrom(link.getAttribute('href'));
+        return {
+          order: index + 1,
+          title: cleanText((node.querySelector('.toc_a') || link).textContent || '') || ('Chapter ' + (index + 1)),
+          path: chapterPath,
+          updatedAt: cleanText((node.querySelector('.fic_date_pub') || {}).textContent || '') || null
+        };
+      }).filter(Boolean).reverse().map((chapter, index) => Object.assign({}, chapter, { order: index + 1 }));
+    }
+    if (!chapters.length) chapters = parseGenericChapterList(doc);
+    return {
+      rawId: String(payload.rawId || normalizedSlug(path)),
+      slug: String(payload.slug || normalizedSlug(path)),
+      path: path,
+      title: pickFirstText(doc, ['.fic_title', 'h1', 'meta[property="og:title"]']) || payload.fallbackTitle || 'Untitled',
+      coverUrl: pickFirstAttr(doc, ['.fic_image > img', 'meta[property="og:image"]', 'img[data-src]', 'img[src]']),
+      author: pickFirstText(doc, ['.auth_name_fic', '.author a', '.author']) || payload.fallbackAuthor || 'Unknown Author',
+      summary: pickFirstText(doc, ['.wi_fic_desc', '.summary', 'meta[name="description"]']) || payload.fallbackSummary || '',
+      status: cleanText((doc.querySelector('.rnd_stats') || {}).nextElementSibling?.textContent || '').indexOf('Ongoing') !== -1 ? 'Ongoing' : 'Completed',
+      chapterCount: chapters.length || payload.fallbackChapterCount || null,
+      genres: Array.from(doc.querySelectorAll('.fic_genre, a[href*="/genre/"], .genres a')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      tags: Array.from(doc.querySelectorAll('.tags a, a[href*="/tag/"]')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      chapters: chapters
+    };
+  }
+
+  async function chapterScribbleHub(payload) {
+    const chapterPath = payload.path || '/';
+    const doc = await fetchDocument(chapterPath);
+    const content = doc.querySelector('div.chp_raw, .chp_raw, .chapter-content, article, main') || doc.body;
+    return {
+      order: parseChapterOrder(chapterPath) || Number(payload.chapterNo || 1),
+      title: pickFirstText(doc, ['.chapter-title', 'h1', 'h2']) || payload.chapterTitle || ('Chapter ' + (payload.chapterNo || 1)),
+      html: sanitizeHtml(cloneContent(content).innerHTML || paragraphHtmlFromText(content.textContent || ''))
+    };
+  }
+
+  function parseRoyalRoadItems(doc) {
+    const items = Array.from(doc.querySelectorAll('.fiction-list-item')).map((node) => {
+      const link = node.querySelector('a[href*="/fiction/"]');
+      if (!link) return null;
+      const path = pathFrom(link.getAttribute('href'));
+      const coverNode = node.querySelector('img.thumbnail, img');
+      const title = cleanText(
+        (node.querySelector('h2 a, h3 a, .fiction-title a') || {}).textContent ||
+        coverNode?.getAttribute('alt') ||
+        link.getAttribute('title') ||
+        'Untitled'
+      );
+      const slug = normalizedSlug(path);
+      return {
+        rawId: slug,
+        slug: slug,
+        path: path,
+        title: title,
+        coverUrl: coverNode ? absoluteUrl(coverNode.getAttribute('data-src') || coverNode.getAttribute('src') || '') : null,
+        author: cleanText((node.querySelector('a[href*="/profile/"]') || {}).textContent || '') || 'Unknown Author',
+        summary: cleanText((node.querySelector('.description, .fiction-description') || {}).textContent || ''),
+        status: 'Unknown'
+      };
+    }).filter(Boolean);
+    return dedupeByPath(items);
+  }
+
+  async function searchRoyalRoad(payload) {
+    const page = Math.max(1, Number(payload.page || 1));
+    const query = cleanText(payload.query || '');
+    const params = new URLSearchParams({ page: String(page) });
+    if (query) {
+      params.append('title', query);
+      params.append('globalFilters', 'true');
+    } else {
+      params.append('orderBy', 'last_update');
+    }
+    const doc = await fetchDocument('/fictions/search?' + params.toString());
+    const items = parseRoyalRoadItems(doc);
+    return { items: items, page: page, hasMore: items.length >= 20 };
+  }
+
+  function parseRoyalRoadChapters(doc) {
+    const scriptText = Array.from(doc.scripts || []).map((script) => script.textContent || '').join('\n');
+    const rawChapters = parseScriptArray(scriptText, 'window.chapters');
+    const chapters = rawChapters.map((chapter, index) => {
+      const chapterPath = pathFrom(chapter.url || chapter.path || '');
+      return {
+        order: Number(chapter.order || index + 1),
+        title: cleanText(chapter.title || '') || ('Chapter ' + (index + 1)),
+        path: chapterPath,
+        updatedAt: chapter.date || chapter.createdDate || null
+      };
+    }).filter((chapter) => chapter.path && chapter.path !== '/');
+    return dedupeByPath(chapters).sort((left, right) => left.order - right.order);
+  }
+
+  async function detailsRoyalRoad(payload) {
+    const path = payload.path || '/';
+    const doc = await fetchDocument(path);
+    const chapters = parseRoyalRoadChapters(doc);
+    const statusText = Array.from(doc.querySelectorAll('.label-sm, span[class*=label], .fiction-info span'))
+      .map((node) => cleanText(node.textContent))
+      .find((text) => /ongoing|hiatus|complete/i.test(text)) || payload.fallbackStatus || 'Unknown';
+    return {
+      rawId: String(payload.rawId || normalizedSlug(path)),
+      slug: String(payload.slug || normalizedSlug(path)),
+      path: path,
+      title: pickFirstText(doc, ['h1', 'meta[property="og:title"]']) || payload.fallbackTitle || 'Untitled',
+      coverUrl: pickFirstAttr(doc, ['img.thumbnail', 'meta[property="og:image"]', 'img[src]']),
+      author: pickFirstText(doc, ['a[href*="/profile/"]']) || payload.fallbackAuthor || 'Unknown Author',
+      summary: pickFirstText(doc, ['.description', '.fiction-info .description', 'meta[name="description"]']) || payload.fallbackSummary || '',
+      status: statusText ? statusText.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Unknown',
+      chapterCount: chapters.length || payload.fallbackChapterCount || null,
+      rating: Number(pickFirstText(doc, ['[itemprop="ratingValue"]', '.star-container meta[itemprop="ratingValue"]'])) || null,
+      genres: Array.from(doc.querySelectorAll('span.tags a, .tags a, a[href*="/fictions/search?tagsAdd"]')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      tags: Array.from(doc.querySelectorAll('span.tags a, .tags a, a[href*="/fictions/search?tagsAdd"]')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      chapters: chapters
+    };
+  }
+
+  async function chapterRoyalRoad(payload) {
+    const chapterPath = payload.path || '/';
+    const doc = await fetchDocument(chapterPath);
+    const content = doc.querySelector('.chapter-content, article, main') || doc.body;
+    const copy = cloneContent(content);
+    const html = doc.documentElement ? doc.documentElement.innerHTML : '';
+    const hiddenClass = (html.match(/<style>[\s\S]*?\.([A-Za-z0-9_-]+)\s*\{[^{}]*display\s*:\s*none/i) || [])[1];
+    if (hiddenClass) {
+      copy.querySelectorAll('[class]').forEach((node) => {
+        if (node.classList && node.classList.contains(hiddenClass)) node.remove();
+      });
+    }
+    return {
+      order: parseChapterOrder(chapterPath) || Number(payload.chapterNo || 1),
+      title: pickFirstText(doc, ['h1', 'h2']) || payload.chapterTitle || ('Chapter ' + (payload.chapterNo || 1)),
+      html: sanitizeHtml(copy.innerHTML || paragraphHtmlFromText(content.textContent || ''))
+    };
+  }
+
+  function parseNovelFireItems(doc, selector) {
+    const items = Array.from(doc.querySelectorAll(selector || '.novel-item')).map((node) => {
+      const link = node.querySelector('.novel-title > a[href], a[href]');
+      if (!link) return null;
+      const path = pathFrom(link.getAttribute('href'));
+      const coverNode = node.querySelector('.novel-cover > img, img');
+      const slug = normalizedSlug(path);
+      return {
+        rawId: slug,
+        slug: slug,
+        path: path,
+        title: cleanText(link.textContent || link.getAttribute('title') || 'Untitled'),
+        coverUrl: coverNode ? absoluteUrl(coverNode.getAttribute('data-src') || coverNode.getAttribute('src') || '') : null,
+        author: 'Unknown Author',
+        summary: cleanText((node.querySelector('.summary, .description, p') || {}).textContent || ''),
+        status: 'Unknown'
+      };
+    }).filter(Boolean);
+    return dedupeByPath(items);
+  }
+
+  async function searchNovelFire(payload) {
+    const page = Math.max(1, Number(payload.page || 1));
+    const query = cleanText(payload.query || '');
+    const url = query
+      ? '/search?keyword=' + encodeURIComponent(query) + '&page=' + page
+      : '/search-adv?sort=date&page=' + page;
+    const doc = await fetchDocument(url);
+    const items = parseNovelFireItems(doc, query ? '.novel-list.chapters .novel-item' : '.novel-item');
+    return { items: items, page: page, hasMore: items.length >= 20 };
+  }
+
+  async function fetchNovelFireChapters(novelPath, doc) {
+    const postId = cleanText((doc.querySelector('#novel-report') || {}).getAttribute?.('report-post_id') || '');
+    if (!postId) return parseGenericChapterList(doc);
+    try {
+      const params = new URLSearchParams({
+        draw: '1',
+        'columns[0][data]': 'n_sort',
+        'columns[0][name]': 'cmm_posts_detail.n_sort',
+        'columns[0][searchable]': 'true',
+        'columns[0][orderable]': 'true',
+        'columns[0][search][value]': '',
+        'columns[0][search][regex]': 'false',
+        'order[0][column]': '0',
+        'order[0][dir]': 'asc',
+        'order[0][name]': 'cmm_posts_detail.n_sort',
+        start: '0',
+        length: '-1',
+        'search[value]': '',
+        'search[regex]': 'false',
+        post_id: postId,
+        only_bookmark: 'false',
+        _: String(Date.now())
+      });
+      const text = await fetchText('/ajax/listChapterDataAjax?' + params.toString(), {
+        headers: {
+          accept: 'application/json,text/plain,*/*',
+          Referer: absoluteUrl(novelPath)
+        }
+      });
+      const json = JSON.parse(text);
+      const rows = Array.isArray(json.data) ? json.data : [];
+      return rows.map((entry, index) => {
+        const order = Number(entry.n_sort || index + 1);
+        if (!Number.isFinite(order)) return null;
+        const title = stripHtml(entry.title || entry.slug || '') || ('Chapter ' + order);
+        return {
+          order: order,
+          title: title,
+          path: pathFrom(String(novelPath || '').replace(/\/+$/, '') + '/chapter-' + order),
+          updatedAt: null
+        };
+      }).filter(Boolean).sort((left, right) => left.order - right.order);
+    } catch (_error) {
+      return parseGenericChapterList(doc);
+    }
+  }
+
+  async function detailsNovelFire(payload) {
+    const path = payload.path || '/';
+    const doc = await fetchDocument(path);
+    const chapters = await fetchNovelFireChapters(path, doc);
+    return {
+      rawId: String(payload.rawId || normalizedSlug(path)),
+      slug: String(payload.slug || normalizedSlug(path)),
+      path: path,
+      title: pickFirstText(doc, ['.novel-title', '.cover > img', 'h1', 'meta[property="og:title"]']) || payload.fallbackTitle || 'Untitled',
+      coverUrl: pickFirstAttr(doc, ['.cover > img', 'meta[property="og:image"]', 'img[data-src]', 'img[src]']),
+      author: pickFirstText(doc, ['.author .property-item > span', '.author a', '.author']) || payload.fallbackAuthor || 'Unknown Author',
+      summary: pickFirstText(doc, ['.summary .content', '.summary', 'meta[name="description"]']) || payload.fallbackSummary || '',
+      status: pickFirstText(doc, ['.header-stats .ongoing', '.header-stats .completed', '.status']) || payload.fallbackStatus || 'Unknown',
+      chapterCount: chapters.length || parseFirstInt(pickFirstText(doc, ['.header-stats', '.chapter-count'])) || payload.fallbackChapterCount || null,
+      rating: Number(pickFirstText(doc, ['.nub', '[itemprop="ratingValue"]'])) || null,
+      genres: Array.from(doc.querySelectorAll('.categories .property-item, a[href*="/genre/"], a[href*="/genres/"]')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      tags: Array.from(doc.querySelectorAll('.tags a, a[href*="/tag/"], a[href*="/tags/"]')).map((node) => cleanText(node.textContent)).filter(Boolean),
+      chapters: chapters
+    };
+  }
+
+  async function chapterNovelFire(payload) {
+    const chapterPath = payload.path || '/';
+    const doc = await fetchDocument(chapterPath);
+    const content = doc.querySelector('#content, .chapter-content, article, main') || doc.body;
+    const copy = cloneContent(content);
+    copy.querySelectorAll('*').forEach((node) => {
+      const tag = String(node.tagName || '').toLowerCase();
+      if (tag.length > 5 && tag.indexOf('nf') === 0) node.remove();
+    });
+    return {
+      order: parseChapterOrder(chapterPath) || Number(payload.chapterNo || 1),
+      title: pickFirstText(doc, ['h1', 'h2']) || payload.chapterTitle || ('Chapter ' + (payload.chapterNo || 1)),
+      html: sanitizeHtml(copy.innerHTML || paragraphHtmlFromText(content.textContent || ''))
+    };
+  }
+
+  function parseAo3Items(doc) {
+    const items = Array.from(doc.querySelectorAll('li.work')).map((node) => {
+      const link = node.querySelector('h4.heading > a[href], h4 a[href], a[href*="/works/"]');
+      if (!link) return null;
+      const path = pathFrom(link.getAttribute('href'));
+      const slug = normalizedSlug(path);
+      return {
+        rawId: slug,
+        slug: slug,
+        path: path,
+        title: cleanText(link.textContent || 'Untitled'),
+        coverUrl: null,
+        author: Array.from(node.querySelectorAll('a[rel="author"]')).map((author) => cleanText(author.textContent)).filter(Boolean).join(', ') || 'Unknown Author',
+        summary: cleanText((node.querySelector('blockquote.userstuff, .summary') || {}).textContent || ''),
+        status: cleanText((node.querySelector('dt.status') || {}).textContent || '') || 'Unknown'
+      };
+    }).filter(Boolean);
+    return dedupeByPath(items);
+  }
+
+  async function searchAo3(payload) {
+    const page = Math.max(1, Number(payload.page || 1));
+    const query = cleanText(payload.query || '');
+    const params = new URLSearchParams({ page: String(page) });
+    params.append('work_search[language_id]', 'en');
+    if (query) {
+      params.append('work_search[query]', query);
+    } else {
+      params.append('work_search[sort_column]', 'revised_at');
+      params.append('work_search[sort_direction]', 'desc');
+    }
+    const doc = await fetchDocument('/works/search?' + params.toString());
+    const items = parseAo3Items(doc);
+    return { items: items, page: page, hasMore: items.length >= 20 };
+  }
+
+  async function fetchAo3Chapters(path, doc) {
+    const basePath = String(path || '').replace(/\/+$/, '');
+    let chapters = [];
+    try {
+      const navDoc = await fetchDocument(basePath + '/navigate');
+      chapters = Array.from(navDoc.querySelectorAll('ol.index li')).map((node, index) => {
+        const link = node.querySelector('a[href]');
+        if (!link) return null;
+        return {
+          order: index + 1,
+          title: cleanText(link.textContent || '') || ('Chapter ' + (index + 1)),
+          path: pathFrom(link.getAttribute('href')),
+          updatedAt: cleanText((node.querySelector('span.datetime') || {}).textContent || '') || null
+        };
+      }).filter(Boolean);
+    } catch (_error) {
+      chapters = [];
+    }
+    if (chapters.length) return dedupeByPath(chapters);
+    chapters = Array.from(doc.querySelectorAll('#chapter_index select option')).map((option, index) => {
+      const code = cleanText(option.getAttribute('value') || '');
+      if (!code) return null;
+      return {
+        order: index + 1,
+        title: cleanText(option.textContent || '') || ('Chapter ' + (index + 1)),
+        path: pathFrom(basePath + '/chapters/' + code),
+        updatedAt: null
+      };
+    }).filter(Boolean);
+    if (chapters.length) return dedupeByPath(chapters);
+    chapters = Array.from(doc.querySelectorAll('#chapters h3.title a[href]')).map((link, index) => ({
+      order: index + 1,
+      title: cleanText(link.parentElement?.textContent || link.textContent || '') || ('Chapter ' + (index + 1)),
+      path: pathFrom(link.getAttribute('href')),
+      updatedAt: null
+    }));
+    if (chapters.length) return dedupeByPath(chapters);
+    return [{ order: 1, title: pickFirstText(doc, ['h2.title', 'h1', 'h2']) || 'Chapter 1', path: pathFrom(path), updatedAt: null }];
+  }
+
+  async function detailsAo3(payload) {
+    const path = payload.path || '/';
+    const doc = await fetchDocument(path);
+    const chapters = await fetchAo3Chapters(path, doc);
+    const fandom = Array.from(doc.querySelectorAll('dd.fandom.tags li a.tag')).map((node) => cleanText(node.textContent)).filter(Boolean);
+    const tags = Array.from(doc.querySelectorAll('dd.freeform.tags li a.tag, dd.relationship.tags li a.tag, dd.character.tags li a.tag')).map((node) => cleanText(node.textContent)).filter(Boolean);
+    const warnings = Array.from(doc.querySelectorAll('dd.warning.tags li a.tag')).map((node) => cleanText(node.textContent)).filter(Boolean);
+    const summary = pickFirstText(doc, ['blockquote.userstuff', '.summary']) || payload.fallbackSummary || '';
+    return {
+      rawId: String(payload.rawId || normalizedSlug(path)),
+      slug: String(payload.slug || normalizedSlug(path)),
+      path: path,
+      title: pickFirstText(doc, ['h2.title', 'h1', 'meta[property="og:title"]']) || payload.fallbackTitle || 'Untitled',
+      coverUrl: null,
+      author: Array.from(doc.querySelectorAll('a[rel="author"]')).map((node) => cleanText(node.textContent)).filter(Boolean).join(', ') || payload.fallbackAuthor || 'Unknown Author',
+      summary: summary,
+      status: pickFirstText(doc, ['dt.status']).indexOf('Updated') !== -1 ? 'Ongoing' : 'Completed',
+      chapterCount: chapters.length || payload.fallbackChapterCount || null,
+      genres: fandom,
+      tags: tags.concat(warnings),
+      chapters: chapters
+    };
+  }
+
+  async function chapterAo3(payload) {
+    const chapterPath = payload.path || '/';
+    const doc = await fetchDocument(chapterPath);
+    doc.querySelectorAll('h3.title a').forEach((link) => link.removeAttribute('href'));
+    doc.querySelectorAll('h3.landmark.heading#work').forEach((node) => node.remove());
+    const content = doc.querySelector('div#chapters > div, #chapters, .userstuff, article, main') || doc.body;
+    return {
+      order: parseChapterOrder(chapterPath) || Number(payload.chapterNo || 1),
+      title: pickFirstText(doc, ['h3.title', 'h2.title', 'h1', 'h2']) || payload.chapterTitle || ('Chapter ' + (payload.chapterNo || 1)),
+      html: sanitizeHtml(cloneContent(content).innerHTML || paragraphHtmlFromText(content.textContent || ''))
+    };
+  }
+
   async function searchPayload(payload) {
     if (CONFIG.mode === 'readwn') return searchReadwn(payload);
     if (CONFIG.mode === 'freewebnovel') return searchFreeWebNovel(payload);
     if (CONFIG.mode === 'novelcool') return searchNovelCool(payload);
     if (CONFIG.mode === 'lightnovelpub') return searchLightNovelPub(payload);
+    if (CONFIG.mode === 'scribblehub') return searchScribbleHub(payload);
+    if (CONFIG.mode === 'royalroad') return searchRoyalRoad(payload);
+    if (CONFIG.mode === 'novelfire') return searchNovelFire(payload);
+    if (CONFIG.mode === 'ao3') return searchAo3(payload);
     throw new Error('This package expects a dedicated runtime source file.');
   }
 
@@ -574,6 +1045,10 @@
     if (CONFIG.mode === 'freewebnovel') return detailsFreeWebNovel(payload);
     if (CONFIG.mode === 'novelcool') return detailsNovelCool(payload);
     if (CONFIG.mode === 'lightnovelpub') return detailsLightNovelPub(payload);
+    if (CONFIG.mode === 'scribblehub') return detailsScribbleHub(payload);
+    if (CONFIG.mode === 'royalroad') return detailsRoyalRoad(payload);
+    if (CONFIG.mode === 'novelfire') return detailsNovelFire(payload);
+    if (CONFIG.mode === 'ao3') return detailsAo3(payload);
     throw new Error('This package expects a dedicated runtime source file.');
   }
 
@@ -582,6 +1057,10 @@
     if (CONFIG.mode === 'freewebnovel') return chapterFreeWebNovel(payload);
     if (CONFIG.mode === 'novelcool') return chapterNovelCool(payload);
     if (CONFIG.mode === 'lightnovelpub') return chapterLightNovelPub(payload);
+    if (CONFIG.mode === 'scribblehub') return chapterScribbleHub(payload);
+    if (CONFIG.mode === 'royalroad') return chapterRoyalRoad(payload);
+    if (CONFIG.mode === 'novelfire') return chapterNovelFire(payload);
+    if (CONFIG.mode === 'ao3') return chapterAo3(payload);
     throw new Error('This package expects a dedicated runtime source file.');
   }
 

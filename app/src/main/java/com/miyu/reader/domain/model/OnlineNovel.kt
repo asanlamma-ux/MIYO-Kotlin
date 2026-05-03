@@ -11,6 +11,10 @@ enum class OnlineNovelProviderId {
     MCREADER,
     FREEWEBNOVEL,
     LIGHTNOVELPUB,
+    SCRIBBLEHUB,
+    ROYALROAD,
+    NOVELFIRE,
+    ARCHIVE_OF_OUR_OWN,
 }
 
 @Serializable
