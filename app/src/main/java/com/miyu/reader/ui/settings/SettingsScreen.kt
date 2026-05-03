@@ -33,7 +33,6 @@ import com.miyu.reader.domain.model.ThemeMode
 import com.miyu.reader.domain.model.DownloadedDictionary
 import com.miyu.reader.permissions.MiyoPermissions
 import com.miyu.reader.storage.MiyoStorage
-import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.core.components.settings.MiyoExpandableChoiceSetting as ExpandableChoiceSetting
 import com.miyu.reader.ui.core.components.settings.MiyoSectionLabel as SectionLabel
 import com.miyu.reader.ui.core.components.settings.MiyoSettingsItem as SettingsRow
@@ -530,7 +529,7 @@ fun AdvancedSettingsScreen(
                 SettingsRow(
                     icon = Icons.Outlined.FileUpload,
                     title = "Export Settings Snapshot",
-                    subtitle = "Save a Koodo-style JSON snapshot of reader, typography, theme, and download settings.",
+                    subtitle = "Save a JSON snapshot of reader, typography, theme, and download settings.",
                     onClick = {
                         scope.launch {
                             val snapshot = runCatching { viewModel.exportSettingsSnapshot() }
@@ -763,7 +762,7 @@ fun ReaderSettingsScreen(
                     onExpandedChange = { expandedSettingKey = if (it) "reader_mode" else null },
                     icon = Icons.Outlined.ViewColumn,
                     title = "Reader Mode",
-                    subtitle = "Koodo-style scroll, single page, or double page layout.",
+                    subtitle = "Scroll, single page, or double page layout.",
                     accentColor = colors.accent,
                     currentValue = when (uiState.readingSettings.readerMode) {
                         ReaderMode.SCROLL -> "Scroll"
@@ -930,7 +929,7 @@ fun ReaderSettingsScreen(
                 SettingsToggle(
                     icon = Icons.Outlined.FormatIndentIncrease,
                     title = "Show Page Border",
-                    subtitle = "Draw a subtle Koodo-style frame inside the reader.",
+                    subtitle = "Draw a subtle frame inside the reader.",
                     checked = uiState.readingSettings.showPageBorder,
                     onCheckedChange = viewModel::setShowPageBorder,
                     accentColor = colors.accent,

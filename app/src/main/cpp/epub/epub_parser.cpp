@@ -340,7 +340,7 @@ std::string toJson(const ParsedEpub& epub) {
 } // anonymous namespace
 
 std::string parseEpub(const std::string& filePath, CacheManager& cache) {
-    if (auto* cached = cache.get(filePath)) {
+    if (auto cached = cache.get(filePath)) {
         LOGI("Cache hit for %s", filePath.c_str());
         return toJson(cached->parsed);
     }
@@ -438,7 +438,7 @@ std::string searchEpub(const std::string& filePath, CacheManager& cache, const s
     // Ensure the EPUB is parsed and in cache
     parseEpub(filePath, cache);
 
-    auto* cached = cache.get(filePath);
+    auto cached = cache.get(filePath);
     if (!cached) {
         return "[]";
     }

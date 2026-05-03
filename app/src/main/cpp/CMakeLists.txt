@@ -11,20 +11,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include_directories(
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/epub
-    ${CMAKE_SOURCE_DIR}/mobi
-    ${CMAKE_SOURCE_DIR}/pdf
-    ${CMAKE_SOURCE_DIR}/comic
-    ${CMAKE_SOURCE_DIR}/renderer
     ${CMAKE_SOURCE_DIR}/storage
 )
 
 # Source files
 file(GLOB_RECURSE ENGINE_SOURCES
     "epub/*.cpp"
-    "mobi/*.cpp"
-    "pdf/*.cpp"
-    "comic/*.cpp"
-    "renderer/*.cpp"
     "storage/*.cpp"
     "jni_bridge.cpp"
     "zip_archive.cpp"

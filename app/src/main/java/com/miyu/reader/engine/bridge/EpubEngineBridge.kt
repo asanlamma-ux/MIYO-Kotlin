@@ -1,13 +1,13 @@
 package com.miyu.reader.engine.bridge
 
 /**
- * JNI bridge to the native C++ ebook parsing and rendering engine.
+ * JNI bridge to the native C++ EPUB parsing and rendering engine.
  *
- * The native layer handles:
- * - EPUB/MOBI/PDF/Comic archive parsing
- * - XML/HTML processing (metadata, TOC, chapters)
- * - Text layout (HarfBuzz + FreeType shaping)
- * - Inline image extraction and encoding
+ * The current native layer handles:
+ * - EPUB archive parsing
+ * - Metadata, chapter outline, and chapter HTML extraction
+ * - Cover and stylesheet extraction
+ * - Cached chapter rendering and in-book search
  */
 class EpubEngineBridge {
     companion object {
@@ -17,8 +17,7 @@ class EpubEngineBridge {
     }
 
     /**
-     * Parse an EPUB file at [filePath] and return JSON with metadata + rendered chapters.
-     * Returns JSON string matching ParsedEpub schema (EpubMetadata + chapters array).
+     * Parse an EPUB file at [filePath] and return JSON with metadata and chapter outline data.
      */
     external fun parseEpub(filePath: String): String
 
@@ -29,8 +28,7 @@ class EpubEngineBridge {
     external fun extractCoverImage(filePath: String): String?
 
     /**
-     * Extract all CSS from an EPUB, merged and deduplicated.
-     * Returns a single CSS string for injection into reader HTML.
+     * Extract all CSS from an EPUB, merged into a single stylesheet string.
      */
     external fun extractStylesheet(filePath: String): String
 

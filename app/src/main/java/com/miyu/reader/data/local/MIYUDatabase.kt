@@ -23,7 +23,7 @@ import com.miyu.reader.data.local.entity.*
         DictionaryEntryEntity::class,
     ],
     version = 1,
-    exportSchema = false,
+    exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class MIYUDatabase : RoomDatabase() {

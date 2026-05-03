@@ -156,7 +156,7 @@ std::string extractCoverFromOpf(ZipArchive& zip) {
 } // anonymous namespace
 
 std::string extractCover(const std::string& filePath, CacheManager& cache) {
-    if (auto* cached = cache.get(filePath); cached && !cached->coverBase64.empty()) {
+    if (auto cached = cache.get(filePath); cached && !cached->coverBase64.empty()) {
         return cached->coverBase64;
     }
 
@@ -165,9 +165,9 @@ std::string extractCover(const std::string& filePath, CacheManager& cache) {
 
     std::string result = extractCoverFromOpf(zip);
     if (!result.empty()) {
-        if (auto* cached = const_cast<CacheManager::CachedData*>(cache.get(filePath))) {
+        cache.update(filePath, [&](CacheManager::CachedData& cached) {
             cached->coverBase64 = result;
-        }
+        });
         return result;
     }
 
@@ -185,10 +185,9 @@ std::string extractCover(const std::string& filePath, CacheManager& cache) {
 
     if (result.empty()) return "";
 
-    // Update cache
-    if (auto* cached = const_cast<CacheManager::CachedData*>(cache.get(filePath))) {
+    cache.update(filePath, [&](CacheManager::CachedData& cached) {
         cached->coverBase64 = result;
-    }
+    });
     return result;
 }
 

@@ -12,8 +12,10 @@ import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 import com.miyu.reader.ui.reader.components.SelectionData
@@ -107,7 +109,13 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val book = bookRepository.getBook(bookId)
+                val (book, position, groups) = withContext(Dispatchers.IO) {
+                    Triple(
+                        bookRepository.getBook(bookId),
+                        bookRepository.getReadingPosition(bookId),
+                        termRepository.getAllGroupsOnce(),
+                    )
+                }
                 if (book == null) {
                     _uiState.update {
                         it.copy(
@@ -117,7 +125,6 @@ class ReaderViewModel @Inject constructor(
                     }
                     return@launch
                 }
-                val position = bookRepository.getReadingPosition(bookId)
                 val chapterIndex = if (launchChapterIndex >= 0) {
                     launchChapterIndex
                 } else {
@@ -135,7 +142,7 @@ class ReaderViewModel @Inject constructor(
                         chapterScrollPercent = chapterScrollPercent,
                         continuousLoadedThroughIndex = chapterIndex,
                         totalChapters = book.totalChapters,
-                        activeTermGroups = termRepository.getAllGroupsOnce(),
+                        activeTermGroups = groups,
                         errorMessage = null,
                     )
                 }
@@ -169,12 +176,8 @@ class ReaderViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val book = _uiState.value.book
-                val replacements = if (book != null) {
-                    termRepository.getReplacementMarkupForBook(book.id)
-                } else {
-                    emptyMap()
-                }
-                val html = epubEngine.renderChapter(filePath, index, replacements)
+                val html = renderChapterHtml(filePath, index, book?.id)
+                val termGroups = withContext(Dispatchers.IO) { termRepository.getAllGroupsOnce() }
                 val readerSessionId = System.nanoTime()
                 if (html.isBlank()) {
                     _uiState.update {
@@ -200,7 +203,7 @@ class ReaderViewModel @Inject constructor(
                         chapterScrollPercent = restorePercent.coerceIn(0f, 1f),
                         continuousLoadedThroughIndex = index,
                         pendingChapterAppend = null,
-                        activeTermGroups = termRepository.getAllGroupsOnce(),
+                        activeTermGroups = termGroups,
                         isLoading = false,
                         errorMessage = null,
                     )
@@ -270,8 +273,7 @@ class ReaderViewModel @Inject constructor(
             }
 
             try {
-                val replacements = termRepository.getReplacementMarkupForBook(book.id)
-                val html = epubEngine.renderChapter(book.filePath, nextIndex, replacements)
+                val html = renderChapterHtml(book.filePath, nextIndex, book.id)
                 val bodyHtml = extractBodyContent(html).takeIf { it.isNotBlank() } ?: run {
                     chapterAppendInFlight = false
                     return@launch
@@ -634,7 +636,9 @@ class ReaderViewModel @Inject constructor(
         val book = state.book ?: return emptyList()
         if (query.length < 2) return emptyList()
         return runCatching {
-            val json = epubEngine.searchInBook(book.filePath, query)
+            val json = withContext(Dispatchers.Default) {
+                epubEngine.searchInBook(book.filePath, query)
+            }
             val array = JSONArray(json)
             buildList {
                 for (index in 0 until array.length()) {
@@ -684,5 +688,16 @@ class ReaderViewModel @Inject constructor(
     private fun extractBodyContent(html: String): String {
         val bodyMatch = Regex("<body[^>]*>([\\s\\S]*?)</body>", RegexOption.IGNORE_CASE).find(html)
         return bodyMatch?.groupValues?.getOrNull(1) ?: html
+    }
+
+    private suspend fun renderChapterHtml(filePath: String, chapterIndex: Int, bookId: String?): String {
+        val replacements = if (bookId != null) {
+            withContext(Dispatchers.IO) { termRepository.getReplacementMarkupForBook(bookId) }
+        } else {
+            emptyMap()
+        }
+        return withContext(Dispatchers.Default) {
+            epubEngine.renderChapter(filePath, chapterIndex, replacements)
+        }
     }
 }

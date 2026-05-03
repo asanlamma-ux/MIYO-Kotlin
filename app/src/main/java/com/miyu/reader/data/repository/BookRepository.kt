@@ -1,19 +1,30 @@
 package com.miyu.reader.data.repository
 
+import android.content.Context
+import android.net.Uri
+import androidx.room.withTransaction
 import com.miyu.reader.data.local.dao.BookDao
+import com.miyu.reader.data.local.MIYUDatabase
 import com.miyu.reader.data.local.entity.*
 import com.miyu.reader.data.toDomain
 import com.miyu.reader.data.toEntity
 import com.miyu.reader.domain.model.*
+import com.miyu.reader.engine.bridge.EpubEngineBridge
+import com.miyu.reader.storage.MiyoStorage
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BookRepository @Inject constructor(
     private val bookDao: BookDao,
+    private val database: MIYUDatabase,
+    private val epubEngine: EpubEngineBridge,
+    @ApplicationContext private val appContext: Context,
 ) {
     fun getAllBooks(): Flow<List<Book>> = bookDao.getAllBooks().map { entities ->
         entities.map { it.toDomain() }
@@ -41,7 +52,15 @@ class BookRepository @Inject constructor(
     }
 
     suspend fun deleteBook(bookId: String) {
-        bookDao.deleteBookById(bookId)
+        val book = bookDao.getBookById(bookId)?.toDomain() ?: return
+        database.withTransaction {
+            bookDao.deleteBookmarksByBookId(bookId)
+            bookDao.deleteHighlightsByBookId(bookId)
+            bookDao.deleteReadingPosition(bookId)
+            bookDao.deleteBookById(bookId)
+        }
+        runCatching { epubEngine.evictCache(book.filePath) }
+        cleanupManagedFiles(book)
     }
 
     suspend fun updateProgress(bookId: String, chapterIndex: Int, progress: Float) {
@@ -127,10 +146,7 @@ class BookRepository @Inject constructor(
     }
 
     suspend fun updateHighlightNote(highlightId: String, note: String?) {
-        // Load all highlights to find the one, update, and re-save
-        // Room @Upsert handles the rest
-        val highlights = bookDao.getAllBooks() // Need a better approach
-        // For now, read+update is handled via the ViewModel
+        bookDao.updateHighlightNote(highlightId, note?.trim()?.takeIf { it.isNotBlank() })
     }
 
     // Reading position
@@ -146,4 +162,46 @@ class BookRepository @Inject constructor(
 
     suspend fun getReadingPosition(bookId: String): ReadingPosition? =
         bookDao.getReadingPosition(bookId)?.toDomain()
+
+    private fun cleanupManagedFiles(book: Book) {
+        deleteManagedPath(book.filePath, managedBookRoots())
+        deleteManagedPath(book.coverUri, managedCoverRoots())
+    }
+
+    private fun deleteManagedPath(rawPath: String?, allowedRoots: List<File>) {
+        val file = rawPath?.toLocalFile() ?: return
+        val canonicalFile = runCatching { file.canonicalFile }.getOrNull() ?: return
+        val canonicalRoots = allowedRoots.mapNotNull { runCatching { it.canonicalFile }.getOrNull() }
+        val managed = canonicalRoots.any { root ->
+            canonicalFile == root || canonicalFile.path.startsWith(root.path + File.separator)
+        }
+        if (!managed) return
+        if (!canonicalFile.exists()) return
+        if (canonicalFile.isDirectory) {
+            canonicalFile.deleteRecursively()
+        } else {
+            canonicalFile.delete()
+        }
+    }
+
+    private fun managedBookRoots(): List<File> = listOf(
+        MiyoStorage.booksDir(appContext),
+        MiyoStorage.onlineEpubDir(appContext),
+        MiyoStorage.legacyBooksDir(appContext),
+    )
+
+    private fun managedCoverRoots(): List<File> = listOf(
+        MiyoStorage.coversDir(appContext),
+        MiyoStorage.legacyCoversDir(appContext),
+    )
+
+    private fun String.toLocalFile(): File? {
+        val uri = runCatching { Uri.parse(this) }.getOrNull()
+        return when {
+            uri == null -> File(this)
+            uri.scheme.isNullOrBlank() -> File(this)
+            uri.scheme.equals("file", ignoreCase = true) -> uri.path?.let(::File)
+            else -> null
+        }
+    }
 }

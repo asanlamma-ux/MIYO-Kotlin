@@ -92,7 +92,7 @@ std::string renderChapter(
     if (!cache.get(filePath)) {
         parseEpub(filePath, cache);
     }
-    const auto* cached = cache.get(filePath);
+    const auto cached = cache.get(filePath);
     if (!cached || chapterIndex < 0 || chapterIndex >= cached->parsed.totalChapters) {
         return "<html><body><p>Chapter not found</p></body></html>";
     }
@@ -149,7 +149,7 @@ int countChapterWords(
     if (!cache.get(filePath)) {
         parseEpub(filePath, cache);
     }
-    const auto* cached = cache.get(filePath);
+    const auto cached = cache.get(filePath);
     if (!cached || chapterIndex < 0 || chapterIndex >= cached->parsed.totalChapters) {
         return 0;
     }

@@ -12,7 +12,7 @@ import com.miyu.reader.data.repository.OnlineNovelRepository
 import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineDownloadHistoryEntry
 import com.miyu.reader.domain.model.OnlineDownloadRequest
-import com.miyu.reader.domain.model.OnlineDownloadStatus
+import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.notifications.OnlineDownloadNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
@@ -30,7 +30,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
-import java.util.Collections
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -101,42 +100,26 @@ class OnlineDownloadService : Service() {
                 activeTotal = chapters.size
                 updateProgress(details.title, 0, chapters.size)
                 val concurrency = preferences.downloadConcurrency.first()
-                val queue = ConcurrentLinkedQueue(chapters)
-                val failures = Collections.synchronizedList(mutableListOf<String>())
-                val contents = Collections.synchronizedList(mutableListOf<OnlineChapterContent>())
-                kotlinx.coroutines.coroutineScope {
-                    // Downloads stay at the service layer so pause/resume, notifications,
-                    // and future queue semantics remain identical for built-in and external
-                    // sources even when the fetch path differs underneath.
-                    repeat(concurrency.coerceAtLeast(1)) {
-                        launch {
-                            while (isActive && !cancelled.get()) {
-                                awaitIfPaused()
-                                val chapter = queue.poll() ?: break
-                                try {
-                                    awaitIfPaused()
-                                    contents += sourceRegistry.chapterContent(sourceId, details, chapter)
-                                } catch (error: Exception) {
-                                    failures += "Chapter ${chapter.order}: ${error.message ?: error::class.java.simpleName}"
-                                } finally {
-                                    val done = completedCount.incrementAndGet()
-                                    updateProgress(details.title, done, chapters.size)
-                                }
-                            }
-                        }
-                    }
-                }
-                if (cancelled.get()) throw CancellationException("Download canceled.")
-                if (failures.isNotEmpty()) {
-                    error(
-                        buildString {
-                            append("Download failed for ${failures.size}/${chapters.size} chapters. No EPUB was written.")
-                            append('\n')
-                            append(failures.take(6).joinToString("\n"))
-                        },
+                val pluginKind = sourceRegistry.source(sourceId)?.kind
+                val generated = if (pluginKind == NovelSourceKind.EXTERNAL_JS) {
+                    val selectedDetails = details.copy(
+                        chapterCount = chapters.size,
+                        chapters = chapters,
                     )
+                    sourceRegistry.downloadAsEpub(
+                        sourceId = sourceId,
+                        novel = selectedDetails,
+                        startChapter = chapters.first().order,
+                        endChapter = chapters.last().order,
+                        concurrency = concurrency,
+                    ) { completed, total ->
+                        completedCount.set(completed)
+                        activeTotal = total
+                        updateProgress(details.title, completed, total)
+                    }
+                } else {
+                    downloadBuiltIn(details, chapters, sourceId, concurrency)
                 }
-                val generated = repository.createGeneratedEpub(details, contents.sortedBy { it.order })
                 val completedAt = Instant.now().toString()
                 preferences.recordOnlineDownload(
                     OnlineDownloadHistoryEntry(
@@ -216,6 +199,50 @@ class OnlineDownloadService : Service() {
         }
         activeRequest = null
         activeJob = null
+    }
+
+    private suspend fun downloadBuiltIn(
+        details: com.miyu.reader.domain.model.OnlineNovelDetails,
+        chapters: List<com.miyu.reader.domain.model.OnlineChapterSummary>,
+        sourceId: String,
+        concurrency: Int,
+    ): com.miyu.reader.domain.model.GeneratedOnlineNovelEpub {
+        val queue = ConcurrentLinkedQueue(chapters)
+        val failures = mutableListOf<String>()
+        val contents = mutableListOf<OnlineChapterContent>()
+        kotlinx.coroutines.coroutineScope {
+            repeat(concurrency.coerceAtLeast(1)) {
+                launch {
+                    while (isActive && !cancelled.get()) {
+                        awaitIfPaused()
+                        val chapter = queue.poll() ?: break
+                        try {
+                            awaitIfPaused()
+                            val content = sourceRegistry.chapterContent(sourceId, details, chapter)
+                            synchronized(contents) { contents += content }
+                        } catch (error: Exception) {
+                            synchronized(failures) {
+                                failures += "Chapter ${chapter.order}: ${error.message ?: error::class.java.simpleName}"
+                            }
+                        } finally {
+                            val done = completedCount.incrementAndGet()
+                            updateProgress(details.title, done, chapters.size)
+                        }
+                    }
+                }
+            }
+        }
+        if (cancelled.get()) throw CancellationException("Download canceled.")
+        if (failures.isNotEmpty()) {
+            error(
+                buildString {
+                    append("Download failed for ${failures.size}/${chapters.size} chapters. No EPUB was written.")
+                    append('\n')
+                    append(failures.take(6).joinToString("\n"))
+                },
+            )
+        }
+        return repository.createGeneratedEpub(details, contents.sortedBy { it.order })
     }
 
     companion object {

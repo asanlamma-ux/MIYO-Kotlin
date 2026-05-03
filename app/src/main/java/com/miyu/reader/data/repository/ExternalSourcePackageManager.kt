@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URI
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,6 +26,7 @@ class ExternalSourcePackageManager @Inject constructor(
 
     suspend fun importPackage(uri: Uri): ExternalSourcePackageDescriptor = withContext(Dispatchers.IO) {
         ensurePackageRoot()
+        validateArchiveSize(uri)
         val tempDir = File(appContext.cacheDir, "source-package-import-${System.currentTimeMillis()}").apply {
             deleteRecursively()
             mkdirs()
@@ -34,9 +36,9 @@ class ExternalSourcePackageManager @Inject constructor(
                 unzipInto(tempDir, input)
             } ?: error("Could not open the selected package.")
             val manifest = readManifest(File(tempDir, MANIFEST_FILE_NAME))
-            val scriptFile = File(tempDir, manifest.entry)
-            validateManifest(manifest, scriptFile)
-            val destination = File(packageRoot, manifest.packageId)
+            val scriptFile = resolvePackageChild(tempDir, manifest.entry)
+            validateManifest(manifest, tempDir, scriptFile)
+            val destination = packageDirectory(manifest.packageId)
             destination.deleteRecursively()
             copyDirectory(tempDir, destination)
             loadImportedPackage(destination).descriptor
@@ -46,7 +48,7 @@ class ExternalSourcePackageManager @Inject constructor(
     }
 
     suspend fun removePackage(packageId: String) = withContext(Dispatchers.IO) {
-        File(packageRoot, packageId.sanitizedPackageId()).deleteRecursively()
+        packageDirectory(packageId).deleteRecursively()
     }
 
     fun installedPackages(): List<InstalledExternalSourcePackage> {
@@ -104,8 +106,8 @@ class ExternalSourcePackageManager @Inject constructor(
 
     private fun loadImportedPackage(directory: File): InstalledExternalSourcePackage {
         val manifest = readManifest(File(directory, MANIFEST_FILE_NAME))
-        val scriptFile = File(directory, manifest.entry)
-        validateManifest(manifest, scriptFile)
+        val scriptFile = resolvePackageChild(directory, manifest.entry)
+        validateManifest(manifest, directory, scriptFile)
         return InstalledExternalSourcePackage(
             manifest = manifest,
             providerId = OnlineNovelProviderId.valueOf(manifest.providerId),
@@ -123,33 +125,68 @@ class ExternalSourcePackageManager @Inject constructor(
 
     private fun validateManifest(
         manifest: ExternalSourcePackageManifest,
+        packageDirectory: File? = null,
         scriptFile: File? = null,
         scriptText: String? = null,
     ) {
+        if (manifest.schemaVersion != 1) {
+            error("Unsupported package schema version: ${manifest.schemaVersion}.")
+        }
         if (!manifest.packageId.matches(PACKAGE_ID_REGEX)) {
             error("Package id must use lowercase letters, numbers, dots, dashes, or underscores.")
         }
         OnlineNovelProviderId.valueOf(manifest.providerId)
-        if (manifest.bridgeScope.isBlank()) error("Package bridgeScope is missing.")
+        if (!manifest.bridgeScope.matches(PACKAGE_ID_REGEX) || manifest.bridgeScope != manifest.packageId) {
+            error("Package bridgeScope must match the package id.")
+        }
         if (manifest.name.isBlank()) error("Package name is missing.")
-        if (manifest.startUrl.isBlank()) error("Package startUrl is missing.")
+        if (manifest.version.isBlank()) error("Package version is missing.")
+        if (manifest.site.isBlank()) error("Package site is missing.")
+        validateStartUrl(manifest)
+        validateEntryPath(manifest.entry)
         if (manifest.entry.isBlank()) error("Package entry is missing.")
-        if (scriptText.isNullOrBlank() && (scriptFile == null || !scriptFile.isFile)) {
+        if (packageDirectory != null && scriptFile?.canonicalPath?.startsWith(packageDirectory.canonicalPath + File.separator) != true) {
+            error("Package entry points outside the package directory.")
+        }
+        val scriptBody = scriptText ?: scriptFile?.takeIf { it.isFile }?.readText()
+        if (scriptBody.isNullOrBlank()) {
             error("Package entry script is missing.")
+        }
+        if (scriptBody.length > MAX_SCRIPT_CHAR_COUNT) {
+            error("Package entry script is too large.")
         }
     }
 
     private fun ensurePackageRoot() {
-        if (!packageRoot.exists()) {
-            packageRoot.mkdirs()
+        if (!packageRoot.exists() && !packageRoot.mkdirs()) {
+            error("Could not create the source package directory.")
+        }
+    }
+
+    private fun validateArchiveSize(uri: Uri) {
+        val archiveBytes = runCatching {
+            appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.length.takeIf { it > 0L }
+            }
+        }.getOrNull()
+        if (archiveBytes != null && archiveBytes > MAX_ARCHIVE_BYTES) {
+            error("Package archive is too large.")
         }
     }
 
     private fun unzipInto(destination: File, input: java.io.InputStream) {
         val rootPath = destination.canonicalPath + File.separator
+        var entryCount = 0
+        var totalBytes = 0L
         ZipInputStream(input).use { zip ->
             generateSequence { zip.nextEntry }.forEach { entry ->
-                val outFile = File(destination, entry.name)
+                entryCount += 1
+                if (entryCount > MAX_ENTRY_COUNT) error("Package contains too many files.")
+                validateEntryPath(entry.name)
+                if (!entry.isDirectory && entry.size > MAX_ENTRY_BYTES) {
+                    error("Package entry is too large.")
+                }
+                val outFile = resolvePackageChild(destination, entry.name)
                 val canonical = outFile.canonicalFile
                 if (!canonical.path.startsWith(rootPath) && canonical.path != destination.canonicalPath) {
                     error("Package contains invalid paths.")
@@ -158,7 +195,20 @@ class ExternalSourcePackageManager @Inject constructor(
                     canonical.mkdirs()
                 } else {
                     canonical.parentFile?.mkdirs()
-                    FileOutputStream(canonical).use { output -> zip.copyTo(output) }
+                    var written = 0L
+                    FileOutputStream(canonical).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val read = zip.read(buffer)
+                            if (read <= 0) break
+                            written += read
+                            totalBytes += read
+                            if (written > MAX_ENTRY_BYTES || totalBytes > MAX_UNCOMPRESSED_BYTES) {
+                                error("Package archive exceeds supported limits.")
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                    }
                 }
                 zip.closeEntry()
             }
@@ -172,6 +222,50 @@ class ExternalSourcePackageManager @Inject constructor(
         }
     }
 
+    private fun packageDirectory(packageId: String): File {
+        if (!packageId.matches(PACKAGE_ID_REGEX)) error("Invalid package id.")
+        return resolvePackageChild(packageRoot, packageId)
+    }
+
+    private fun resolvePackageChild(root: File, relativePath: String): File {
+        if (relativePath.isBlank()) error("Package path is missing.")
+        if (relativePath.startsWith("/") || relativePath.startsWith("\\")) error("Package path must be relative.")
+        val normalized = relativePath.replace('\\', '/').trimEnd('/')
+        if (normalized.split('/').any { it == ".." || it.isBlank() }) {
+            error("Package path is invalid.")
+        }
+        val canonicalRoot = root.canonicalFile
+        val target = File(canonicalRoot, normalized).canonicalFile
+        if (!target.path.startsWith(canonicalRoot.path + File.separator)) {
+            error("Package path resolves outside the package root.")
+        }
+        return target
+    }
+
+    private fun validateStartUrl(manifest: ExternalSourcePackageManifest) {
+        val parsed = runCatching { URI(manifest.startUrl.trim()) }.getOrNull()
+            ?: error("Package startUrl is invalid.")
+        if (parsed.scheme?.lowercase() != "https") {
+            error("Package startUrl must use HTTPS.")
+        }
+        val host = parsed.host?.lowercase().orEmpty()
+        if (host.isBlank()) error("Package startUrl host is missing.")
+        val declaredHost = manifest.site.trim().removePrefix("https://").removePrefix("http://").trimEnd('/').lowercase()
+        if (declaredHost.isNotBlank() && !host.endsWith(declaredHost.removePrefix("www.")) && !host.endsWith(declaredHost)) {
+            error("Package startUrl host must match the declared site.")
+        }
+    }
+
+    private fun validateEntryPath(entry: String) {
+        val normalized = entry.replace('\\', '/').trimEnd('/')
+        if (!normalized.matches(PACKAGE_ENTRY_REGEX)) {
+            error("Package entry path is invalid.")
+        }
+        if (!normalized.endsWith(".js") && !entry.endsWith("/")) {
+            error("Package entry must point to a JavaScript file.")
+        }
+    }
+
     private fun String.toSourceId(): String = "external:${sanitizedPackageId()}"
 
     private fun String.sanitizedPackageId(): String = trim().lowercase()
@@ -180,6 +274,12 @@ class ExternalSourcePackageManager @Inject constructor(
         const val BUNDLED_ASSET_ROOT = "source-packages"
         const val MANIFEST_FILE_NAME = "manifest.json"
         val PACKAGE_ID_REGEX = Regex("^[a-z0-9._-]+$")
+        val PACKAGE_ENTRY_REGEX = Regex("^[A-Za-z0-9._/-]+$")
+        const val MAX_ARCHIVE_BYTES = 4L * 1024L * 1024L
+        const val MAX_UNCOMPRESSED_BYTES = 8L * 1024L * 1024L
+        const val MAX_ENTRY_BYTES = 2L * 1024L * 1024L
+        const val MAX_ENTRY_COUNT = 32
+        const val MAX_SCRIPT_CHAR_COUNT = 512_000
     }
 }
 

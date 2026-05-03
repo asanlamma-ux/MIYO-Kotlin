@@ -12,7 +12,7 @@ namespace miyu {
 namespace epub {
 
 std::string extractCss(const std::string& filePath, CacheManager& cache) {
-    if (auto* cached = cache.get(filePath)) {
+    if (auto cached = cache.get(filePath)) {
         if (!cached->mergedCss.empty()) return cached->mergedCss;
     }
 
@@ -32,9 +32,9 @@ std::string extractCss(const std::string& filePath, CacheManager& cache) {
     }
 
     std::string result = cssBuf.str();
-    if (auto* cached = const_cast<CacheManager::CachedData*>(cache.get(filePath))) {
+    cache.update(filePath, [&](CacheManager::CachedData& cached) {
         cached->mergedCss = result;
-    }
+    });
     return result;
 }
 

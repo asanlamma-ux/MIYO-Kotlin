@@ -236,10 +236,10 @@ fun ReaderLayoutPanelBottomSheet(
                 Spacer(Modifier.height(MiyoSpacing.large))
 
                 SectionHeader(
-                    "KOODO CONTROLS",
+                    "READER CONTROLS",
                     Icons.Outlined.Tune,
                     readerTheme,
-                    hint = "Reader chrome and selection behavior ported from Koodo-style controls.",
+                    hint = "Reader chrome and selection behavior tuned for the current reading flow.",
                 )
                 ToggleRow(
                     title = "Hide top controls",
@@ -279,7 +279,7 @@ fun ReaderLayoutPanelBottomSheet(
                 Spacer(Modifier.height(MiyoSpacing.small))
                 ToggleRow(
                     title = "Show page border",
-                    subtitle = "Add a subtle Koodo-style reading page frame",
+                    subtitle = "Add a subtle reading page frame",
                     icon = Icons.Outlined.FormatIndentIncrease,
                     active = settings.showPageBorder,
                     readerTheme = readerTheme,

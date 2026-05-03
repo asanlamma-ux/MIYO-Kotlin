@@ -29,7 +29,6 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): MIYUDatabase =
         Room.databaseBuilder(context, MIYUDatabase::class.java, "miyu.db")
-            .fallbackToDestructiveMigration()
             .build()
 
     @Provides fun provideBookDao(db: MIYUDatabase): BookDao = db.bookDao()

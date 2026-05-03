@@ -1646,7 +1646,7 @@ fun ProviderRepositoriesScreen(
                             color = colors.onBackground,
                         )
                         Text(
-                            "Import release packages built for Miyo. Each package contains a signed manifest and a browser-backed parser script that the app can install or replace.",
+                            "Import release packages built for Miyo. Each package contains a manifest and a browser-backed parser script that the app can validate, install, or replace.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = colors.secondaryText,
                         )
