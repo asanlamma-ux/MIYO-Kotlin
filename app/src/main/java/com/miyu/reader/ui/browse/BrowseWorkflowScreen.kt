@@ -113,7 +113,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
-import com.miyu.reader.domain.model.ExternalSourcePackageOrigin
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
@@ -1682,12 +1681,7 @@ fun ProviderRepositoriesScreen(
                         language = externalPackage.language,
                         providerName = externalPackage.providerId.name.replace('_', ' '),
                         description = externalPackage.description,
-                        bundled = externalPackage.origin == ExternalSourcePackageOrigin.BUNDLED,
-                        onRemove = if (externalPackage.origin == ExternalSourcePackageOrigin.IMPORTED) {
-                            { viewModel.removeExternalPackage(externalPackage.packageId) }
-                        } else {
-                            null
-                        },
+                        onRemove = { viewModel.removeExternalPackage(externalPackage.packageId) },
                     )
                 }
             }
@@ -1825,7 +1819,6 @@ private fun ExternalPackageCard(
     language: String,
     providerName: String,
     description: String,
-    bundled: Boolean,
     onRemove: (() -> Unit)?,
 ) {
     val colors = LocalMIYUColors.current
@@ -1871,7 +1864,7 @@ private fun ExternalPackageCard(
                 SourcePill(version)
                 SourcePill(language)
                 SourcePill(providerName)
-                SourcePill(if (bundled) "Bundled" else "Imported")
+                SourcePill("Imported")
             }
             if (description.isNotBlank()) {
                 Text(
@@ -2423,7 +2416,7 @@ private fun SourceHeroCard(source: NovelSourcePluginItem) {
             Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
                 SourcePill(source.language)
                 SourcePill(source.version)
-                SourcePill(if (source.kind == NovelSourceKind.BUILT_IN) "Built-in" else "External")
+                SourcePill("External JS")
             }
         }
     }

@@ -34,8 +34,7 @@ class ExternalPackageNovelSourcePlugin(
         site = externalPackage.manifest.site,
         language = externalPackage.manifest.language,
         version = externalPackage.manifest.version,
-        customJsUrl = externalPackage.installPath?.let { "file://$it/${externalPackage.manifest.entry}" }
-            ?: "asset://source-packages/${externalPackage.manifest.packageId}/${externalPackage.manifest.entry}",
+        customJsUrl = externalPackage.installPath?.let { "file://$it/${externalPackage.manifest.entry}" },
         verificationUrl = externalPackage.manifest.startUrl,
         kind = NovelSourceKind.EXTERNAL_JS,
         installState = NovelSourceInstallState.INSTALLED,

@@ -49,11 +49,7 @@ class ExternalSourcePackageManager @Inject constructor(
     }
 
     fun installedPackages(): List<InstalledExternalSourcePackage> {
-        // Imported packages intentionally override bundled ones when the package id matches.
-        val bundled = bundledPackages().associateBy { it.manifest.packageId }
-        val imported = importedPackages().associateBy { it.manifest.packageId }
-        return (bundled + imported)
-            .values
+        return importedPackages()
             .sortedBy { it.manifest.name.lowercase() }
     }
 
@@ -65,31 +61,6 @@ class ExternalSourcePackageManager @Inject constructor(
 
     fun installedPackageDescriptors(): List<ExternalSourcePackageDescriptor> =
         installedPackages().map { it.descriptor }
-
-    private fun bundledPackages(): List<InstalledExternalSourcePackage> {
-        val packageIds = appContext.assets.list(BUNDLED_ASSET_ROOT).orEmpty()
-        return packageIds.mapNotNull { packageId ->
-            runCatching {
-                val manifest = appContext.assets
-                    .open("$BUNDLED_ASSET_ROOT/$packageId/$MANIFEST_FILE_NAME")
-                    .bufferedReader()
-                    .use { reader -> json.decodeFromString(ExternalSourcePackageManifest.serializer(), reader.readText()) }
-                val script = appContext.assets
-                    .open("$BUNDLED_ASSET_ROOT/$packageId/${manifest.entry}")
-                    .bufferedReader()
-                    .use { it.readText() }
-                validateManifest(manifest, scriptText = script)
-                InstalledExternalSourcePackage(
-                    manifest = manifest,
-                    providerId = OnlineNovelProviderId.valueOf(manifest.providerId),
-                    sourceId = manifest.packageId.toSourceId(),
-                    script = script,
-                    origin = ExternalSourcePackageOrigin.BUNDLED,
-                    installPath = null,
-                )
-            }.getOrNull()
-        }
-    }
 
     private fun importedPackages(): List<InstalledExternalSourcePackage> {
         ensurePackageRoot()
@@ -118,6 +89,15 @@ class ExternalSourcePackageManager @Inject constructor(
     private fun installExtractedPackages(directory: File): List<ExternalSourcePackageDescriptor> {
         if (File(directory, MANIFEST_FILE_NAME).isFile) {
             return listOf(installPackageDirectory(directory))
+        }
+
+        val packageDirectories = directory
+            .walkTopDown()
+            .filter { it.isDirectory && it != directory && File(it, MANIFEST_FILE_NAME).isFile }
+            .sortedBy { it.name.lowercase() }
+            .toList()
+        if (packageDirectories.isNotEmpty()) {
+            return packageDirectories.map { installPackageDirectory(it) }
         }
 
         val nestedArchives = directory
@@ -160,7 +140,6 @@ class ExternalSourcePackageManager @Inject constructor(
         manifest: ExternalSourcePackageManifest,
         packageDirectory: File? = null,
         scriptFile: File? = null,
-        scriptText: String? = null,
     ) {
         if (manifest.schemaVersion != 1) {
             error("Unsupported package schema version: ${manifest.schemaVersion}.")
@@ -181,7 +160,7 @@ class ExternalSourcePackageManager @Inject constructor(
         if (packageDirectory != null && scriptFile?.canonicalPath?.startsWith(packageDirectory.canonicalPath + File.separator) != true) {
             error("Package entry points outside the package directory.")
         }
-        val scriptBody = scriptText ?: scriptFile?.takeIf { it.isFile }?.readText()
+        val scriptBody = scriptFile?.takeIf { it.isFile }?.readText()
         if (scriptBody.isNullOrBlank()) {
             error("Package entry script is missing.")
         }
@@ -326,7 +305,6 @@ class ExternalSourcePackageManager @Inject constructor(
     private fun String.sanitizedPackageId(): String = trim().lowercase()
 
     private companion object {
-        const val BUNDLED_ASSET_ROOT = "source-packages"
         const val MANIFEST_FILE_NAME = "manifest.json"
         val PACKAGE_ID_REGEX = Regex("^[a-z0-9._-]+$")
         val PACKAGE_ENTRY_REGEX = Regex("^[A-Za-z0-9._/-]+$")

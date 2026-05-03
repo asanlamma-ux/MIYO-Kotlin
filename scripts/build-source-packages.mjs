@@ -10,7 +10,6 @@ const CATALOG_PATH = path.join(SOURCE_PLUGIN_ROOT, 'catalog.json');
 const TEMPLATE_PATH = path.join(SOURCE_PLUGIN_ROOT, 'templates', 'source-package.js');
 const DIST_ROOT = path.join(SOURCE_PLUGIN_ROOT, '.dist');
 const DIST_PACKAGE_ROOT = path.join(DIST_ROOT, 'packages');
-const APP_ASSET_ROOT = path.join(ROOT, 'app', 'src', 'main', 'assets', 'source-packages');
 const MANIFEST_FILE = 'manifest.json';
 const MAIN_FILE = 'main.js';
 const PACKAGE_EXTENSION = '.miyuplugin.zip';
@@ -29,8 +28,6 @@ const template = fs.existsSync(TEMPLATE_PATH)
 fs.rmSync(DIST_ROOT, { recursive: true, force: true });
 fs.mkdirSync(DIST_ROOT, { recursive: true });
 fs.mkdirSync(DIST_PACKAGE_ROOT, { recursive: true });
-fs.rmSync(APP_ASSET_ROOT, { recursive: true, force: true });
-fs.mkdirSync(APP_ASSET_ROOT, { recursive: true });
 
 const packageIds = new Set();
 const providerIds = new Set();
@@ -58,13 +55,9 @@ for (const spec of catalog) {
   const sourceScriptPath = path.join(sourceDir, MAIN_FILE);
   const generatedScript = renderScript(spec);
   const packageDir = path.join(DIST_PACKAGE_ROOT, spec.packageId);
-  const bundledAssetDir = path.join(APP_ASSET_ROOT, spec.packageId);
   fs.mkdirSync(packageDir, { recursive: true });
-  fs.mkdirSync(bundledAssetDir, { recursive: true });
   fs.writeFileSync(path.join(packageDir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + '\n');
   fs.writeFileSync(path.join(packageDir, MAIN_FILE), generatedScript);
-  fs.writeFileSync(path.join(bundledAssetDir, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + '\n');
-  fs.writeFileSync(path.join(bundledAssetDir, MAIN_FILE), generatedScript);
 
   const zip = new JSZip();
   zip.file(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
@@ -76,9 +69,7 @@ for (const spec of catalog) {
       const extraPath = path.join(sourceDir, extraFile);
       if (fs.statSync(extraPath).isFile()) {
         const targetPath = path.join(packageDir, extraFile);
-        const bundledTargetPath = path.join(bundledAssetDir, extraFile);
         fs.copyFileSync(extraPath, targetPath);
-        fs.copyFileSync(extraPath, bundledTargetPath);
         zip.file(extraFile, fs.readFileSync(extraPath));
       }
     }
@@ -120,7 +111,7 @@ fs.writeFileSync(
 );
 
 console.log(`Wrote ${feed.length} source package(s) to ${DIST_ROOT}`);
-console.log(`Synced bundled source package assets to ${APP_ASSET_ROOT}`);
+console.log('Source packages are release artifacts and are not bundled into the APK.');
 
 function renderScript(spec) {
   const explicitScriptPath = path.join(PACKAGE_SOURCE_ROOT, spec.packageId, MAIN_FILE);

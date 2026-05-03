@@ -9,11 +9,8 @@ import androidx.core.content.ContextCompat
 import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.NovelSourcePluginRegistry
-import com.miyu.reader.data.repository.OnlineNovelRepository
-import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineDownloadHistoryEntry
 import com.miyu.reader.domain.model.OnlineDownloadRequest
-import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.notifications.OnlineDownloadNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
@@ -23,15 +20,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -39,7 +33,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class OnlineDownloadService : Service() {
     @Inject lateinit var sourceRegistry: NovelSourcePluginRegistry
-    @Inject lateinit var repository: OnlineNovelRepository
     @Inject lateinit var bookRepository: BookRepository
     @Inject lateinit var preferences: UserPreferences
     @Inject lateinit var notifier: OnlineDownloadNotifier
@@ -102,25 +95,20 @@ class OnlineDownloadService : Service() {
                 activeTotal = chapters.size
                 updateProgress(details.title, 0, chapters.size)
                 val concurrency = preferences.downloadConcurrency.first()
-                val pluginKind = sourceRegistry.source(sourceId)?.kind
-                val generated = if (pluginKind == NovelSourceKind.EXTERNAL_JS) {
-                    val selectedDetails = details.copy(
-                        chapterCount = chapters.size,
-                        chapters = chapters,
-                    )
-                    sourceRegistry.downloadAsEpub(
-                        sourceId = sourceId,
-                        novel = selectedDetails,
-                        startChapter = chapters.first().order,
-                        endChapter = chapters.last().order,
-                        concurrency = concurrency,
-                    ) { completed, total ->
-                        completedCount.set(completed)
-                        activeTotal = total
-                        updateProgress(details.title, completed, total)
-                    }
-                } else {
-                    downloadBuiltIn(details, chapters, sourceId, concurrency)
+                val selectedDetails = details.copy(
+                    chapterCount = chapters.size,
+                    chapters = chapters,
+                )
+                val generated = sourceRegistry.downloadAsEpub(
+                    sourceId = sourceId,
+                    novel = selectedDetails,
+                    startChapter = chapters.first().order,
+                    endChapter = chapters.last().order,
+                    concurrency = concurrency,
+                ) { completed, total ->
+                    completedCount.set(completed)
+                    activeTotal = total
+                    updateProgress(details.title, completed, total)
                 }
                 val importedBook = bookRepository.importGeneratedOnlineNovelEpub(
                     filePath = generated.filePath,
@@ -162,11 +150,6 @@ class OnlineDownloadService : Service() {
                 }
             }
         }
-    }
-
-    private suspend fun awaitIfPaused() {
-        paused.filter { isPaused -> !isPaused }.first()
-        if (cancelled.get()) throw CancellationException("Download canceled.")
     }
 
     private fun setPaused(value: Boolean) {
@@ -212,50 +195,6 @@ class OnlineDownloadService : Service() {
         }
         activeRequest = null
         activeJob = null
-    }
-
-    private suspend fun downloadBuiltIn(
-        details: com.miyu.reader.domain.model.OnlineNovelDetails,
-        chapters: List<com.miyu.reader.domain.model.OnlineChapterSummary>,
-        sourceId: String,
-        concurrency: Int,
-    ): com.miyu.reader.domain.model.GeneratedOnlineNovelEpub {
-        val queue = ConcurrentLinkedQueue(chapters)
-        val failures = mutableListOf<String>()
-        val contents = mutableListOf<OnlineChapterContent>()
-        kotlinx.coroutines.coroutineScope {
-            repeat(concurrency.coerceAtLeast(1)) {
-                launch {
-                    while (isActive && !cancelled.get()) {
-                        awaitIfPaused()
-                        val chapter = queue.poll() ?: break
-                        try {
-                            awaitIfPaused()
-                            val content = sourceRegistry.chapterContent(sourceId, details, chapter)
-                            synchronized(contents) { contents += content }
-                        } catch (error: Exception) {
-                            synchronized(failures) {
-                                failures += "Chapter ${chapter.order}: ${error.message ?: error::class.java.simpleName}"
-                            }
-                        } finally {
-                            val done = completedCount.incrementAndGet()
-                            updateProgress(details.title, done, chapters.size)
-                        }
-                    }
-                }
-            }
-        }
-        if (cancelled.get()) throw CancellationException("Download canceled.")
-        if (failures.isNotEmpty()) {
-            error(
-                buildString {
-                    append("Download failed for ${failures.size}/${chapters.size} chapters. No EPUB was written.")
-                    append('\n')
-                    append(failures.take(6).joinToString("\n"))
-                },
-            )
-        }
-        return repository.createGeneratedEpub(details, contents.sortedBy { it.order })
     }
 
     companion object {

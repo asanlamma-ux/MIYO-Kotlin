@@ -19,7 +19,6 @@ data class ExternalSourcePackageManifest(
 )
 
 enum class ExternalSourcePackageOrigin {
-    BUNDLED,
     IMPORTED,
 }
 

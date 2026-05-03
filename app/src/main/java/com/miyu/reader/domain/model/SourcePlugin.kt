@@ -6,7 +6,6 @@ import kotlinx.serialization.Serializable
 @Keep
 @Serializable
 enum class NovelSourceKind {
-    BUILT_IN,
     EXTERNAL_JS,
 }
 
@@ -31,7 +30,7 @@ data class NovelSourcePluginItem(
     val customJsUrl: String? = null,
     val customCssUrl: String? = null,
     val verificationUrl: String? = null,
-    val kind: NovelSourceKind = NovelSourceKind.BUILT_IN,
+    val kind: NovelSourceKind = NovelSourceKind.EXTERNAL_JS,
     val installState: NovelSourceInstallState = NovelSourceInstallState.INSTALLED,
     val hasUpdate: Boolean = false,
     val hasSettings: Boolean = false,

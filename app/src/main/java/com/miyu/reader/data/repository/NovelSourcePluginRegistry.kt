@@ -2,14 +2,11 @@ package com.miyu.reader.data.repository
 
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
-import com.miyu.reader.domain.model.NovelSourceInstallState
-import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePlugin
 import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineChapterSummary
 import com.miyu.reader.domain.model.OnlineNovelDetails
-import com.miyu.reader.domain.model.OnlineNovelProvider
 import com.miyu.reader.domain.model.OnlineNovelProviderId
 import com.miyu.reader.domain.model.OnlineNovelSearchResult
 import com.miyu.reader.domain.model.OnlineNovelSummary
@@ -22,18 +19,6 @@ class NovelSourcePluginRegistry @Inject constructor(
     private val externalPackageManager: ExternalSourcePackageManager,
     private val externalRuntime: ExternalJsPluginRuntime,
 ) {
-    private val builtInPlugins: Map<String, NovelSourcePlugin>
-        get() {
-            val externalizedProviders = externalPackageManager.installedPackages()
-                .map { it.providerId }
-                .toSet()
-            return onlineNovelRepository.providers
-                .filterNot { it.id in externalizedProviders }
-                .associate { provider ->
-                    provider.toSourcePluginId() to BuiltInNovelSourcePlugin(provider, onlineNovelRepository)
-                }
-        }
-
     private val externalPlugins: Map<String, NovelSourcePlugin>
         get() = externalPackageManager.installedPackages()
             .associate { externalPackage ->
@@ -45,7 +30,7 @@ class NovelSourcePluginRegistry @Inject constructor(
             }
 
     val installedSources: List<NovelSourcePluginItem>
-        get() = (builtInPlugins.values + externalPlugins.values)
+        get() = externalPlugins.values
             .map { it.item }
             .sortedBy { it.name.lowercase() }
 
@@ -62,7 +47,8 @@ class NovelSourcePluginRegistry @Inject constructor(
         allSources.firstOrNull { it.id == sourceId }
 
     fun sourceIdForProvider(providerId: OnlineNovelProviderId): String =
-        externalPackageManager.packageForProvider(providerId)?.sourceId ?: providerId.toSourcePluginId()
+        externalPackageManager.packageForProvider(providerId)?.sourceId
+            ?: "missing:${providerId.name.lowercase().replace('_', '-')}"
 
     suspend fun installExternalPackage(uri: android.net.Uri): ExternalSourcePackageDescriptor =
         externalPackageManager.importPackage(uri)
@@ -98,65 +84,6 @@ class NovelSourcePluginRegistry @Inject constructor(
         plugin(sourceId).downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
 
     private fun plugin(sourceId: String): NovelSourcePlugin =
-        builtInPlugins[sourceId]
-            ?: externalPlugins[sourceId]
+        externalPlugins[sourceId]
             ?: error("Source plugin is not installed or cannot run yet.")
-}
-
-private class BuiltInNovelSourcePlugin(
-    private val provider: OnlineNovelProvider,
-    private val repository: OnlineNovelRepository,
-) : NovelSourcePlugin {
-    override val item: NovelSourcePluginItem = NovelSourcePluginItem(
-        id = provider.toSourcePluginId(),
-        name = provider.label,
-        site = provider.baseUrl.removePrefix("https://").removePrefix("http://").trimEnd('/'),
-        language = provider.sourceLanguageLabel(),
-        version = "built-in",
-        kind = NovelSourceKind.BUILT_IN,
-        installState = NovelSourceInstallState.INSTALLED,
-        requiresVerification = provider.requiresBrowserVerification,
-        verificationUrl = provider.startUrl,
-        description = provider.description,
-    )
-
-    override suspend fun popularNovels(page: Int): OnlineNovelSearchResult =
-        repository.search(provider.id, query = "", page = page)
-
-    override suspend fun searchNovels(query: String, page: Int): OnlineNovelSearchResult =
-        repository.search(provider.id, query = query, page = page)
-
-    override suspend fun parseNovel(summary: OnlineNovelSummary): OnlineNovelDetails =
-        repository.getDetails(summary)
-
-    override suspend fun fetchChapterContent(
-        novel: OnlineNovelDetails,
-        chapter: OnlineChapterSummary,
-    ): OnlineChapterContent =
-        repository.getChapterContent(novel, chapter)
-
-    override suspend fun downloadAsEpub(
-        novel: OnlineNovelDetails,
-        startChapter: Int,
-        endChapter: Int,
-        concurrency: Int,
-        onProgress: ((completed: Int, total: Int) -> Unit)?,
-    ): GeneratedOnlineNovelEpub =
-        repository.downloadAsEpub(novel, startChapter, endChapter, concurrency, onProgress)
-}
-
-internal fun OnlineNovelProvider.toSourcePluginId(): String =
-    id.toSourcePluginId()
-
-internal fun OnlineNovelProviderId.toSourcePluginId(): String =
-    "builtin:${name.lowercase().replace('_', '-')}"
-
-private fun OnlineNovelProvider.sourceLanguageLabel(): String = when (id) {
-    OnlineNovelProviderId.FANMTL,
-    OnlineNovelProviderId.WUXIASPOT,
-    OnlineNovelProviderId.MCREADER -> "EN MTL"
-    OnlineNovelProviderId.NOVELCOOL,
-    OnlineNovelProviderId.FREEWEBNOVEL,
-    OnlineNovelProviderId.LIGHTNOVELPUB -> "EN"
-    OnlineNovelProviderId.WTR_LAB -> "EN MTL"
 }

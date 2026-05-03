@@ -65,12 +65,29 @@ object MiyoPermissions {
         context.safeStartActivity(intent)
     }
 
-    @SuppressLint("BatteryLife")
-    fun openBatteryOptimizationSettings(context: Context) {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:${context.packageName}")
+    fun openInstallUnknownAppsSettings(context: Context) {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}"),
+            )
+        } else {
+            Intent(Settings.ACTION_SECURITY_SETTINGS)
         }
         context.safeStartActivity(intent)
+    }
+
+    @SuppressLint("BatteryLife")
+    fun openBatteryOptimizationSettings(context: Context) {
+        if (isIgnoringBatteryOptimizations(context)) {
+            context.safeStartActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            return
+        }
+        val requestIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
+        val listIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        context.safeStartActivity(requestIntent, listIntent)
     }
 
     fun openAppSettings(context: Context) {
@@ -116,15 +133,14 @@ object MiyoPermissions {
             powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
         }.getOrDefault(false)
 
-    private fun Context.safeStartActivity(intent: Intent) {
+    private fun Context.safeStartActivity(intent: Intent, fallback: Intent? = null) {
         val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { startActivity(launchIntent) }
             .recoverCatching {
                 if (it is ActivityNotFoundException) {
-                    startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
+                    val fallbackIntent = fallback
+                        ?: Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                    startActivity(fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } else {
                     throw it
                 }

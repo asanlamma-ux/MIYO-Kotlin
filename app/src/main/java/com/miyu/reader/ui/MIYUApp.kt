@@ -483,7 +483,7 @@ fun MIYUApp() {
         if (shouldShowInitialSetup) {
             InitialSetupBottomSheet(
                 initialReaderThemeId = effectiveReaderThemeId,
-                onGrantInstallApps = { MiyoPermissions.openAppSettings(context) },
+                onGrantInstallApps = { MiyoPermissions.openInstallUnknownAppsSettings(context) },
                 onGrantNotifications = {
                     val runtimePermissions = MiyoPermissions.runtimePermissionsToRequest(context)
                     if (runtimePermissions.isNotEmpty()) {

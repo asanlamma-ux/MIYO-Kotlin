@@ -13,7 +13,6 @@ import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
 import com.miyu.reader.domain.model.HIDDEN_LIBRARY_PREVIEW_TAG
 import com.miyu.reader.domain.model.NovelSourceInstallState
-import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
 import com.miyu.reader.domain.model.OnlineChapterContent
 import com.miyu.reader.domain.model.OnlineDownloadRequest
@@ -155,7 +154,6 @@ data class BrowseUiState(
         if (source.id == lastUsedSourceId) score += 80
         if (source.id in pinnedSourceIds) score += 60
         if (!source.requiresVerification) score += 30
-        if (source.kind == NovelSourceKind.BUILT_IN) score += 20
         if (languageFilter.isNotEmpty() && source.language in languageFilter) score += 15
         if (source.hasUpdate) score += 10
         return score
