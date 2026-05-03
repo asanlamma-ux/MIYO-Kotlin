@@ -11,6 +11,7 @@ import com.miyu.reader.downloads.OnlineDownloadCoordinator
 import com.miyu.reader.downloads.OnlineDownloadService
 import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
 import com.miyu.reader.domain.model.GeneratedOnlineNovelEpub
+import com.miyu.reader.domain.model.HIDDEN_LIBRARY_PREVIEW_TAG
 import com.miyu.reader.domain.model.NovelSourceInstallState
 import com.miyu.reader.domain.model.NovelSourceKind
 import com.miyu.reader.domain.model.NovelSourcePluginItem
