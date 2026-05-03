@@ -2,6 +2,7 @@ package com.miyu.reader.data.repository
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import com.miyu.reader.domain.model.ExternalSourcePackageDescriptor
 import com.miyu.reader.domain.model.ExternalSourcePackageManifest
 import com.miyu.reader.domain.model.ExternalSourcePackageOrigin
@@ -26,6 +27,7 @@ class ExternalSourcePackageManager @Inject constructor(
 
     suspend fun importPackage(uri: Uri): ExternalSourcePackageDescriptor = withContext(Dispatchers.IO) {
         ensurePackageRoot()
+        validateSelectedPackage(uri)
         validateArchiveSize(uri)
         val tempDir = File(appContext.cacheDir, "source-package-import-${System.currentTimeMillis()}").apply {
             deleteRecursively()
@@ -182,7 +184,7 @@ class ExternalSourcePackageManager @Inject constructor(
             generateSequence { zip.nextEntry }.forEach { entry ->
                 entryCount += 1
                 if (entryCount > MAX_ENTRY_COUNT) error("Package contains too many files.")
-                validateEntryPath(entry.name)
+                validateArchiveEntryPath(entry.name)
                 if (!entry.isDirectory && entry.size > MAX_ENTRY_BYTES) {
                     error("Package entry is too large.")
                 }
@@ -253,6 +255,28 @@ class ExternalSourcePackageManager @Inject constructor(
         val declaredHost = manifest.site.trim().removePrefix("https://").removePrefix("http://").trimEnd('/').lowercase()
         if (declaredHost.isNotBlank() && !host.endsWith(declaredHost.removePrefix("www.")) && !host.endsWith(declaredHost)) {
             error("Package startUrl host must match the declared site.")
+        }
+    }
+
+    private fun validateSelectedPackage(uri: Uri) {
+        val name = appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?.trim()
+            .orEmpty()
+        if (name.isBlank()) return
+        if (name.endsWith(".json", ignoreCase = true)) {
+            error("Select a .miyuplugin.zip package file, not the feed catalog JSON.")
+        }
+        if (!name.endsWith(".miyuplugin.zip", ignoreCase = true) && !name.endsWith(".zip", ignoreCase = true)) {
+            error("Source packages must be imported from a .miyuplugin.zip file.")
+        }
+    }
+
+    private fun validateArchiveEntryPath(entry: String) {
+        val normalized = entry.replace('\\', '/').trimEnd('/')
+        if (normalized.isBlank()) error("Package contains an empty entry path.")
+        if (!normalized.matches(PACKAGE_ENTRY_REGEX)) {
+            error("Package contains an invalid entry path.")
         }
     }
 

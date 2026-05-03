@@ -91,6 +91,7 @@ class ReaderViewModel @Inject constructor(
     private var lastSelectionNonNullAt = 0L
     private var ignoreProgressUntil = 0L
     private var navigationTargetChapterIndex: Int? = null
+    private var lastReaderTapAt = 0L
 
     val readerThemeId: StateFlow<String> = preferences.readerThemeId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DefaultReaderThemeId)
@@ -315,6 +316,9 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun handleReaderTap() {
+        val now = System.currentTimeMillis()
+        if (now - lastReaderTapAt < 260L) return
+        lastReaderTapAt = now
         _uiState.update { state ->
             if (state.selection != null) state.copy(selection = null) else state.copy(showControls = !state.showControls)
         }

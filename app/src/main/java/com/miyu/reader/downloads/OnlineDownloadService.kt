@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.NovelSourcePluginRegistry
 import com.miyu.reader.data.repository.OnlineNovelRepository
@@ -39,6 +40,7 @@ import javax.inject.Inject
 class OnlineDownloadService : Service() {
     @Inject lateinit var sourceRegistry: NovelSourcePluginRegistry
     @Inject lateinit var repository: OnlineNovelRepository
+    @Inject lateinit var bookRepository: BookRepository
     @Inject lateinit var preferences: UserPreferences
     @Inject lateinit var notifier: OnlineDownloadNotifier
     @Inject lateinit var coordinator: OnlineDownloadCoordinator
@@ -120,6 +122,17 @@ class OnlineDownloadService : Service() {
                 } else {
                     downloadBuiltIn(details, chapters, sourceId, concurrency)
                 }
+                val importedBook = bookRepository.importGeneratedOnlineNovelEpub(
+                    filePath = generated.filePath,
+                    fileName = generated.fileName,
+                    suggestedTitle = details.title,
+                    identityKey = onlineIdentityKey(request.summary.providerId, request.summary.path),
+                )
+                val importedEpub = generated.copy(
+                    filePath = importedBook.filePath,
+                    fileName = importedBook.fileName ?: generated.fileName,
+                    title = importedBook.title,
+                )
                 val completedAt = Instant.now().toString()
                 preferences.recordOnlineDownload(
                     OnlineDownloadHistoryEntry(
@@ -131,8 +144,8 @@ class OnlineDownloadService : Service() {
                         dayKey = LocalDate.now(ZoneId.systemDefault()).toString(),
                     ),
                 )
-                coordinator.complete(request.key, details.title, chapters.size, generated)
-                notifier.showComplete(request.key, details.title, generated.fileName)
+                coordinator.complete(request.key, importedBook.title, chapters.size, importedEpub)
+                notifier.showComplete(request.key, importedBook.title, importedEpub.fileName)
             } catch (cancelledError: CancellationException) {
                 coordinator.cancel(request.key, activeTitle, completedCount.get(), activeTotal)
                 notifier.clear(request.key)
@@ -281,5 +294,8 @@ class OnlineDownloadService : Service() {
         fun cancel(context: Context) {
             ContextCompat.startForegroundService(context, cancelIntent(context))
         }
+
+        private fun onlineIdentityKey(providerId: com.miyu.reader.domain.model.OnlineNovelProviderId, path: String): String =
+            "online:${providerId.name.lowercase()}:${path.trim()}"
     }
 }

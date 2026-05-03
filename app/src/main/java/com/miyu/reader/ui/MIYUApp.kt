@@ -390,6 +390,7 @@ fun MIYUApp() {
                             path = Uri.decode(backStackEntry.arguments?.getString("path").orEmpty()),
                             fallbackTitle = backStackEntry.arguments?.getString("title")?.let(Uri::decode),
                             onBack = { navController.popBackStack() },
+                            onOpenReader = openReader,
                         )
                     }
                     composable(

@@ -73,7 +73,8 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             combine(allBooks, userPreferences.libraryCategories, userPreferences.hiddenLibraryCategories) { books, storedCategories, hiddenCategories ->
-                books to buildLibraryCategories(books, storedCategories, hiddenCategories)
+                val visibleBooks = books.filterNot { book -> HIDDEN_LIBRARY_PREVIEW_TAG in book.tags }
+                visibleBooks to buildLibraryCategories(visibleBooks, storedCategories, hiddenCategories)
             }.collect { (books, categories) ->
                 _uiState.update { current ->
                     val existingIds = books.mapTo(mutableSetOf()) { it.id }
@@ -498,49 +499,17 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true, importFeedback = null) }
             try {
-                val destFile = withContext(Dispatchers.IO) {
-                    copyGeneratedEpubToInternalBookFile(File(filePath), uniqueImportFileName(fileName))
-                }
-
-                val parsed = withContext(Dispatchers.IO) {
-                    JSONObject(epubEngine.parseEpub(destFile.absolutePath))
-                }
-                val metadata = parsed.optJSONObject("metadata")
-                val totalChapters = parsed.optInt("totalChapters", 0)
-                if (totalChapters <= 0) error("The generated EPUB did not contain readable chapters.")
-
-                val title = metadata?.optString("title")
-                    ?.takeIf { it.isNotBlank() }
-                    ?: suggestedTitle.ifBlank { destFile.nameWithoutExtension.replace("_", " ") }
-                val author = metadata?.optString("author")
-                    ?.takeIf { it.isNotBlank() }
-                    ?: "Unknown"
-                val bookId = UUID.randomUUID().toString()
-                val coverUri = withContext(Dispatchers.IO) {
-                    epubEngine.extractCoverImage(destFile.absolutePath)
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { if (it.startsWith("data:", ignoreCase = true)) it else "data:image/jpeg;base64,$it" }
-                        ?.let { persistCoverImage(bookId, it) ?: it }
-                }
-                val book = Book(
-                    id = bookId,
-                    title = title,
-                    author = author,
-                    coverUri = coverUri,
-                    filePath = destFile.absolutePath,
-                    fileName = destFile.name,
-                    epubIdentifier = metadata?.optString("identifier")?.takeIf { it.isNotBlank() },
-                    language = metadata?.optString("language")?.takeIf { it.isNotBlank() },
-                    totalChapters = totalChapters,
-                    dateAdded = java.time.Instant.now().toString(),
+                val book = bookRepository.importGeneratedOnlineNovelEpub(
+                    filePath = filePath,
+                    fileName = fileName,
+                    suggestedTitle = suggestedTitle,
                 )
-                bookRepository.importBook(book)
                 _uiState.update {
                     it.copy(
                         importFeedback = ImportFeedback(
                             type = ImportFeedbackType.SUCCESS,
                             title = "Online novel imported",
-                            message = "\"${book.title}\" is ready with $totalChapters chapter${if (totalChapters == 1) "" else "s"}.",
+                            message = "\"${book.title}\" is ready with ${book.totalChapters} chapter${if (book.totalChapters == 1) "" else "s"}.",
                             bookId = book.id,
                         )
                     )

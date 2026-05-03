@@ -8,9 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ActionMode
+import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -250,6 +252,7 @@ fun ReaderScreen(
                         volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
                         suppressSystemSelectionToolbar = readingSettings.selectionPopupEnabled
                         onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
+                        onCenterTap = { viewModel.handleReaderTap() }
                         isFocusable = true
                         isFocusableInTouchMode = true
                         requestFocus()
@@ -282,6 +285,7 @@ fun ReaderScreen(
                     webView.volumeNavigationEnabled = readingSettings.volumeButtonPageTurn
                     webView.suppressSystemSelectionToolbar = readingSettings.selectionPopupEnabled
                     webView.onVolumeNavigation = { delta -> viewModel.navigateChapter(delta) }
+                    webView.onCenterTap = { viewModel.handleReaderTap() }
                     webView.setBackgroundColor(bgColor.toArgb())
                     val restorePercent = uiState.chapterScrollPercent.coerceIn(0f, 1f)
                     webView.webViewClient = object : SecureReaderWebViewClient() {
@@ -1536,6 +1540,21 @@ private class ReaderWebView(context: Context) : WebView(context) {
     var volumeNavigationEnabled: Boolean = false
     var suppressSystemSelectionToolbar: Boolean = true
     var onVolumeNavigation: ((Int) -> Unit)? = null
+    var onCenterTap: (() -> Unit)? = null
+    private val gestureDetector = GestureDetector(
+        context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                val widthPx = width.takeIf { it > 0 } ?: return false
+                val normalizedX = event.x / widthPx.toFloat()
+                if (normalizedX in 0.24f..0.76f) {
+                    onCenterTap?.invoke()
+                    return true
+                }
+                return false
+            }
+        },
+    )
 
     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? =
         super.startActionMode(callback.withHiddenMenuWhenNeeded())
@@ -1577,6 +1596,11 @@ private class ReaderWebView(context: Context) : WebView(context) {
             return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(event)
+        return super.onTouchEvent(event)
     }
 }
 

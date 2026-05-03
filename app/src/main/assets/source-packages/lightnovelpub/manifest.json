@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "packageId": "lightnovelpub",
+  "providerId": "LIGHTNOVELPUB",
+  "bridgeScope": "lightnovelpub",
+  "name": "LightNovelPub",
+  "version": "1.0.0",
+  "site": "lightnovelpub.vip",
+  "language": "EN",
+  "startUrl": "https://lightnovelpub.vip/browse/",
+  "entry": "main.js",
+  "requiresVerification": false,
+  "description": "LightNovelPub package with paged chapter sheet support and MIYO reader bridge output."
+}

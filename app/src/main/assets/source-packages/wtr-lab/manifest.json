@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "packageId": "wtr-lab",
+  "providerId": "WTR_LAB",
+  "bridgeScope": "wtr-lab",
+  "name": "WTR-LAB",
+  "version": "1.2.0",
+  "site": "wtr-lab.com",
+  "language": "EN MTL",
+  "startUrl": "https://wtr-lab.com/en/novel-finder",
+  "entry": "main.js",
+  "requiresVerification": true,
+  "description": "Browser-backed WTR-LAB source with encrypted chapter and AI translation support."
+}

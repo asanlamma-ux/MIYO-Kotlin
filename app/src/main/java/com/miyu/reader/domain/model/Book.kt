@@ -27,6 +27,8 @@ data class Book(
     val tags: List<String> = emptyList(),
 )
 
+const val HIDDEN_LIBRARY_PREVIEW_TAG = "__miyo_hidden_preview__"
+
 @Keep
 enum class StorageLocation { APP, SAF }
 

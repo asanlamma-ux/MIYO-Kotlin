@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.miyu.reader.data.repository.BookRepository
 import com.miyu.reader.data.preferences.UserPreferences
 import com.miyu.reader.data.repository.NovelSourcePluginRegistry
 import com.miyu.reader.downloads.OnlineDownloadCoordinator
@@ -87,6 +88,7 @@ data class BrowseUiState(
     val downloadProgress: BrowseDownloadProgress? = null,
     val queuedDownloadCount: Int = 0,
     val generatedEpub: GeneratedOnlineNovelEpub? = null,
+    val pendingReaderBookId: String? = null,
     val selectedNovelSummary: OnlineNovelSummary? = null,
     val selectedNovelDetails: OnlineNovelDetails? = null,
     val selectedChapterPreview: OnlineChapterContent? = null,
@@ -162,6 +164,7 @@ data class BrowseUiState(
 @HiltViewModel
 class BrowseViewModel @Inject constructor(
     private val sourceRegistry: NovelSourcePluginRegistry,
+    private val bookRepository: BookRepository,
     private val preferences: UserPreferences,
     private val downloadCoordinator: OnlineDownloadCoordinator,
     @ApplicationContext private val context: Context,
@@ -586,6 +589,81 @@ class BrowseViewModel @Inject constructor(
         }
     }
 
+    fun clearPendingReaderBook() {
+        _uiState.update { it.copy(pendingReaderBookId = null) }
+    }
+
+    fun openChapterInReader(details: OnlineNovelDetails, chapter: OnlineChapterSummary) {
+        val sourceId = sourceRegistry.sourceIdForProvider(details.providerId)
+        val source = sourceRegistry.source(sourceId)
+        if (source == null) {
+            _uiState.update { it.copy(error = "Source not found.") }
+            return
+        }
+        if (source.installState != NovelSourceInstallState.INSTALLED) {
+            _uiState.update { it.copy(error = "${source.name} is not installed yet.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    chapterPreviewLoading = true,
+                    chapterPreviewError = null,
+                    pendingReaderBookId = null,
+                    error = null,
+                )
+            }
+            runCatching {
+                val epub = sourceRegistry.downloadAsEpub(
+                    sourceId = sourceId,
+                    novel = details,
+                    startChapter = chapter.order,
+                    endChapter = chapter.order,
+                    concurrency = 1,
+                )
+                val imported = bookRepository.importGeneratedOnlineNovelEpub(
+                    filePath = epub.filePath,
+                    fileName = epub.fileName,
+                    suggestedTitle = details.title,
+                    identityKey = previewIdentityKey(details.providerId, details.path),
+                    tags = listOf(HIDDEN_LIBRARY_PREVIEW_TAG),
+                )
+                preferences.recordOnlineReading(
+                    OnlineReadingHistoryEntry(
+                        id = "${details.providerId.name}:${details.path}",
+                        providerId = details.providerId,
+                        path = details.path,
+                        title = details.title,
+                        author = details.author,
+                        coverUrl = details.coverUrl,
+                        lastChapterTitle = chapter.title,
+                        lastReadAt = java.time.Instant.now().toString(),
+                    ),
+                )
+                imported
+            }.onSuccess { importedBook ->
+                _uiState.update {
+                    it.copy(
+                        chapterPreviewLoading = false,
+                        chapterPreviewError = null,
+                        error = null,
+                        pendingReaderBookId = importedBook.id,
+                    )
+                }
+            }.onFailure { error ->
+                val message = error.message ?: "Could not open that chapter."
+                _uiState.update {
+                    it.copy(
+                        chapterPreviewLoading = false,
+                        chapterPreviewError = message,
+                        error = message,
+                    )
+                }
+            }
+        }
+    }
+
     fun downloadNovelDetails(details: OnlineNovelDetails) {
         val sourceId = sourceRegistry.sourceIdForProvider(details.providerId)
         val source = sourceRegistry.source(sourceId)
@@ -726,4 +804,10 @@ class BrowseViewModel @Inject constructor(
             chapterCount = chapterCount ?: chapters.size,
             rating = rating,
         )
+
+    private fun onlineIdentityKey(providerId: OnlineNovelProviderId, path: String): String =
+        "online:${providerId.name.lowercase(Locale.ROOT)}:${path.trim()}"
+
+    private fun previewIdentityKey(providerId: OnlineNovelProviderId, path: String): String =
+        "preview:${providerId.name.lowercase(Locale.ROOT)}:${path.trim()}"
 }

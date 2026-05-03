@@ -747,6 +747,7 @@ fun OnlineNovelDetailsScreen(
     path: String,
     fallbackTitle: String?,
     onBack: () -> Unit,
+    onOpenReader: (String, Int?) -> Unit,
     viewModel: BrowseViewModel = hiltViewModel(),
 ) {
     val provider = remember(providerId) {
@@ -768,9 +769,11 @@ fun OnlineNovelDetailsScreen(
     val downloadKey = details?.let { "${it.providerId}:${it.path}" }
     val downloading = downloadKey?.let { state.downloadingKey == it } == true
     val downloadProgress = state.downloadProgress?.takeIf { it.key == downloadKey }
-    val showChapterPreview = state.chapterPreviewLoading ||
-        state.selectedChapterPreview != null ||
-        state.chapterPreviewError != null
+    LaunchedEffect(state.pendingReaderBookId) {
+        val bookId = state.pendingReaderBookId ?: return@LaunchedEffect
+        viewModel.clearPendingReaderBook()
+        onOpenReader(bookId, 0)
+    }
 
     MiyoNovelDetailsScaffold(
         coverModel = details?.coverUrl ?: summary?.coverUrl,
@@ -861,7 +864,7 @@ fun OnlineNovelDetailsScreen(
             onOpenChapter = { chapter ->
                 if (selectedChapterOrders.isEmpty()) {
                     showChapterSheet = false
-                    viewModel.loadChapterPreview(details, chapter)
+                    viewModel.openChapterInReader(details, chapter)
                 } else {
                     selectedChapterOrders = selectedChapterOrders.toggle(chapter.order)
                 }
@@ -876,15 +879,6 @@ fun OnlineNovelDetailsScreen(
         )
     }
 
-    if (showChapterPreview) {
-        OnlineChapterPreviewBottomSheet(
-            chapter = state.selectedChapterSummary,
-            preview = state.selectedChapterPreview,
-            isLoading = state.chapterPreviewLoading,
-            error = state.chapterPreviewError,
-            onDismiss = viewModel::clearChapterPreview,
-        )
-    }
 }
 
 @Composable
