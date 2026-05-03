@@ -1680,6 +1680,7 @@ fun ProviderRepositoriesScreen(
                         site = externalPackage.site,
                         language = externalPackage.language,
                         providerName = externalPackage.providerId.name.replace('_', ' '),
+                        capabilities = externalPackage.capabilities,
                         description = externalPackage.description,
                         onRemove = { viewModel.removeExternalPackage(externalPackage.packageId) },
                     )
@@ -1818,6 +1819,7 @@ private fun ExternalPackageCard(
     site: String,
     language: String,
     providerName: String,
+    capabilities: List<String>,
     description: String,
     onRemove: (() -> Unit)?,
 ) {
@@ -1865,6 +1867,9 @@ private fun ExternalPackageCard(
                 SourcePill(language)
                 SourcePill(providerName)
                 SourcePill("Imported")
+                capabilities.take(4).forEach { capability ->
+                    SourcePill(capability.sourceCapabilityLabel())
+                }
             }
             if (description.isNotBlank()) {
                 Text(
@@ -1876,6 +1881,15 @@ private fun ExternalPackageCard(
         }
     }
 }
+
+private fun String.sourceCapabilityLabel(): String =
+    when (trim().lowercase()) {
+        "search" -> "Search"
+        "details" -> "Details"
+        "chapter" -> "Read"
+        "chapters" -> "Batch"
+        else -> replaceFirstChar { it.titlecase() }
+    }
 
 @Composable
 fun MigrationWorkflowScreen(

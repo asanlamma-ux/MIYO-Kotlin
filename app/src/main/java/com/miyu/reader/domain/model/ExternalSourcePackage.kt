@@ -14,6 +14,8 @@ data class ExternalSourcePackageManifest(
     val language: String,
     val startUrl: String,
     val entry: String = "main.js",
+    val capabilities: List<String> = listOf("search", "details", "chapter", "chapters"),
+    val allowedHosts: List<String> = emptyList(),
     val requiresVerification: Boolean = false,
     val description: String = "",
 )
@@ -31,6 +33,8 @@ data class ExternalSourcePackageDescriptor(
     val site: String,
     val language: String,
     val startUrl: String,
+    val capabilities: List<String>,
+    val allowedHosts: List<String>,
     val requiresVerification: Boolean,
     val description: String,
     val origin: ExternalSourcePackageOrigin,

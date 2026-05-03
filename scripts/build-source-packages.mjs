@@ -13,6 +13,7 @@ const DIST_PACKAGE_ROOT = path.join(DIST_ROOT, 'packages');
 const MANIFEST_FILE = 'manifest.json';
 const MAIN_FILE = 'main.js';
 const PACKAGE_EXTENSION = '.miyuplugin.zip';
+const DEFAULT_CAPABILITIES = ['search', 'details', 'chapter', 'chapters'];
 
 if (!fs.existsSync(CATALOG_PATH)) {
   throw new Error(`Missing source package catalog: ${CATALOG_PATH}`);
@@ -47,6 +48,8 @@ for (const spec of catalog) {
     language: spec.language,
     startUrl: spec.startUrl,
     entry: MAIN_FILE,
+    capabilities: normalizeCapabilities(spec.capabilities),
+    allowedHosts: allowedHostsForSpec(spec),
     requiresVerification: Boolean(spec.requiresVerification),
     description: spec.description || '',
   };
@@ -91,6 +94,9 @@ for (const spec of catalog) {
     version: spec.version,
     site: spec.site,
     language: spec.language,
+    startUrl: spec.startUrl,
+    capabilities: manifest.capabilities,
+    allowedHosts: manifest.allowedHosts,
     requiresVerification: Boolean(spec.requiresVerification),
     description: spec.description || '',
     artifact: artifactName,
@@ -129,6 +135,8 @@ function renderScript(spec) {
     providerId: spec.providerId,
     baseUrl: spec.config.baseUrl,
     startUrl: spec.startUrl,
+    capabilities: normalizeCapabilities(spec.capabilities),
+    allowedHosts: allowedHostsForSpec(spec),
   };
   return template.replace('__MIYU_CONFIG__', JSON.stringify(runtimeConfig, null, 2));
 }
@@ -163,4 +171,51 @@ function validateSpec(spec, packageIds, providerIds) {
   }
   packageIds.add(spec.packageId);
   providerIds.add(spec.providerId);
+  const capabilities = normalizeCapabilities(spec.capabilities);
+  if (capabilities.length === 0) {
+    throw new Error(`Package ${spec.packageId} must declare at least one capability`);
+  }
+  for (const capability of capabilities) {
+    if (!DEFAULT_CAPABILITIES.includes(capability)) {
+      throw new Error(`Package ${spec.packageId} declares unsupported capability: ${capability}`);
+    }
+  }
+  if (allowedHostsForSpec(spec).length === 0) {
+    throw new Error(`Package ${spec.packageId} has no allowed hosts`);
+  }
+}
+
+function normalizeCapabilities(value) {
+  const source = Array.isArray(value) && value.length > 0 ? value : DEFAULT_CAPABILITIES;
+  return Array.from(new Set(
+    source
+      .map(item => String(item || '').trim().toLowerCase())
+      .filter(Boolean),
+  ));
+}
+
+function allowedHostsForSpec(spec) {
+  const hosts = [
+    spec.startUrl,
+    spec.site,
+    spec.config && spec.config.baseUrl,
+    ...(Array.isArray(spec.allowedHosts) ? spec.allowedHosts : []),
+  ]
+    .map(normalizeHost)
+    .filter(Boolean);
+  return Array.from(new Set(hosts)).sort();
+}
+
+function normalizeHost(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/\/+$/, '').replace(/^\*\./, '').replace(/\.$/, '');
+  if (!raw) return null;
+  try {
+    const host = new URL(raw.includes('://') ? raw : `https://${raw}`).hostname
+      .replace(/^www\./, '')
+      .replace(/\.$/, '');
+    if (!/^[a-z0-9.-]+$/.test(host) || host.includes('..')) return null;
+    return host;
+  } catch (_error) {
+    return null;
+  }
 }

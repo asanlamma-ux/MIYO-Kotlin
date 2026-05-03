@@ -26,6 +26,8 @@ class ExternalPackageNovelSourcePlugin(
         bootstrapScript = externalPackage.script,
         bridgeObjectName = "__MIYO_SOURCE_BRIDGE",
         androidBridgeName = "AndroidExternalSourceBridge",
+        capabilities = externalPackage.descriptor.capabilities.toSet(),
+        allowedHosts = externalPackage.descriptor.allowedHosts.toSet(),
     )
 
     override val item: NovelSourcePluginItem = NovelSourcePluginItem(

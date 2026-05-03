@@ -155,6 +155,8 @@ class ExternalSourcePackageManager @Inject constructor(
         if (manifest.version.isBlank()) error("Package version is missing.")
         if (manifest.site.isBlank()) error("Package site is missing.")
         validateStartUrl(manifest)
+        val capabilities = validateCapabilities(manifest)
+        val allowedHosts = validateAllowedHosts(manifest)
         validateEntryPath(manifest.entry)
         if (manifest.entry.isBlank()) error("Package entry is missing.")
         if (packageDirectory != null && scriptFile?.canonicalPath?.startsWith(packageDirectory.canonicalPath + File.separator) != true) {
@@ -167,6 +169,7 @@ class ExternalSourcePackageManager @Inject constructor(
         if (scriptBody.length > MAX_SCRIPT_CHAR_COUNT) {
             error("Package entry script is too large.")
         }
+        validateBridgeScript(scriptBody, capabilities, allowedHosts)
     }
 
     private fun ensurePackageRoot() {
@@ -268,6 +271,57 @@ class ExternalSourcePackageManager @Inject constructor(
         }
     }
 
+    private fun validateCapabilities(manifest: ExternalSourcePackageManifest): List<String> {
+        val capabilities = manifest.normalizedCapabilities()
+        if (capabilities.isEmpty()) {
+            error("Package must declare at least one JavaScript capability.")
+        }
+        val unsupported = capabilities.filterNot { it in SUPPORTED_CAPABILITIES }
+        if (unsupported.isNotEmpty()) {
+            error("Package declares unsupported capabilities: ${unsupported.joinToString()}.")
+        }
+        return capabilities
+    }
+
+    private fun validateAllowedHosts(manifest: ExternalSourcePackageManifest): List<String> {
+        val hosts = manifest.effectiveAllowedHosts()
+        if (hosts.isEmpty()) error("Package must declare at least one allowed host.")
+        hosts.forEach { host ->
+            if (!host.matches(HOST_REGEX) || host.contains("..")) {
+                error("Package allowed host is invalid: $host.")
+            }
+        }
+        val startHost = normalizeHost(manifest.startUrl)
+            ?: error("Package startUrl host is missing.")
+        val startHostAllowed = hosts.any { allowedHost ->
+            startHost == allowedHost ||
+                startHost.endsWith(".$allowedHost") ||
+                startHost.removePrefix("www.") == allowedHost.removePrefix("www.")
+        }
+        if (!startHostAllowed) {
+            error("Package startUrl host must be included in allowedHosts.")
+        }
+        return hosts
+    }
+
+    private fun validateBridgeScript(
+        scriptBody: String,
+        capabilities: List<String>,
+        allowedHosts: List<String>,
+    ) {
+        if (!scriptBody.contains("__MIYO_SOURCE_BRIDGE") || !scriptBody.contains("AndroidExternalSourceBridge")) {
+            error("Package entry script must expose the MIYO JavaScript source bridge.")
+        }
+        capabilities.forEach { capability ->
+            if (!scriptBody.contains("'$capability'") && !scriptBody.contains("\"$capability\"")) {
+                error("Package entry script does not appear to handle the $capability capability.")
+            }
+        }
+        if (allowedHosts.isEmpty()) {
+            error("Package entry script has no allowed hosts.")
+        }
+    }
+
     private fun validateSelectedPackage(uri: Uri) {
         val name = appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
@@ -308,6 +362,8 @@ class ExternalSourcePackageManager @Inject constructor(
         const val MANIFEST_FILE_NAME = "manifest.json"
         val PACKAGE_ID_REGEX = Regex("^[a-z0-9._-]+$")
         val PACKAGE_ENTRY_REGEX = Regex("^[A-Za-z0-9._/-]+$")
+        val HOST_REGEX = Regex("^[a-z0-9.-]+$")
+        val SUPPORTED_CAPABILITIES = setOf("search", "details", "chapter", "chapters")
         const val MAX_ARCHIVE_BYTES = 4L * 1024L * 1024L
         const val MAX_UNCOMPRESSED_BYTES = 8L * 1024L * 1024L
         const val MAX_ENTRY_BYTES = 2L * 1024L * 1024L
@@ -334,9 +390,37 @@ data class InstalledExternalSourcePackage(
             site = manifest.site,
             language = manifest.language,
             startUrl = manifest.startUrl,
+            capabilities = manifest.normalizedCapabilities(),
+            allowedHosts = manifest.effectiveAllowedHosts(),
             requiresVerification = manifest.requiresVerification,
             description = manifest.description,
             origin = origin,
             installPath = installPath,
         )
+}
+
+private fun ExternalSourcePackageManifest.normalizedCapabilities(): List<String> {
+    val requested = capabilities.ifEmpty { listOf("search", "details", "chapter", "chapters") }
+    return requested
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun ExternalSourcePackageManifest.effectiveAllowedHosts(): List<String> = buildSet {
+    normalizeHost(startUrl)?.let(::add)
+    normalizeHost(site)?.let(::add)
+    allowedHosts.mapNotNull { normalizeHost(it) }.forEach(::add)
+}.sorted()
+
+private fun normalizeHost(value: String): String? {
+    val raw = value.trim().lowercase().trimEnd('/').removePrefix("*.").removeSuffix(".")
+    if (raw.isBlank()) return null
+    val parseable = if (raw.contains("://")) raw else "https://$raw"
+    val parsedHost = runCatching { URI(parseable).host }.getOrNull()
+    val host = (parsedHost ?: raw.substringBefore('/').substringBefore(':'))
+        .lowercase()
+        .removePrefix("www.")
+        .removeSuffix(".")
+    return host.takeIf { it.isNotBlank() }
 }

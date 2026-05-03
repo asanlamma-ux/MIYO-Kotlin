@@ -18,4 +18,11 @@ Artifacts are written to `source-plugins/.dist/`:
 - `*.miyuplugin.zip`
 - `miyu-source-packages.json`
 
-The package catalog is intentionally curated. Broken or discontinued providers should be removed here instead of being carried forward as dead entries.
+Each package manifest declares the JavaScript bridge capabilities it supports:
+`search`, `details`, `chapter`, and `chapters`. It also declares the HTTPS
+hosts the runtime is allowed to load. The Android importer validates both before
+installing a package, and the hidden WebView runtime blocks navigation outside
+the package allow-list.
+
+The package catalog is intentionally curated. Broken or discontinued providers
+should be removed here instead of being carried forward as dead entries.

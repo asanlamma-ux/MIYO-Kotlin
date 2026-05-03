@@ -8,6 +8,10 @@
     "site": "wtr-lab.com",
     "language": "EN MTL",
     "startUrl": "https://wtr-lab.com/en/novel-finder",
+    "allowedHosts": [
+      "challenges.cloudflare.com",
+      "static.cloudflareinsights.com"
+    ],
     "requiresVerification": true,
     "description": "Browser-backed WTR-LAB source with encrypted chapter and AI translation support.",
     "config": {
