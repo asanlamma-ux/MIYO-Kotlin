@@ -278,6 +278,7 @@ fun MIYUApp() {
                     composable(Screen.Library.route) {
                         LibraryScreen(
                             onOpenBook = openBookDetails,
+                            onReadBook = { bookId -> openReader(bookId, null) },
                             onOpenBookDetails = openBookDetails,
                             onOpenBrowse = {
                                 navController.navigate(Screen.Browse.route)

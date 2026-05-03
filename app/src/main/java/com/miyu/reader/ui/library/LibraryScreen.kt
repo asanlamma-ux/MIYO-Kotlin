@@ -112,6 +112,7 @@ import com.miyu.reader.viewmodel.LibraryViewModel
 fun LibraryScreen(
     viewModel: LibraryViewModel = hiltViewModel(),
     onOpenBook: (String) -> Unit = {},
+    onReadBook: (String) -> Unit = onOpenBook,
     onOpenBookDetails: (String) -> Unit = {},
     onOpenBrowse: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -324,7 +325,7 @@ fun LibraryScreen(
 
         ImportFeedbackDialog(
             viewModel = viewModel,
-            onOpenBook = onOpenBook,
+            onReadBook = onReadBook,
         )
 
         if (showCreateCategory) {
@@ -1399,7 +1400,7 @@ private fun DropdownMenuHeader(label: String) {
 @Composable
 private fun ImportFeedbackDialog(
     viewModel: LibraryViewModel,
-    onOpenBook: (String) -> Unit,
+    onReadBook: (String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = LocalMIYUColors.current
@@ -1425,7 +1426,7 @@ private fun ImportFeedbackDialog(
                         onClick = {
                             val bookId = feedback.bookId
                             viewModel.clearImportFeedback()
-                            onOpenBook(bookId)
+                            onReadBook(bookId)
                         },
                     ) {
                         Text("Read now", color = colors.accent)

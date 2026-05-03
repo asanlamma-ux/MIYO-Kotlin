@@ -37,13 +37,8 @@ class ExternalSourcePackageManager @Inject constructor(
             appContext.contentResolver.openInputStream(uri)?.use { input ->
                 unzipInto(tempDir, input)
             } ?: error("Could not open the selected package.")
-            val manifest = readManifest(File(tempDir, MANIFEST_FILE_NAME))
-            val scriptFile = resolvePackageChild(tempDir, manifest.entry)
-            validateManifest(manifest, tempDir, scriptFile)
-            val destination = packageDirectory(manifest.packageId)
-            destination.deleteRecursively()
-            copyDirectory(tempDir, destination)
-            loadImportedPackage(destination).descriptor
+            installExtractedPackages(tempDir).lastOrNull()
+                ?: error("No source packages were found in the selected archive.")
         } finally {
             tempDir.deleteRecursively()
         }
@@ -118,6 +113,42 @@ class ExternalSourcePackageManager @Inject constructor(
             origin = ExternalSourcePackageOrigin.IMPORTED,
             installPath = directory.absolutePath,
         )
+    }
+
+    private fun installExtractedPackages(directory: File): List<ExternalSourcePackageDescriptor> {
+        if (File(directory, MANIFEST_FILE_NAME).isFile) {
+            return listOf(installPackageDirectory(directory))
+        }
+
+        val nestedArchives = directory
+            .walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".miyuplugin.zip", ignoreCase = true) }
+            .sortedBy { it.name.lowercase() }
+            .toList()
+        if (nestedArchives.isEmpty()) {
+            error("Package manifest.json is missing.")
+        }
+
+        return nestedArchives.mapIndexed { index, archive ->
+            val nestedDir = File(directory, "__nested_package_$index").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            archive.inputStream().use { nestedInput ->
+                unzipInto(nestedDir, nestedInput)
+            }
+            installPackageDirectory(nestedDir)
+        }
+    }
+
+    private fun installPackageDirectory(directory: File): ExternalSourcePackageDescriptor {
+        val manifest = readManifest(File(directory, MANIFEST_FILE_NAME))
+        val scriptFile = resolvePackageChild(directory, manifest.entry)
+        validateManifest(manifest, directory, scriptFile)
+        val destination = packageDirectory(manifest.packageId)
+        destination.deleteRecursively()
+        copyDirectory(directory, destination)
+        return loadImportedPackage(destination).descriptor
     }
 
     private fun readManifest(file: File): ExternalSourcePackageManifest {

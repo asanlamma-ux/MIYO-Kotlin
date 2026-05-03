@@ -433,9 +433,13 @@ fun ReaderScreen(
             )
         }
 
+        val bothReaderChromeBarsHidden = readingSettings.hideReaderHeader && readingSettings.hideReaderFooter
+
         // ── Top controls overlay ────────────────────────────────────
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.selection == null && !readingSettings.hideReaderHeader,
+            visible = uiState.showControls &&
+                uiState.selection == null &&
+                (!readingSettings.hideReaderHeader || bothReaderChromeBarsHidden),
             enter = fadeIn() + slideInVertically(),
             exit = fadeOut() + slideOutVertically(),
             modifier = Modifier.align(Alignment.TopCenter),
@@ -504,7 +508,9 @@ fun ReaderScreen(
 
         // ── Bottom controls overlay ─────────────────────────────────
         AnimatedVisibility(
-            visible = uiState.showControls && uiState.selection == null && !readingSettings.hideReaderFooter,
+            visible = uiState.showControls &&
+                uiState.selection == null &&
+                (!readingSettings.hideReaderFooter || bothReaderChromeBarsHidden),
             enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -1013,6 +1019,23 @@ img { max-width: 100%; height: auto; }
 .miyu-term:active {
   background: rgba(154, 119, 71, 0.16);
 }
+.miyu-highlight {
+  border-radius: 0.18em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0.02em 0.08em;
+}
+.miyu-highlight-yellow { background-color: #E8D97A; }
+.miyu-highlight-green { background-color: #8DB870; }
+.miyu-highlight-teal { background-color: #6EC4B0; }
+.miyu-highlight-blue { background-color: #74B4E6; }
+.miyu-highlight-text-dark { color: #222222 !important; }
+.miyu-highlight-text-red { color: #CC3333 !important; }
+.miyu-highlight-text-blue { color: #2255CC !important; }
+.miyu-highlight-text-green { color: #229944 !important; }
+.miyu-bionic {
+  font-weight: 800 !important;
+}
 h1, h2, h3, h4, h5, h6 { margin: 1em 0 0.5em; line-height: 1.3; }
 p { margin-bottom: 0.8em; }
 blockquote { border-left: 3px solid $accentColor; padding-left: 12px; margin: 1em 0; opacity: 0.85; }
@@ -1134,22 +1157,31 @@ function hasReadableSelection() {
     return !!(selection && !selection.isCollapsed && normalizeSelectionText(selection.toString()).length > 0);
 }
 
+function closestElement(target, selector) {
+    var node = target;
+    if (node && node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    return node && node.closest ? node.closest(selector) : null;
+}
+
+function dispatchTermTap(target) {
+    var term = closestElement(target, '.miyu-term');
+    if (!term) return false;
+    var detail = {
+        originalText: term.getAttribute('data-original') || '',
+        correctedText: term.getAttribute('data-corrected') || term.textContent || '',
+        translationText: term.getAttribute('data-translation') || '',
+        context: term.getAttribute('data-context') || '',
+        imageUri: term.getAttribute('data-image-uri') || '',
+        groupName: term.getAttribute('data-group') || ''
+    };
+    if (window.AndroidBridge) window.AndroidBridge.onTermTapped(JSON.stringify(detail));
+    return true;
+}
+
 function handleReaderInteraction(clientX, clientY, target) {
-    if (target && target.closest && target.closest('a, button, input, textarea, select')) return false;
+    if (closestElement(target, 'a, button, input, textarea, select')) return false;
     if (window.__miyuSelectionActiveUntil && Date.now() < window.__miyuSelectionActiveUntil) return false;
-    var term = target && target.closest ? target.closest('.miyu-term') : null;
-    if (term) {
-        var detail = {
-            originalText: term.getAttribute('data-original') || '',
-            correctedText: term.getAttribute('data-corrected') || term.textContent || '',
-            translationText: term.getAttribute('data-translation') || '',
-            context: term.getAttribute('data-context') || '',
-            imageUri: term.getAttribute('data-image-uri') || '',
-            groupName: term.getAttribute('data-group') || ''
-        };
-        if (window.AndroidBridge) window.AndroidBridge.onTermTapped(JSON.stringify(detail));
-        return true;
-    }
+    if (dispatchTermTap(target)) return true;
     var tapZonesEnabled = $tapZones;
     var navigationLocked = $navLocked;
     var navMode = "$navMode";
@@ -1177,6 +1209,7 @@ document.addEventListener('click', function(event) {
     if (Date.now() - window.__miyuLastTouchTapAt < 420) return;
     if (handleReaderInteraction(event.clientX || 0, event.clientY || 0, event.target)) {
         event.preventDefault();
+        event.stopPropagation();
     }
 }, true);
 
@@ -1516,7 +1549,8 @@ document.addEventListener('pointerup', function(event) {
 	                }
 	                var strongCount = Math.max(1, Math.ceil(part.length * 0.42));
 	                var span = document.createElement('span');
-	                var strong = document.createElement('strong');
+	                var strong = document.createElement('span');
+	                strong.className = 'miyu-bionic';
 	                strong.textContent = part.slice(0, strongCount);
 	                span.appendChild(strong);
 	                span.appendChild(document.createTextNode(part.slice(strongCount)));

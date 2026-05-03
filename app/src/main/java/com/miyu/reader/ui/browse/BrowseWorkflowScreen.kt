@@ -1650,7 +1650,7 @@ fun ProviderRepositoriesScreen(
                             Text("Import package", fontWeight = FontWeight.Bold)
                         }
                         Text(
-                            "Accepted format: .miyuplugin.zip",
+                            "Accepted format: .miyuplugin.zip or a source package bundle.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.secondaryText,
                         )

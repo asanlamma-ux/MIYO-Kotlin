@@ -10,18 +10,20 @@ import com.miyu.reader.data.repository.TermRepository
 import com.miyu.reader.data.repository.TranslationRepository
 import com.miyu.reader.domain.model.*
 import com.miyu.reader.engine.bridge.EpubEngineBridge
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.miyu.reader.ui.reader.components.HighlightData
+import com.miyu.reader.ui.reader.components.SearchResult
+import com.miyu.reader.ui.reader.components.SelectionData
 import com.miyu.reader.ui.theme.DefaultReaderThemeId
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-
-import com.miyu.reader.ui.reader.components.SelectionData
-import com.miyu.reader.ui.reader.components.HighlightData
-import com.miyu.reader.ui.reader.components.SearchResult
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Element
+import org.jsoup.nodes.TextNode
 import org.json.JSONArray
+import javax.inject.Inject
 
 data class ReaderUiState(
     val book: Book? = null,
@@ -178,6 +180,20 @@ class ReaderViewModel @Inject constructor(
             try {
                 val book = _uiState.value.book
                 val html = renderChapterHtml(filePath, index, book?.id)
+                    .let { rendered ->
+                        if (book == null) {
+                            rendered
+                        } else {
+                            applyHighlightMarkup(
+                                rendered,
+                                withContext(Dispatchers.IO) {
+                                    bookRepository.getHighlights(book.id)
+                                        .first()
+                                        .filter { it.chapterIndex == index }
+                                },
+                            )
+                        }
+                    }
                 val termGroups = withContext(Dispatchers.IO) { termRepository.getAllGroupsOnce() }
                 val readerSessionId = System.nanoTime()
                 if (html.isBlank()) {
@@ -544,20 +560,27 @@ class ReaderViewModel @Inject constructor(
         viewModelScope.launch {
             val state = _uiState.value
             val book = state.book ?: return@launch
-            bookRepository.addHighlight(
-                Highlight(
-                    id = java.util.UUID.randomUUID().toString(),
-                    bookId = book.id,
-                    chapterIndex = state.chapterIndex,
-                    startOffset = startOffset,
-                    endOffset = endOffset,
-                    text = data.text,
-                    color = data.color,
-                    textColor = data.textColor,
-                    note = data.note,
-                    createdAt = java.time.Instant.now().toString(),
-                )
+            val selectedText = data.text.trim()
+            if (selectedText.isBlank()) return@launch
+            val highlight = Highlight(
+                id = java.util.UUID.randomUUID().toString(),
+                bookId = book.id,
+                chapterIndex = state.chapterIndex,
+                startOffset = startOffset,
+                endOffset = endOffset,
+                text = selectedText,
+                color = data.color.sanitizedHexColor("#E8D97A"),
+                textColor = data.textColor?.sanitizedHexColor("#222222"),
+                note = data.note?.trim()?.takeIf { it.isNotBlank() },
+                createdAt = java.time.Instant.now().toString(),
             )
+            bookRepository.addHighlight(highlight)
+            _uiState.update {
+                it.copy(
+                    chapterHtml = applyHighlightMarkup(it.chapterHtml, highlight),
+                    selection = null,
+                )
+            }
         }
     }
 
@@ -703,5 +726,69 @@ class ReaderViewModel @Inject constructor(
         return withContext(Dispatchers.Default) {
             epubEngine.renderChapter(filePath, chapterIndex, replacements)
         }
+    }
+
+    private fun applyHighlightMarkup(html: String, highlights: List<Highlight>): String =
+        highlights.fold(html) { currentHtml, highlight -> applyHighlightMarkup(currentHtml, highlight) }
+
+    private fun applyHighlightMarkup(html: String, highlight: Highlight): String {
+        val selectedText = highlight.text.trim()
+        if (html.isBlank() || selectedText.isBlank()) return html
+        return runCatching {
+            val document = Jsoup.parseBodyFragment(html)
+            val textNode = document.body()
+                .textNodesDeep()
+                .firstOrNull { node ->
+                    node.parent()?.hasClass("miyu-highlight") != true &&
+                        node.wholeText.indexOf(selectedText, ignoreCase = true) >= 0
+                } ?: return@runCatching html
+            val source = textNode.wholeText
+            val start = source.indexOf(selectedText, ignoreCase = true)
+            if (start < 0) return@runCatching html
+            val end = start + selectedText.length
+            val parent = textNode.parent() ?: return@runCatching html
+            val siblingIndex = textNode.siblingIndex()
+            val highlightSpan = document.createElement("span")
+                .addClass("miyu-highlight")
+                .addClass(highlight.highlightColorClass())
+                .attr("data-highlight-id", highlight.id)
+                .text(source.substring(start, end))
+            highlight.highlightTextColorClass()?.let { highlightSpan.addClass(it) }
+            val replacementNodes = buildList {
+                source.substring(0, start).takeIf { it.isNotEmpty() }?.let { add(TextNode(it)) }
+                add(highlightSpan)
+                source.substring(end).takeIf { it.isNotEmpty() }?.let { add(TextNode(it)) }
+            }
+            textNode.remove()
+            parent.insertChildren(siblingIndex, replacementNodes)
+            document.body().html()
+        }.getOrDefault(html)
+    }
+
+    private fun Element.textNodesDeep(): List<TextNode> =
+        textNodes() + children().flatMap { it.textNodesDeep() }
+
+    private fun Highlight.highlightColorClass(): String =
+        when (color.sanitizedHexColor("#E8D97A").uppercase()) {
+            "#8DB870" -> "miyu-highlight-green"
+            "#6EC4B0" -> "miyu-highlight-teal"
+            "#74B4E6" -> "miyu-highlight-blue"
+            else -> "miyu-highlight-yellow"
+        }
+
+    private fun Highlight.highlightTextColorClass(): String? =
+        when (textColor?.sanitizedHexColor("#222222")?.uppercase()) {
+            "#222222" -> "miyu-highlight-text-dark"
+            "#CC3333" -> "miyu-highlight-text-red"
+            "#2255CC" -> "miyu-highlight-text-blue"
+            "#229944" -> "miyu-highlight-text-green"
+            else -> null
+        }
+
+    private fun String.sanitizedHexColor(fallback: String): String =
+        trim().takeIf { hexColorRegex.matches(it) } ?: fallback
+
+    private companion object {
+        val hexColorRegex = Regex("^#[0-9A-Fa-f]{6}$")
     }
 }
