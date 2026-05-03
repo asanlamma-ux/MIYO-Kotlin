@@ -5,6 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,11 +19,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -31,6 +36,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,7 +52,7 @@ import com.miyu.reader.domain.model.TermGroup
 import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.ReaderThemeColors
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddTermBottomSheet(
     selectedText: String,
@@ -98,7 +104,6 @@ fun AddTermBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = readerTheme.cardBackground,
-        dragHandle = null,
     ) {
         Column(
             modifier = Modifier
@@ -116,7 +121,7 @@ fun AddTermBottomSheet(
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     )
                     Text(
-                        "Correct the selected MTL text and apply the group to this book.",
+                        "Save a reusable correction and apply its group to this book.",
                         color = readerTheme.secondaryText,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -125,105 +130,177 @@ fun AddTermBottomSheet(
 
             Spacer(Modifier.height(MiyoSpacing.large))
 
-            TermField(
-                label = "Original text",
-                value = originalText,
-                onValueChange = { originalText = it },
+            TermSectionCard(
                 readerTheme = readerTheme,
-                minLines = 2,
-            )
-            TermField(
-                label = "Replacement",
-                value = correctedText,
-                onValueChange = { correctedText = it },
-                readerTheme = readerTheme,
-                minLines = 2,
-            )
-            TermField(
-                label = "Translation note (optional)",
-                value = translationText,
-                onValueChange = { translationText = it },
-                readerTheme = readerTheme,
-            )
-            TermField(
-                label = "Context (optional)",
-                value = contextText,
-                onValueChange = { contextText = it },
-                readerTheme = readerTheme,
-            )
-
-            OutlinedButton(
-                onClick = { imagePicker.launch(arrayOf("image/*")) },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                title = "Correction",
+                subtitle = "Saving the same original phrase to the same group replaces the older correction.",
             ) {
-                Icon(Icons.Outlined.Image, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (imageUri == null) "Attach image to term" else "Image attached",
-                    color = readerTheme.accent,
+                Surface(
+                    color = readerTheme.background.copy(alpha = 0.46f),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(MiyoSpacing.large),
+                    ) {
+                        Text(
+                            text = selectedText,
+                            color = readerTheme.text,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                        Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                        Text(
+                            text = "Selected from the current chapter.",
+                            color = readerTheme.secondaryText,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(MiyoSpacing.medium))
+                TermField(
+                    label = "Original text",
+                    value = originalText,
+                    onValueChange = { originalText = it },
+                    readerTheme = readerTheme,
+                    minLines = 2,
+                )
+                TermField(
+                    label = "Replacement",
+                    value = correctedText,
+                    onValueChange = { correctedText = it },
+                    readerTheme = readerTheme,
+                    minLines = 2,
+                )
+                TermField(
+                    label = "Translation note (optional)",
+                    value = translationText,
+                    onValueChange = { translationText = it },
+                    readerTheme = readerTheme,
+                )
+                TermField(
+                    label = "Context (optional)",
+                    value = contextText,
+                    onValueChange = { contextText = it },
+                    readerTheme = readerTheme,
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MiyoSpacing.medium))
 
-            if (createNewGroup) {
-                TermField(
-                    label = "New group name",
-                    value = newGroupName,
-                    onValueChange = { newGroupName = it },
-                    readerTheme = readerTheme,
-                    singleLine = true,
-                )
-                if (groups.isNotEmpty()) {
-                    TextButton(onClick = { createNewGroup = false }) {
-                        Text("Use existing group", color = readerTheme.accent)
-                    }
-                }
-            } else {
-                ExposedDropdownMenuBox(
-                    expanded = groupMenuOpen,
-                    onExpandedChange = { groupMenuOpen = !groupMenuOpen },
+            TermSectionCard(
+                readerTheme = readerTheme,
+                title = "Save destination",
+                subtitle = "Groups let you reuse the same correction set across multiple books.",
+            ) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
+                    verticalArrangement = Arrangement.spacedBy(MiyoSpacing.small),
                 ) {
-                    val selectedName = groups.firstOrNull { it.id == selectedGroupId }?.name ?: "Choose group"
-                    OutlinedTextField(
-                        value = selectedName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Term group") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupMenuOpen) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = readerTheme.accent,
-                            focusedTextColor = readerTheme.text,
-                            unfocusedTextColor = readerTheme.text,
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
+                    GroupModeButton(
+                        label = "Existing group",
+                        selected = !createNewGroup,
+                        enabled = groups.isNotEmpty(),
+                        readerTheme = readerTheme,
+                        onClick = { createNewGroup = false },
                     )
-                    ExposedDropdownMenu(
+                    GroupModeButton(
+                        label = "New group",
+                        selected = createNewGroup,
+                        enabled = true,
+                        readerTheme = readerTheme,
+                        onClick = { createNewGroup = true },
+                    )
+                }
+                Spacer(Modifier.height(MiyoSpacing.medium))
+
+                if (createNewGroup) {
+                    TermField(
+                        label = "New group name",
+                        value = newGroupName,
+                        onValueChange = { newGroupName = it },
+                        readerTheme = readerTheme,
+                        singleLine = true,
+                    )
+                } else {
+                    ExposedDropdownMenuBox(
                         expanded = groupMenuOpen,
-                        onDismissRequest = { groupMenuOpen = false },
+                        onExpandedChange = { groupMenuOpen = !groupMenuOpen },
                     ) {
-                        groups.forEach { group ->
-                            DropdownMenuItem(
-                                text = { Text(group.name) },
-                                onClick = {
-                                    selectedGroupId = group.id
-                                    groupMenuOpen = false
-                                },
-                            )
+                        val selectedName = groups.firstOrNull { it.id == selectedGroupId }?.name ?: "Choose group"
+                        OutlinedTextField(
+                            value = selectedName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Term group") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupMenuOpen) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = readerTheme.accent,
+                                focusedTextColor = readerTheme.text,
+                                unfocusedTextColor = readerTheme.text,
+                                unfocusedBorderColor = readerTheme.secondaryText.copy(alpha = 0.35f),
+                                focusedLabelColor = readerTheme.accent,
+                                unfocusedLabelColor = readerTheme.secondaryText,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                        )
+                        ExposedDropdownMenu(
+                            expanded = groupMenuOpen,
+                            onDismissRequest = { groupMenuOpen = false },
+                        ) {
+                            groups.forEach { group ->
+                                DropdownMenuItem(
+                                    text = { Text(group.name) },
+                                    onClick = {
+                                        selectedGroupId = group.id
+                                        groupMenuOpen = false
+                                    },
+                                )
+                            }
                         }
                     }
-                }
-                TextButton(onClick = { createNewGroup = true }) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(Modifier.width(MiyoSpacing.small))
-                    Text("Create new group", color = readerTheme.accent)
+                    Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                    Text(
+                        text = "${groups.size} group${if (groups.size == 1) "" else "s"} available",
+                        color = readerTheme.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
 
             Spacer(Modifier.height(MiyoSpacing.medium))
+
+            TermSectionCard(
+                readerTheme = readerTheme,
+                title = "Reference image",
+                subtitle = "Optional. Attach a visual cue to make the correction easier to review later.",
+            ) {
+                OutlinedButton(
+                    onClick = { imagePicker.launch(arrayOf("image/*")) },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Outlined.Image, contentDescription = null)
+                    Spacer(Modifier.width(MiyoSpacing.small))
+                    Text(
+                        if (imageUri == null) "Attach image" else "Replace attached image",
+                        color = readerTheme.accent,
+                    )
+                }
+                if (imageUri != null) {
+                    Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                    Text(
+                        text = "Image attached",
+                        color = readerTheme.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(MiyoSpacing.large))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -236,7 +313,7 @@ fun AddTermBottomSheet(
                 Button(
                     enabled = canSave,
                     colors = ButtonDefaults.buttonColors(containerColor = readerTheme.accent),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     onClick = {
                         if (createNewGroup) {
                             onCreateGroupAndSave(newGroupName, originalText, correctedText, translationText, contextText, imageUri)
@@ -245,9 +322,78 @@ fun AddTermBottomSheet(
                         }
                     },
                 ) {
-                    Text("Save term", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Outlined.Translate, contentDescription = null)
+                    Spacer(Modifier.width(MiyoSpacing.small))
+                    Text("Save correction", fontWeight = FontWeight.Bold)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TermSectionCard(
+    readerTheme: ReaderThemeColors,
+    title: String,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = readerTheme.background.copy(alpha = 0.56f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiyoSpacing.large),
+        ) {
+            Text(
+                text = title,
+                color = readerTheme.text,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            )
+            subtitle?.let {
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                Text(
+                    text = it,
+                    color = readerTheme.secondaryText,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(MiyoSpacing.medium))
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun GroupModeButton(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    readerTheme: ReaderThemeColors,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = readerTheme.accent,
+            ),
+        ) {
+            Text(label, fontWeight = FontWeight.SemiBold)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Text(label, color = readerTheme.secondaryText)
         }
     }
 }
@@ -274,6 +420,7 @@ private fun TermField(
             unfocusedTextColor = readerTheme.text,
             focusedLabelColor = readerTheme.accent,
             unfocusedLabelColor = readerTheme.secondaryText,
+            cursorColor = readerTheme.accent,
         ),
         modifier = Modifier
             .fillMaxWidth()

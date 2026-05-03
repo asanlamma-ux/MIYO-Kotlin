@@ -40,6 +40,9 @@ interface TermDao {
     @Delete
     suspend fun deleteTerm(term: TermEntity)
 
+    @Query("DELETE FROM terms WHERE groupId = :groupId AND originalText = :originalText")
+    suspend fun deleteTermsByOriginalText(groupId: String, originalText: String)
+
     @Query("DELETE FROM terms WHERE groupId = :groupId")
     suspend fun deleteTermsForGroup(groupId: String)
 }

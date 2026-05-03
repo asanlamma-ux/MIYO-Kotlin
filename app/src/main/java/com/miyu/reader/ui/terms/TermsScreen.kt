@@ -22,6 +22,7 @@ import com.miyu.reader.domain.model.TermGroup
 import com.miyu.reader.ui.core.components.MiyoEmptyScreen
 import com.miyu.reader.ui.core.components.MiyoScreenHeader
 import com.miyu.reader.ui.core.components.MiyoWorkspaceExitButton
+import com.miyu.reader.ui.core.theme.MiyoSpacing
 import com.miyu.reader.ui.theme.LocalMIYUColors
 import com.miyu.reader.viewmodel.TermsViewModel
 
@@ -43,10 +44,10 @@ fun TermsScreen(
             .fillMaxSize()
             .background(colors.background.copy(alpha = 0.94f))
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp),
+            .padding(bottom = MiyoSpacing.extraLarge),
     ) {
         onBack?.let { back ->
-            Box(modifier = Modifier.padding(start = 24.dp, top = 24.dp)) {
+            Box(modifier = Modifier.padding(start = MiyoSpacing.extraLarge, top = MiyoSpacing.extraLarge)) {
                 MiyoWorkspaceExitButton(
                     label = "Exit term groups",
                     onClick = back,
@@ -69,38 +70,50 @@ fun TermsScreen(
         OutlinedTextField(
             value = uiState.searchQuery,
             onValueChange = viewModel::setSearchQuery,
-            placeholder = { Text("Search groups or terms…") },
+            placeholder = { Text("Search groups or saved terms…") },
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 8.dp),
-            shape = RoundedCornerShape(12.dp),
+                .padding(horizontal = MiyoSpacing.extraLarge)
+                .padding(top = MiyoSpacing.small),
+            shape = RoundedCornerShape(16.dp),
             singleLine = true,
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(MiyoSpacing.large))
 
         // ── Create input ────────────────────────────────────────────
         AnimatedVisibility(visible = uiState.showCreateInput) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                shape = RoundedCornerShape(14.dp),
+                    .padding(horizontal = MiyoSpacing.extraLarge),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(MiyoSpacing.large)) {
+                    Text(
+                        text = "Create group",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.onBackground,
+                    )
+                    Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                    Text(
+                        text = "Group related corrections together so they can be reused across books.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondaryText,
+                    )
+                    Spacer(Modifier.height(MiyoSpacing.medium))
                     OutlinedTextField(
                         value = newGroupName,
                         onValueChange = { newGroupName = it },
                         placeholder = { Text("New group name…") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.height(MiyoSpacing.medium))
+                    Row(horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.small)) {
                         OutlinedButton(
                             onClick = {
                                 viewModel.toggleCreateInput()
@@ -122,13 +135,13 @@ fun TermsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
+                            Spacer(Modifier.width(MiyoSpacing.extraSmall))
                             Text("Create", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(MiyoSpacing.medium))
         }
 
         // ── Empty state ─────────────────────────────────────────────
@@ -139,7 +152,7 @@ fun TermsScreen(
                 message = if (uiState.searchQuery.isNotBlank()) {
                     "Try a different search query."
                 } else {
-                    "Create a term group to start correcting MTL translations."
+                    "Create a term group to start saving translation corrections."
                 },
                 actionLabel = if (uiState.searchQuery.isBlank()) "Create First Group" else null,
                 onAction = if (uiState.searchQuery.isBlank()) viewModel::toggleCreateInput else null,
@@ -155,19 +168,19 @@ fun TermsScreen(
                     onClick = { viewModel.setSelectedGroupId(group.id) },
                     onDelete = { groupToDelete = group },
                     accentColor = colors.accent,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = MiyoSpacing.extraLarge, vertical = MiyoSpacing.extraSmall),
                 )
             }
 
             // Footer
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(MiyoSpacing.large))
             Text(
                 "${uiState.termGroups.size} group${if (uiState.termGroups.size != 1) "s" else ""} · ${uiState.termGroups.sumOf { it.terms.size }} total terms",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.secondaryText,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = MiyoSpacing.extraLarge),
             )
         }
     }
@@ -200,59 +213,100 @@ fun TermsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = MiyoSpacing.extraLarge, vertical = MiyoSpacing.small),
             ) {
-                Text(
-                    group.name,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = colors.onBackground,
-                )
-                Text(
-                    "${group.terms.size} terms · applied to ${group.appliedToBooks.size} books",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondaryText,
-                )
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = original,
-                    onValueChange = { original = it },
-                    label = { Text("Original text") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = replacement,
-                    onValueChange = { replacement = it },
-                    label = { Text("Replacement") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        viewModel.addTerm(group.id, original, replacement)
-                        original = ""
-                        replacement = ""
-                    },
-                    enabled = original.isNotBlank() && replacement.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(MiyoSpacing.medium),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add term", fontWeight = FontWeight.Bold)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = colors.accent.copy(alpha = 0.12f),
+                        modifier = Modifier.size(52.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Outlined.Translate,
+                                contentDescription = null,
+                                tint = colors.accent,
+                            )
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            group.name,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.onBackground,
+                        )
+                        Text(
+                            "${group.terms.size} terms · applied to ${group.appliedToBooks.size} books",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.secondaryText,
+                        )
+                    }
                 }
-                Spacer(Modifier.height(14.dp))
-                group.terms.forEach { term ->
-                    ListItem(
-                        headlineContent = { Text(term.originalText, fontWeight = FontWeight.SemiBold) },
-                        supportingContent = { Text(term.correctedText) },
-                        leadingContent = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = colors.accent) },
+                Spacer(Modifier.height(MiyoSpacing.large))
+                TermsPanel(
+                    title = "Add or replace correction",
+                    subtitle = "Adding the same original text again replaces the existing correction in this group.",
+                ) {
+                    OutlinedTextField(
+                        value = original,
+                        onValueChange = { original = it },
+                        label = { Text("Original text") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        shape = RoundedCornerShape(14.dp),
                     )
+                    Spacer(Modifier.height(MiyoSpacing.small))
+                    OutlinedTextField(
+                        value = replacement,
+                        onValueChange = { replacement = it },
+                        label = { Text("Replacement") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    Spacer(Modifier.height(MiyoSpacing.medium))
+                    Button(
+                        onClick = {
+                            viewModel.addTerm(group.id, original, replacement)
+                            original = ""
+                            replacement = ""
+                        },
+                        enabled = original.isNotBlank() && replacement.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(MiyoSpacing.small))
+                        Text("Save term", fontWeight = FontWeight.Bold)
+                    }
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(MiyoSpacing.medium))
+                TermsPanel(
+                    title = "Saved terms",
+                    subtitle = if (group.terms.isEmpty()) {
+                        "No saved corrections in this group yet."
+                    } else {
+                        "${group.terms.size} saved correction${if (group.terms.size == 1) "" else "s"}."
+                    },
+                ) {
+                    if (group.terms.isEmpty()) {
+                        Text(
+                            text = "Add a correction above to populate this group.",
+                            color = colors.secondaryText,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        group.terms.forEach { term ->
+                            TermRow(term.originalText, term.correctedText)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(MiyoSpacing.extraLarge))
             }
         }
     }
@@ -271,16 +325,16 @@ private fun TermGroupCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(MiyoSpacing.large),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = accentColor.copy(alpha = 0.12f),
                 modifier = Modifier.size(44.dp),
             ) {
@@ -288,15 +342,16 @@ private fun TermGroupCard(
                     Icon(Icons.Outlined.Translate, contentDescription = null, tint = accentColor, modifier = Modifier.size(22.dp))
                 }
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(MiyoSpacing.medium))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     group.name,
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.onBackground,
                 )
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
                 Text(
-                    "${group.terms.size} terms",
+                    "${group.terms.size} terms · ${group.appliedToBooks.size} book${if (group.appliedToBooks.size == 1) "" else "s"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.secondaryText,
                 )
@@ -304,6 +359,74 @@ private fun TermGroupCard(
             IconButton(onClick = onDelete) {
                 Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = colors.secondaryText, modifier = Modifier.size(18.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun TermsPanel(
+    title: String,
+    subtitle: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = LocalMIYUColors.current
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiyoSpacing.large),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+            )
+            subtitle?.let {
+                Spacer(Modifier.height(MiyoSpacing.extraSmall))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.secondaryText,
+                )
+            }
+            Spacer(Modifier.height(MiyoSpacing.medium))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun TermRow(
+    originalText: String,
+    correctedText: String,
+) {
+    val colors = LocalMIYUColors.current
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colors.background.copy(alpha = 0.35f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = MiyoSpacing.small),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MiyoSpacing.medium),
+        ) {
+            Text(
+                text = originalText,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.onBackground,
+            )
+            Spacer(Modifier.height(MiyoSpacing.extraSmall))
+            Text(
+                text = correctedText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.secondaryText,
+            )
         }
     }
 }

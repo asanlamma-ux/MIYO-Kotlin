@@ -185,14 +185,6 @@ fun BrowseWorkflowScreen(
                     onAbout = onAbout,
                     extraItems = { dismiss ->
                         DropdownMenuItem(
-                            text = { Text("Global search") },
-                            onClick = {
-                                dismiss()
-                                onOpenGlobalSearch()
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                        )
-                        DropdownMenuItem(
                             text = { Text("Downloads") },
                             onClick = {
                                 dismiss()

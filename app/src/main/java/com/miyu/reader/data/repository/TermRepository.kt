@@ -88,18 +88,22 @@ class TermRepository @Inject constructor(
     }
 
     suspend fun addTermToGroup(groupId: String, term: Term) {
-        termDao.upsertTerm(term.sanitizedForStorage().toEntity(groupId))
+        val group = termDao.getGroupById(groupId) ?: return
+        val sanitized = term.sanitizedForStorage()
+        termDao.upsertGroup(group.copy(updatedAt = java.time.Instant.now().toString()))
+        replaceTermInGroup(groupId, sanitized)
     }
 
     suspend fun addTermToGroupAndApplyToBook(groupId: String, term: Term, bookId: String?) {
         val group = termDao.getGroupById(groupId) ?: return
+        val sanitized = term.sanitizedForStorage()
         val appliedBooks = if (bookId != null && bookId !in group.appliedToBooks) {
             group.appliedToBooks + bookId
         } else {
             group.appliedToBooks
         }
         termDao.upsertGroup(group.copy(appliedToBooks = appliedBooks, updatedAt = java.time.Instant.now().toString()))
-        termDao.upsertTerm(term.sanitizedForStorage().toEntity(groupId))
+        replaceTermInGroup(groupId, sanitized)
     }
 
     suspend fun applyGroupToBook(groupId: String, bookId: String) {
@@ -144,6 +148,13 @@ class TermRepository @Inject constructor(
                     (uri.startsWith("content://", ignoreCase = true) || uri.startsWith("file://", ignoreCase = true))
             },
         )
+
+    // Treat the original text as the stable identity inside a group so repeated saves
+    // from the reader replace the older correction instead of accumulating duplicates.
+    private suspend fun replaceTermInGroup(groupId: String, term: Term) {
+        termDao.deleteTermsByOriginalText(groupId, term.originalText)
+        termDao.upsertTerm(term.toEntity(groupId))
+    }
 
     private fun String.sanitizePlainText(maxChars: Int): String =
         replace(Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F]"), "")

@@ -35,9 +35,19 @@ class TermsViewModel @Inject constructor(
     }
 
     val filteredGroups: StateFlow<List<TermGroup>> = _uiState.map { state ->
-        if (state.searchQuery.isBlank()) state.termGroups
-        else state.termGroups.filter { group ->
-            group.name.lowercase().contains(state.searchQuery.lowercase())
+        val query = state.searchQuery.trim().lowercase()
+        if (query.isBlank()) {
+            state.termGroups
+        } else {
+            state.termGroups.filter { group ->
+                group.name.lowercase().contains(query) ||
+                    group.terms.any { term ->
+                        term.originalText.lowercase().contains(query) ||
+                            term.correctedText.lowercase().contains(query) ||
+                            term.translationText.orEmpty().lowercase().contains(query) ||
+                            term.context.orEmpty().lowercase().contains(query)
+                    }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
