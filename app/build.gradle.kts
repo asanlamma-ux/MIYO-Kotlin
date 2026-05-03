@@ -15,6 +15,10 @@ fun org.gradle.api.Project.secret(name: String): String =
 fun buildConfigString(value: String): String =
     "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
+val roomSchemaDir = layout.projectDirectory.dir("schemas")
+
+roomSchemaDir.asFile.mkdirs()
+
 android {
     namespace = "com.miyu.reader"
     compileSdk = 34
@@ -145,7 +149,7 @@ android {
 }
 
 ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.schemaLocation", roomSchemaDir.asFile.absolutePath)
     arg("room.incremental", "true")
     arg("room.generateKotlin", "true")
 }

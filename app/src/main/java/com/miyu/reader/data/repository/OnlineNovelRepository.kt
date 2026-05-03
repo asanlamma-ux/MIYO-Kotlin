@@ -318,6 +318,7 @@ class OnlineNovelRepository @Inject constructor(
             path = path,
             title = doc.selectFirst("h1, meta[property=og:title], meta[name=twitter:title]")
                 ?.attr("content")
+                .orEmpty()
                 .ifBlank { doc.selectFirst("h1")?.text().orEmpty() }
                 .cleanText()
                 .ifBlank { summary.title },
@@ -326,9 +327,11 @@ class OnlineNovelRepository @Inject constructor(
                 .ifBlank {
                     doc.selectFirst("meta[property=og:image], meta[name=twitter:image], .cover img, img[src*=/cover], img[data-src], img[src]")
                         ?.attr("content")
+                        .orEmpty()
                         .ifBlank {
                             doc.selectFirst(".cover img, img[src*=/cover], img[data-src], img[src]")
                                 ?.attr("data-src")
+                                .orEmpty()
                                 .ifBlank { doc.selectFirst(".cover img, img[src*=/cover], img[src]")?.attr("src").orEmpty() }
                         }
                 }
@@ -345,6 +348,7 @@ class OnlineNovelRepository @Inject constructor(
                 .ifBlank {
                     doc.selectFirst("meta[property=og:description], meta[name=description], [itemprop=description], .summary, .lead")
                         ?.attr("content")
+                        .orEmpty()
                         .ifBlank { doc.selectFirst("[itemprop=description], .summary, .lead")?.text().orEmpty() }
                 }
                 .cleanText()
@@ -723,6 +727,7 @@ class OnlineNovelRepository @Inject constructor(
             order = chapterNo,
             title = doc.selectFirst("h1, h2, meta[property=og:title]")
                 ?.attr("content")
+                .orEmpty()
                 .ifBlank { doc.selectFirst("h1, h2")?.text().orEmpty() }
                 .cleanText()
                 .ifBlank { title },

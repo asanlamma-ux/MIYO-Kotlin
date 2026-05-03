@@ -166,7 +166,7 @@ std::string extractCover(const std::string& filePath, CacheManager& cache) {
     std::string result = extractCoverFromOpf(zip);
     if (!result.empty()) {
         cache.update(filePath, [&](CacheManager::CachedData& cached) {
-            cached->coverBase64 = result;
+            cached.coverBase64 = result;
         });
         return result;
     }
@@ -186,7 +186,7 @@ std::string extractCover(const std::string& filePath, CacheManager& cache) {
     if (result.empty()) return "";
 
     cache.update(filePath, [&](CacheManager::CachedData& cached) {
-        cached->coverBase64 = result;
+        cached.coverBase64 = result;
     });
     return result;
 }

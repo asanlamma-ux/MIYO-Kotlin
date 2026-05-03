@@ -1,3 +1,9 @@
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+)
+
 package com.miyu.reader.ui.browse
 
 import android.annotation.SuppressLint
@@ -8,12 +14,11 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.animateContentSize
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,7 +27,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -76,7 +80,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -738,8 +741,6 @@ fun GlobalSourceSearchScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun OnlineNovelDetailsScreen(
     providerId: String,
@@ -886,7 +887,6 @@ fun OnlineNovelDetailsScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OnlineNovelHeroCard(
     details: OnlineNovelDetails?,
@@ -1024,7 +1024,6 @@ private fun OnlineNovelDescriptionCard(novel: OnlineNovelDetails) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OnlineNovelTagCard(novel: OnlineNovelDetails) {
     val colors = LocalMIYUColors.current
@@ -1056,7 +1055,6 @@ private fun OnlineNovelTagCard(novel: OnlineNovelDetails) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OnlineNovelChapterSheet(
     chapters: List<OnlineChapterSummary>,
@@ -1224,7 +1222,6 @@ private fun expandChapterOrderRange(
     return chapters.map { it.order }.filter { it in min..max }.toSet()
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OnlineChapterPreviewBottomSheet(
     chapter: OnlineChapterSummary?,

@@ -33,7 +33,7 @@ std::string extractCss(const std::string& filePath, CacheManager& cache) {
 
     std::string result = cssBuf.str();
     cache.update(filePath, [&](CacheManager::CachedData& cached) {
-        cached->mergedCss = result;
+        cached.mergedCss = result;
     });
     return result;
 }
