@@ -573,7 +573,28 @@ fun ReaderScreen(
         if (uiState.showThemePicker) {
             ThemePickerBottomSheet(
                 selectedThemeId = readerThemeId,
-                onThemeSelected = { viewModel.setReaderThemeId(it) },
+                onThemeSelected = { themeId ->
+                    val webView = readerWebViewRef.get()
+                    if (webView == null) {
+                        viewModel.setReaderThemeId(themeId)
+                    } else {
+                        // Capture the active WebView chapter/offset before theme CSS reloads the page.
+                        webView.evaluateJavascript(
+                            "window.MIYU_CURRENT_PROGRESS_JSON ? window.MIYU_CURRENT_PROGRESS_JSON() : '';",
+                        ) { result ->
+                            val progress = parseReaderProgressSnapshot(result)
+                            if (progress != null) {
+                                viewModel.setReaderThemeId(
+                                    id = themeId,
+                                    chapterIndex = progress.chapterIndex,
+                                    chapterScrollPercent = progress.progress,
+                                )
+                            } else {
+                                viewModel.setReaderThemeId(themeId)
+                            }
+                        }
+                    }
+                },
                 onDismiss = { viewModel.toggleThemePicker() },
             )
         }
@@ -1120,6 +1141,25 @@ private fun restoreReaderScrollScript(percent: Float): String {
     return "if (window.MIYU_RESTORE_SCROLL) window.MIYU_RESTORE_SCROLL($safePercent);"
 }
 
+private data class ReaderProgressSnapshot(
+    val chapterIndex: Int,
+    val progress: Float,
+)
+
+private fun parseReaderProgressSnapshot(result: String?): ReaderProgressSnapshot? =
+    runCatching {
+        if (result.isNullOrBlank() || result == "null") return@runCatching null
+        val jsonText = JSONObject("""{"value":$result}""").optString("value")
+        if (jsonText.isBlank()) return@runCatching null
+        val json = JSONObject(jsonText)
+        val chapterIndex = json.optInt("chapterIndex", -1)
+        if (chapterIndex < 0) return@runCatching null
+        ReaderProgressSnapshot(
+            chapterIndex = chapterIndex,
+            progress = json.optDouble("progress", 0.0).toFloat().coerceIn(0f, 1f),
+        )
+    }.getOrNull()
+
 private fun readerBridgeScript(
     tapZonesEnabled: Boolean,
     tapScrollPageRatio: Float,
@@ -1429,6 +1469,9 @@ document.addEventListener('pointerup', function(event) {
 	        }, 9000);
 	    }
 	    window.MIYU_POST_PROGRESS = function() { postProgress(true); };
+	    window.MIYU_CURRENT_PROGRESS_JSON = function() {
+	        return JSON.stringify(currentProgress());
+	    };
 	    window.MIYU_RESTORE_SCROLL = function(percent) {
 	        var safePercent = Math.max(0, Math.min(1, Number(percent) || 0));
             __miyuRestoreCancelled = false;

@@ -700,8 +700,34 @@ class ReaderViewModel @Inject constructor(
         _uiState.update { it.copy(showThemePicker = !it.showThemePicker) }
     }
 
-    fun setReaderThemeId(id: String) {
+    fun setReaderThemeId(
+        id: String,
+        chapterIndex: Int? = null,
+        chapterScrollPercent: Float? = null,
+    ) {
+        preserveThemeChangePosition(chapterIndex, chapterScrollPercent)
         viewModelScope.launch { preferences.setReaderThemeId(id) }
+    }
+
+    private fun preserveThemeChangePosition(chapterIndex: Int?, chapterScrollPercent: Float?) {
+        if (chapterIndex == null || chapterScrollPercent == null) return
+        val state = _uiState.value
+        val book = state.book ?: return
+        val safeChapterIndex = chapterIndex.coerceIn(0, (state.totalChapters - 1).coerceAtLeast(0))
+        val safeProgress = chapterScrollPercent.coerceIn(0f, 1f)
+        navigationTargetChapterIndex = safeChapterIndex
+        ignoreProgressUntil = System.currentTimeMillis() + 1_600L
+        _uiState.update {
+            it.copy(
+                chapterIndex = safeChapterIndex,
+                chapterScrollPercent = safeProgress,
+                selection = null,
+            )
+        }
+        savePosition(safeChapterIndex, safeProgress)
+        if (safeChapterIndex != state.renderedChapterIndex) {
+            loadChapter(safeChapterIndex, book.filePath, safeProgress)
+        }
     }
 
     fun showTermDetail(detail: ReaderTermDetail) {

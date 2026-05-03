@@ -397,8 +397,6 @@ class UserPreferences @Inject constructor(
         const val DEFAULT_DOWNLOAD_CONCURRENCY = 4
 
         private val SETUP_EXISTING_KEYS = setOf<Preferences.Key<*>>(
-            THEME_MODE,
-            KEY_READER_THEME_ID,
             KEY_FONT_FAMILY,
             KEY_FONT_SIZE,
             KEY_LINE_HEIGHT,
@@ -411,6 +409,7 @@ class UserPreferences @Inject constructor(
             KEY_DOWNLOAD_CONCURRENCY,
         )
 
+        // Theme keys are excluded so a preview write from older builds cannot hide first-run setup.
         private fun isFreshInstallPreferences(prefs: Preferences): Boolean =
             prefs.asMap().keys.none { key -> key in SETUP_EXISTING_KEYS }
 

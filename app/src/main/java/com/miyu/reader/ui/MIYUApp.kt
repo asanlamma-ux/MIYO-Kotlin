@@ -101,8 +101,20 @@ fun MIYUApp() {
     val readerThemeId by themeViewModel.readerThemeId.collectAsStateWithLifecycle(initialValue = DefaultReaderThemeId)
     val shouldShowInitialSetup by themeViewModel.shouldShowInitialSetup.collectAsStateWithLifecycle(initialValue = false)
     val permissionState by permissionViewModel.uiState.collectAsStateWithLifecycle()
+    var setupPreviewThemeMode by remember { mutableStateOf<ThemeMode?>(null) }
+    var setupPreviewReaderThemeId by remember { mutableStateOf<String?>(null) }
+    // First-run previews must stay in memory. Writing them to DataStore marks setup as no longer fresh.
+    val effectiveThemeMode = if (shouldShowInitialSetup) setupPreviewThemeMode ?: themeMode else themeMode
+    val effectiveReaderThemeId = if (shouldShowInitialSetup) setupPreviewReaderThemeId ?: readerThemeId else readerThemeId
 
-    MIYUTheme(themeMode = themeMode, readerThemeId = readerThemeId) {
+    LaunchedEffect(shouldShowInitialSetup) {
+        if (!shouldShowInitialSetup) {
+            setupPreviewThemeMode = null
+            setupPreviewReaderThemeId = null
+        }
+    }
+
+    MIYUTheme(themeMode = effectiveThemeMode, readerThemeId = effectiveReaderThemeId) {
         val context = LocalContext.current
         val lifecycleOwner = LocalLifecycleOwner.current
         val scope = rememberCoroutineScope()
@@ -223,7 +235,7 @@ fun MIYUApp() {
                 .background(colors.background),
         ) {
             SpecialThemeBackdrop(
-                readerThemeId = readerThemeId,
+                readerThemeId = effectiveReaderThemeId,
                 darkTheme = colors.isDark,
                 modifier = Modifier.matchParentSize(),
             )
@@ -470,7 +482,7 @@ fun MIYUApp() {
 
         if (shouldShowInitialSetup) {
             InitialSetupBottomSheet(
-                initialReaderThemeId = readerThemeId,
+                initialReaderThemeId = effectiveReaderThemeId,
                 onGrantInstallApps = { MiyoPermissions.openAppSettings(context) },
                 onGrantNotifications = {
                     val runtimePermissions = MiyoPermissions.runtimePermissionsToRequest(context)
@@ -481,8 +493,8 @@ fun MIYUApp() {
                     }
                 },
                 onGrantBattery = { MiyoPermissions.openBatteryOptimizationSettings(context) },
-                onPreviewThemeMode = themeViewModel::setThemeMode,
-                onPreviewReaderTheme = themeViewModel::setReaderThemeId,
+                onPreviewThemeMode = { setupPreviewThemeMode = it },
+                onPreviewReaderTheme = { setupPreviewReaderThemeId = it },
                 onSave = themeViewModel::saveInitialSetup,
             )
         }
